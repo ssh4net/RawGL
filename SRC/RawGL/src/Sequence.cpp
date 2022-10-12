@@ -104,7 +104,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
                     "Uniform pass index, name & value\n"
                     "(numeric or texture path)\n"
                     "(e.g.: --in Texture0 BasicTex.png).\n"
-                    "as output from #-pass: --in outTexture::0\n"
+                    "as output from #-pass: --in outTexture 0\n"
                     ""
                     "Texture filtering and sampling:\n"
                     + PassInput::get_possible_tex_attr_fmt()
