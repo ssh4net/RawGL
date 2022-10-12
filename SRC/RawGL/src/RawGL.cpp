@@ -39,9 +39,8 @@ int main(int argc, const char* argv[])
     // start the sequence
     Sequence sequence(argc, argv);
     sequence.run();
-
-	LOG(info) << "------------ Completed -------------";
-	LOG(info) << "Total processing time: " << timer.nowText();
+	LOG(info) << std::endl;
+	LOG(info) << "Total processing time : " << timer.nowText() << std::endl;
 
     return 0;
 }

@@ -219,7 +219,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
             {
                 // Start a new pass
                 int currentPassN = m_passes.size();
-                LOG(info) << "Loading pass " << currentPassN;
+                LOG(debug) << "Loading pass " << currentPassN;
 
                 std::shared_ptr<GLProgram> program;
 
@@ -1034,7 +1034,7 @@ void Sequence::initCommon()
                 {
                     // Not finding the texture means the referenced output is missing,
                     // which should never happen unless we made a mistake during parsing stage
-                    LOG(info) << "input (" << inputIt.first << ": referenced output is missing texture.";
+                    LOG(error) << "input (" << inputIt.first << ": referenced output is missing texture.";
                     exit(1);
                 }
 
@@ -1089,7 +1089,7 @@ void Sequence::run()
 {
     Timer timer;
 
-    LOG(info) << "Rendering.";
+    LOG(debug) << "Rendering.";
 
     glDisable(GL_BLEND);
     glBlendEquation(GL_FUNC_ADD);
@@ -1238,7 +1238,7 @@ void Sequence::run()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glUseProgram(0);
 
-    LOG(info) << "Sequence completed in " << timer.nowText();
+    LOG(debug) << "Sequence completed in " << timer.nowText();
 }
 
 #define STRING_USED_DEFAULTS "(used default)"

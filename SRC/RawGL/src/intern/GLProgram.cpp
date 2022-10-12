@@ -265,7 +265,7 @@ void GLShader::finalize()
 GLProgram::GLProgram(const std::vector<std::shared_ptr<GLShader>>& shaders) :
 	m_isValid(false)
 {
-	LOG(info) << "Creating program from a shader set.";
+	LOG(debug) << "Creating program from a shader set.";
 
 	m_id = glCreateProgram();
 	
@@ -312,7 +312,7 @@ GLProgram::GLProgram(const std::vector<std::shared_ptr<GLShader>>& shaders) :
 	}
 #endif
 
-	LOG(info) << "Program has linked successfully.";
+	LOG(debug) << "Program has linked successfully.";
 
 	compileUniformList();
 	compileOutputList();
@@ -369,7 +369,7 @@ void GLProgram::compileUniformList()
 
         if (length > sizeof(name))
         {
-            LOG(info) << "program: uniform name length exceeds " << sizeof(name);
+            LOG(error) << "program: uniform name length exceeds " << sizeof(name);
             exit(1);
         }
 
@@ -405,7 +405,7 @@ void GLProgram::compileOutputList()
         glGetProgramResourceName(m_id, GL_PROGRAM_OUTPUT, i, sizeof(name), &length, name);
 
         if (length > sizeof(name)) {
-            LOG(info) << "program: output name length exceeds " << sizeof(name);
+            LOG(error) << "program: output name length exceeds " << sizeof(name);
             exit(1);
         }
 

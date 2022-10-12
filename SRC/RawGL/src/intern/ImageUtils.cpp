@@ -231,13 +231,13 @@ bool image_utils::load_image(
 
         if (ext == "crw" || ext == "cs1" || ext == "dc2" || ext == "dcr" || ext == "dng" || ext == "erf" || ext == "fff" || ext == "k25" || ext == "kdc" || ext == "mdc" || ext == "mos" || ext == "mrw" || ext == "nef" || ext == "orf" || ext == "pef" || ext == "pxn" || ext == "raf" || ext == "raw" || ext == "rdc" || ext == "sr2" || ext == "srf" || ext == "x3f" || ext == "arw" || ext == "3fr" || ext == "cine" || ext == "ia" || ext == "kc2" || ext == "mef" || ext == "nrw" || ext == "qtk" || ext == "rw2" || ext == "sti" || ext == "rwl" || ext == "srw" || ext == "drf" || ext == "dsc" || ext == "ptx" || ext == "cap" || ext == "iiq" || ext == "rwz" || ext == "cr3")
         {
-            LOG(info) << " user attributes:";
-            LOG(info) << "  oiio:ColorSpace: " << specin.get_string_attribute("oiio:ColorSpace");
-            LOG(info) << "  raw:ColorSpace: " << specin.get_string_attribute("raw:ColorSpace");
-            LOG(info) << "  raw:Demosaic: " << specin.get_string_attribute("raw:Demosaic");
-            LOG(info) << "  raw:use_camera_wb: " << specin.get_int_attribute("raw:use_camera_wb");
-            LOG(info) << "  raw:HighlightMode: " << specin.get_int_attribute("raw:HighlightMode");
-            LOG(info) << "  raw:user_flip: " << specin.get_int_attribute("raw:user_flip");
+            LOG(debug) << " user attributes:";
+            LOG(debug) << "  oiio:ColorSpace: " << specin.get_string_attribute("oiio:ColorSpace");
+            LOG(debug) << "  raw:ColorSpace: " << specin.get_string_attribute("raw:ColorSpace");
+            LOG(debug) << "  raw:Demosaic: " << specin.get_string_attribute("raw:Demosaic");
+            LOG(debug) << "  raw:use_camera_wb: " << specin.get_int_attribute("raw:use_camera_wb");
+            LOG(debug) << "  raw:HighlightMode: " << specin.get_int_attribute("raw:HighlightMode");
+            LOG(debug) << "  raw:user_flip: " << specin.get_int_attribute("raw:user_flip");
         }
 
         Timer timer;
@@ -249,7 +249,7 @@ bool image_utils::load_image(
         alphaChannel = spec.alpha_channel;
 	    format = spec.format;
 
-        LOG(info) << " size: " << width << "x" << height;
+        LOG(debug) << " size: " << width << "x" << height;
         LOG(debug) << " channels: " << channels;
 
         if (alphaChannel > 3)
@@ -296,7 +296,7 @@ bool image_utils::load_image(
         {
             if (in->close())
             {
-                LOG(info) << "Finished in " << timer.nowText();
+                LOG(debug) << "Finished in " << timer.nowText();
                 return true;
             }
         }
