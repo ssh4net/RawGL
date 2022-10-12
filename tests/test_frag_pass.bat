@@ -1,0 +1,37 @@
+"..\bin\RawGL\RawGL.exe" ^
+--verbosity 0 ^
+-P shaders\empty.vert shaders\pass1.frag ^
+--pass_size 1024 ^
+--in InSample inputs\EmptyPresetLUT.png ^
+--out OutSample outputs\pass1.tif ^
+--out_format rgb32f ^
+--out_channels 3 ^
+--out_bits 32 ^
+--out_attr oiio:ColorSpace linear ^
+--out_attr oiio:RawColor 1 ^
+--out_attr oiio:nchannels 3 ^
+--out_attr oiio:UnassociatedAlpha 2 ^
+--out_attr tiff:compression ZIP ^
+-P shaders\empty.vert shaders\pass2.frag ^
+--in InSample2 OutSample 0 ^
+--out OutSample2 outputs\pass2.tif ^
+--out_format rgb32f ^
+--out_channels 3 ^
+--out_bits 32 ^
+--out_attr oiio:ColorSpace linear ^
+--out_attr oiio:RawColor 1 ^
+--out_attr oiio:nchannels 3 ^
+--out_attr oiio:UnassociatedAlpha 2 ^
+--out_attr tiff:compression ZIP ^
+-P shaders\empty.vert shaders\pass3.frag ^
+--in _LOD 5 ^
+--in InSample3 OutSample2 1 min ll ^
+--out OutSample3 outputs\pass3.tif ^
+--out_format rgb32f ^
+--out_channels 3 ^
+--out_bits 32 ^
+--out_attr oiio:ColorSpace linear ^
+--out_attr oiio:RawColor 1 ^
+--out_attr oiio:nchannels 3 ^
+--out_attr oiio:UnassociatedAlpha 2 ^
+--out_attr tiff:compression ZIP

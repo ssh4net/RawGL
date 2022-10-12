@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ShowAllFiles>true</ShowAllFiles>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LocalDebuggerCommandArguments>--verbosity 0 --pass_comp data\test.comp --pass_size 512 --pass_workgroupsize 32 32 --in u_test false --in u_texture0 data\lotr.jpg min ll  --out o_out0 out\comp_out0.tif --out_format rgba32f --out_channels 4 --out_alpha_channel 3 --out_bits 16</LocalDebuggerCommandArguments>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <LocalDebuggerWorkingDirectory>$(SolutionDir)\..\bin\RawGL</LocalDebuggerWorkingDirectory>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LocalDebuggerCommandArguments>--verbosity 0 --pass_comp data\test.comp --pass_size 512 --pass_workgroupsize 32 32 --in u_test false --in u_texture0 data\lotr.jpg min ll --out o_out0 out\comp_out0.tif --out_format rgba32f --out_channels 4 --out_alpha_channel 3 --out_bits 16</LocalDebuggerCommandArguments>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <LocalDebuggerWorkingDirectory>$(SolutionDir)\..\bin\RawGL</LocalDebuggerWorkingDirectory>
+  </PropertyGroup>
+</Project>

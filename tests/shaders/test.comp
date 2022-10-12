@@ -1,0 +1,30 @@
+#version 460 core
+
+layout(location = 0) uniform bool u_test;
+
+layout(binding = 0) uniform sampler2D u_texture0;
+
+// layout(rgba32f) readonly uniform image2D u_texture0;
+layout(rgba32f) writeonly uniform image2D o_out0;
+
+//layout(rgba32f) readonly uniform image2D u_texture0;
+//layout(rgba32f) writeonly uniform image2D o_out0;
+
+layout (local_size_x = 32, local_size_y = 32) in;
+
+void main()
+{
+	ivec2 tc = ivec2(gl_GlobalInvocationID.xy);
+
+//	vec4 tex = imageLoad(u_texture0, tc);
+	vec4 tex = texture(u_texture0, vec2(tc) / imageSize(o_out0));
+
+	vec4 color;
+
+	if (u_test)
+		color = vec4(0.25f, 0.5f, 1.f, 1.f);
+	else
+		color = vec4(1.f, 0.5f, 0.25f, 1.f);
+
+	imageStore(o_out0, tc, tex + color);
+}
