@@ -81,7 +81,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 " 0 - debug\n"
                 " 1 - info\n"
                 " 2 - warning\n"
-                " 3 - error\n")
+                " 3 - error")
             ("pass_vertfrag,P", po::value<std::vector<std::string>>()->multitoken(),
                 "New pass using vertex & fragment shaders (in GLSL or SPIR-V format):\n"
                 " --pass_vertfrag s.vertfrag\n"
@@ -110,7 +110,6 @@ Sequence::Sequence(int argc, const char* argv[]) :
                     + PassInput::get_possible_tex_attr_fmt()
                     ).c_str()
                 )
-
             ("in_attr,t", po::value<std::vector<std::string>>()->multitoken(), "OpenImageIO/plugin attribute value (e.g.: --in_attr oiio:colorspace sRGB).")
             /*
                         ("in_color_space,s", po::value<std::vector<std::string>>(), "Color space of input images (e.g.: --in_color_space raw).")
@@ -150,7 +149,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 "Targa:    8, 16\n"
                 "OpenEXR:  16, 32 (half & float)\n"
                 "HDR/RGBE: 32\n"
-                "TIFF:     8, 16")
+                "TIFF:     8, 16, 32 float")
             /*
                         ("out_compression,c", po::value<std::vector<std::string>>()->multitoken(),
                             "Output image file compression (e.g.: --out_compression JPEG 100)\n"
