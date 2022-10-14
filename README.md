@@ -4,14 +4,15 @@ Command line image processing tool using OpenGL GLSL shaders.
 ## Features
 
 **Image import/export use OpenimageIO**\
-Support all image file formats that support OpenimageIO:
+Support all image file formats that support by OpenimageIO for import:
 * Camera RAWs (oiio compiled with libraw plugin)
 * OpenEXR
 * TIFF
 * PNG
 * JPEG
 * JPEG-2000 (oiio compiled with openjpeg plugin)
-* etc.
+* etc.\
+Export for this moment limited to JPG, PNG, TIFF, TGA, HDR, EXR
 
 **On image import and export allow define OpenimageIO reading/writing options like:**
 * oiio:ColorSpace ACES
