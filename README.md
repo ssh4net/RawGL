@@ -30,7 +30,7 @@ https://openimageio.readthedocs.io/en/latest/builtinplugins.html
 https://openimageio.readthedocs.io/en/latest/stdmetadata.html#sec-metadata-color
 https://openimageio.readthedocs.io/en/latest/oiiotool.html
 
-**For this moment support vertex, fragment and compute shaders in text and binary SPIR-V form**\
+**For this moment support vertex, fragment and compute shaders in text and binary SPIR-V form**
 * two files: shader.vert shader.frag
 * single file: shader.vertfrag
 * binary: shader.vert_spv shader.frag_spv\
