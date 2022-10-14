@@ -1,8 +1,7 @@
 # RawGL
-Command line image processing tool using OpenGL GLSL shaders.
+Command line image processing tool using OpenGL GLSL shaders.**
  
-### Features
-
+## Features
 
 **Image import/export use OpenimageIO**\
 Support all image file formats that support OpenimageIO:
@@ -46,3 +45,39 @@ That allows the run process from input images, export results as files to disk a
 
 **RawGL** itself **is not a batch tool** and runs as one thread, but using **windows CMD batch, PowerShell, or Python scripts** it is possible to run **RawGL** in parallel as many as can allow your system and GPU memory. **On multi-GPU systems, it is possible to clone RawGL binary and define GPU affinity to run a specific copy on a specific GPU and use batch scripts run multi-threaded on Multi-GPUs.**\
 *Native support for GPU affinity as a RawGL option is in the TODO list, but only if I found a usable way to do this. In that case, it will be possible to define GPU# in CLI. Before that only used Nvidia Control Panel and use specific RawGL binary.**
+
+Dependencies
+------------
+
+### Required dependencies -- RawGL will not build without these
+* boost
+  * boost-program-options
+  * boost-log
+* openimageio
+* glfw (included in repo)
+* glad (included in repo)
+
+### Optional dependencies -- features may be disabled if not found
+* If you want support for camera "RAW" formats:
+  * openimageio libraw plugin
+* If you want support for jpeg 2000 images:
+  * openimageio openjpeg plugin
+  
+Building
+========
+Please use **MS Visual Studio 2022**. For install dependencies easier to use **VCPKG**.
+Due to some bugs in some moments **vcpkg ports** can be broken, in that case, please use vcpkg reports.
+
+Download Binaries
+-----------------
+Compiling RawGL in MS VisualStudio is dumb and simple, but for better controling users feedback and bug reports, binaries will be available only through my Patreon:
+https://www.patreon.com/3DScan and maybe later through Gumroad.
+Premium examples and advanced tutorials as well as tailored support are available from Patreon too.
+Feel free to follow me there.
+
+Known bugs and limitations
+==========================
+* Windows registry required to change Video Driver delays from default settings (30~60 sec). Without this RawGL can silently drop processing or just crashing
+* No support for atomic counters and bufers yet (highest in priority in TODO list)
+* Compute shaders are less tested and probably missed a lot of features
+* No support for uniform arrays
