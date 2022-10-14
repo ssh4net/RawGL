@@ -63,8 +63,8 @@ Dependencies
 * If you want support for jpeg 2000 images:
   * openimageio openjpeg plugin
   
-Building
-========
+Building and Downloads
+======================
 Please use **MS Visual Studio 2022**. For install dependencies easier to use **VCPKG**.
 Due to some bugs in some moments **vcpkg ports** can be broken, in that case, please use vcpkg reports.
 
@@ -78,6 +78,7 @@ Feel free to follow me there.
 Known bugs and limitations
 ==========================
 * Windows registry required to change Video Driver delays from default settings (30~60 sec). Without this RawGL can silently drop processing or just crashing
-* No support for atomic counters and bufers yet (highest in priority in TODO list)
+Please use gpu_delays.reg from tools/registry folder to change the required registry values. And restart the system before using RawGL.
+* No support for atomic counters and buffers yet (highest in priority in TODO list)
 * Compute shaders are less tested and probably missed a lot of features
 * No support for uniform arrays
