@@ -1,5 +1,5 @@
 "..\bin\RawGL\RawGL.exe" ^
---verbosity 0 ^
+--verbosity 5 ^
 -P shaders\empty.vert shaders\pass1.frag ^
 --pass_size 1024 ^
 --in InSample inputs\EmptyPresetLUT.png ^

@@ -76,12 +76,14 @@ Sequence::Sequence(int argc, const char* argv[]) :
             ("help,h", "Show help message.")
             ("version,v", "Show program version.")
 
-            ("verbosity,V", po::value<int>()->default_value(1),
+            ("verbosity,V", po::value<int>()->default_value(3),
                 "Log level (selection & above will be shown):\n"
-                " 0 - debug\n"
-                " 1 - info\n"
-                " 2 - warning\n"
-                " 3 - error\n")
+				" 0 - fatal error only\n"
+                " 1 - errors only\n"
+                " 2 - warnings only\n"
+                " 3 - info\n"
+				" 4 - debug\n"
+				" 5 - trace\n")
             ("pass_vertfrag,P", po::value<std::vector<std::string>>()->multitoken(),
                 "New pass using vertex & fragment shaders (in GLSL or SPIR-V format):\n"
                 " --pass_vertfrag s.vertfrag\n"
@@ -110,7 +112,6 @@ Sequence::Sequence(int argc, const char* argv[]) :
                     + PassInput::get_possible_tex_attr_fmt()
                     ).c_str()
                 )
-
             ("in_attr,t", po::value<std::vector<std::string>>()->multitoken(), "OpenImageIO/plugin attribute value (e.g.: --in_attr oiio:colorspace sRGB).")
             /*
                         ("in_color_space,s", po::value<std::vector<std::string>>(), "Color space of input images (e.g.: --in_color_space raw).")
@@ -150,7 +151,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 "Targa:    8, 16\n"
                 "OpenEXR:  16, 32 (half & float)\n"
                 "HDR/RGBE: 32\n"
-                "TIFF:     8, 16")
+                "TIFF:     8, 16, 32 float")
             /*
                         ("out_compression,c", po::value<std::vector<std::string>>()->multitoken(),
                             "Output image file compression (e.g.: --out_compression JPEG 100)\n"
@@ -199,7 +200,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
             exit(1);
 
         // set the logger verbosity
-        Log_SetVerbosity(std::clamp(vm["verbosity"].as<int>(), 0, 3));
+		Log_SetVerbosity(std::clamp(vm["verbosity"].as<int>(), 0, 5));
 
         //
         // parse the multi-occurence, multi-token options here
@@ -219,7 +220,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
             {
                 // Start a new pass
                 int currentPassN = m_passes.size();
-                LOG(info) << "Loading pass " << currentPassN;
+                LOG(debug) << "Loading pass " << currentPassN;
 
                 std::shared_ptr<GLProgram> program;
 
@@ -1034,7 +1035,7 @@ void Sequence::initCommon()
                 {
                     // Not finding the texture means the referenced output is missing,
                     // which should never happen unless we made a mistake during parsing stage
-                    LOG(info) << "input (" << inputIt.first << ": referenced output is missing texture.";
+                    LOG(error) << "input (" << inputIt.first << ": referenced output is missing texture.";
                     exit(1);
                 }
 
@@ -1089,7 +1090,7 @@ void Sequence::run()
 {
     Timer timer;
 
-    LOG(info) << "Rendering.";
+    LOG(debug) << "Rendering.";
 
     glDisable(GL_BLEND);
     glBlendEquation(GL_FUNC_ADD);
@@ -1238,7 +1239,7 @@ void Sequence::run()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glUseProgram(0);
 
-    LOG(info) << "Sequence completed in " << timer.nowText();
+    LOG(debug) << "Sequence completed in " << timer.nowText();
 }
 
 #define STRING_USED_DEFAULTS "(used default)"

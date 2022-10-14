@@ -122,7 +122,7 @@ void PassOutput::saveTexture()
         if (!output->close())
             LOG(error) << "Can't close file after writing: " << OIIO::geterror();
         else
-            LOG(info) << "Finished in " << timer.nowText();
+            LOG(debug) << "Finished in " << timer.nowText();
     }
 
     free(data);

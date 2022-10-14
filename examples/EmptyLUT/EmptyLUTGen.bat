@@ -1,5 +1,5 @@
 "..\..\bin\RawGL\RawGL.exe" ^
---verbosity 1 ^
+--verbosity 3 ^
 -P empty.vert EmptyLUT.frag ^
 --pass_size 512 ^
 --in img_size 512 ^

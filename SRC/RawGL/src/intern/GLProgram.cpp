@@ -265,7 +265,7 @@ void GLShader::finalize()
 GLProgram::GLProgram(const std::vector<std::shared_ptr<GLShader>>& shaders) :
 	m_isValid(false)
 {
-	LOG(info) << "Creating program from a shader set.";
+	LOG(debug) << "Creating program from a shader set.";
 
 	m_id = glCreateProgram();
 	
@@ -312,7 +312,7 @@ GLProgram::GLProgram(const std::vector<std::shared_ptr<GLShader>>& shaders) :
 	}
 #endif
 
-	LOG(info) << "Program has linked successfully.";
+	LOG(debug) << "Program has linked successfully.";
 
 	compileUniformList();
 	compileOutputList();
@@ -350,7 +350,10 @@ void GLProgram::compileUniformList()
 {
     int count;
         
+    // returns the number of active attribute atomic counter buffers used by program.
     GLCall(glGetProgramiv(m_id, GL_ACTIVE_UNIFORMS, &count));
+    // returns the number of active attribute atomic counter buffers used by program.
+    //GlCall(glGetProgramiv(m_id, GL_ACTIVE_ATOMIC_COUNTER_BUFFERS, &count));
 
     if (!count)
     {
@@ -369,7 +372,7 @@ void GLProgram::compileUniformList()
 
         if (length > sizeof(name))
         {
-            LOG(info) << "program: uniform name length exceeds " << sizeof(name);
+            LOG(error) << "program: uniform name length exceeds " << sizeof(name);
             exit(1);
         }
 
@@ -382,6 +385,7 @@ void GLProgram::compileUniformList()
         }
 
         m_uniforms.insert({ name, GLProgramUniform(type, location, size) });
+        LOG(trace) << "UNIFORM: " << name << " location = " << location;
     }
 }
 
@@ -405,7 +409,7 @@ void GLProgram::compileOutputList()
         glGetProgramResourceName(m_id, GL_PROGRAM_OUTPUT, i, sizeof(name), &length, name);
 
         if (length > sizeof(name)) {
-            LOG(info) << "program: output name length exceeds " << sizeof(name);
+            LOG(error) << "program: output name length exceeds " << sizeof(name);
             exit(1);
         }
 
@@ -413,5 +417,6 @@ void GLProgram::compileOutputList()
         //m_outputs.insert({ name, ShaderOutput(glGetProgramResourceIndex(m_id, GL_PROGRAM_OUTPUT, name)) });
         //LOG(info) << "OUTPUT LOCATION: %i %s\n\n", glGetProgramResourceLocation(m_id, GL_PROGRAM_OUTPUT, name), &name[0]);
         m_outputs.insert({ name, GLProgramOutput(glGetProgramResourceLocation(m_id, GL_PROGRAM_OUTPUT, name)) });
+        LOG(trace) << "OUTPUT: " << name << " location = " << glGetProgramResourceLocation(m_id, GL_PROGRAM_OUTPUT, name);
     }
 }

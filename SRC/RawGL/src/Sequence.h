@@ -202,10 +202,10 @@ struct Pass
     //
 
     // Output viewport size
-    int size[2];
+	int size[2] = { 512, 512 };
 
     // Number of threads
-    int workGroupSize[2];
+	int workGroupSize[2] = { 16, 16 };
 
     GLuint fboId;
 

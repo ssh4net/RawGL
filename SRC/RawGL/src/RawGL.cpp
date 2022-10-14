@@ -28,10 +28,9 @@ const int APP_VERSION[] = { 1, 5 };
 
 int main(int argc, const char* argv[])
 {
-	//std::shared_ptr<GLSLProgram> program = g_glslProgramManager.loadTextFiles("");
-	//return 0;
 	Timer timer;
-    OpenGLHandle glhandle;
+
+	OpenGLHandle glhandle;
 
 	// init the logger
 	Log_Init();
@@ -39,9 +38,8 @@ int main(int argc, const char* argv[])
     // start the sequence
     Sequence sequence(argc, argv);
     sequence.run();
-
-	LOG(info) << "------------ Completed -------------";
-	LOG(info) << "Total processing time: " << timer.nowText();
+	LOG(info) << std::endl;
+	LOG(info) << "Total processing time : " << timer.nowText() << std::endl;
 
     return 0;
 }

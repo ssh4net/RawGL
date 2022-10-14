@@ -35,14 +35,14 @@ public:
     void* getData(GLenum type) const;
 
 private:
-    GLuint m_id;
+	GLuint m_id = 0;
 
-    int m_width;
-	int m_height;
+	int m_width = 0;
+	int m_height = 0;
 
-	GLenum m_baseFormat;
-	int m_channels;
-    int m_alphaChannel;
+	GLenum m_baseFormat = 0;
+	int m_channels = 0;
+	int m_alphaChannel = -1;
 
-    GLenum m_internalFormat;
+	GLenum m_internalFormat = 0;
 };
