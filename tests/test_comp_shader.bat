@@ -1,5 +1,5 @@
 "..\bin\RawGL\RawGL.exe" ^
---verbosity 0 ^
+--verbosity 5 ^
 --pass_comp shaders\test.comp ^
 --pass_size 512 ^
 --pass_workgroupsize 32 32 ^
