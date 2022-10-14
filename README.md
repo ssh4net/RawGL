@@ -253,5 +253,7 @@ Premium content can be found on Patreon https://www.patreon.com/3DScan
 License
 -------
 
-RawGL  is licensed under the GNU General Public License, Version 3.
+Copyright © 2022 Erium Vladlen.
+
+RawGL is licensed under the GNU General Public License, Version 3.
 Individual files may have a different, but compatible license.
