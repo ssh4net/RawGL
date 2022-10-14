@@ -35,7 +35,15 @@ void Log_Init()
 void Log_SetVerbosity(int l)
 {
 	boost::log::core::get()->set_filter(
-		boost::log::trivial::severity >= (boost::log::trivial::debug + l)
+		boost::log::trivial::severity >= (boost::log::trivial::fatal - l)
+		// log level is 0-5, 0 is most verbose
+		// 0 = trace, 1 = debug, 2 = info, 3 = warning, 4 = error, 5 = fatal
+		// fatal - 0 = only fatal errors, 
+		// fatal - 1 = error,
+		// fatal - 2 = warning, 
+		// fatal - 3 = info (default), 
+		// fatal - 4 = debug, 
+		// fatal - 5 = trace (most outputs)
 	);
 
 	//LOG(debug) << "DEBUGMSG";

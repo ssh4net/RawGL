@@ -350,7 +350,10 @@ void GLProgram::compileUniformList()
 {
     int count;
         
+    // returns the number of active attribute atomic counter buffers used by program.
     GLCall(glGetProgramiv(m_id, GL_ACTIVE_UNIFORMS, &count));
+    // returns the number of active attribute atomic counter buffers used by program.
+    //GlCall(glGetProgramiv(m_id, GL_ACTIVE_ATOMIC_COUNTER_BUFFERS, &count));
 
     if (!count)
     {
@@ -382,6 +385,7 @@ void GLProgram::compileUniformList()
         }
 
         m_uniforms.insert({ name, GLProgramUniform(type, location, size) });
+        LOG(trace) << "UNIFORM: " << name << " location = " << location;
     }
 }
 
@@ -413,5 +417,6 @@ void GLProgram::compileOutputList()
         //m_outputs.insert({ name, ShaderOutput(glGetProgramResourceIndex(m_id, GL_PROGRAM_OUTPUT, name)) });
         //LOG(info) << "OUTPUT LOCATION: %i %s\n\n", glGetProgramResourceLocation(m_id, GL_PROGRAM_OUTPUT, name), &name[0]);
         m_outputs.insert({ name, GLProgramOutput(glGetProgramResourceLocation(m_id, GL_PROGRAM_OUTPUT, name)) });
+        LOG(trace) << "OUTPUT: " << name << " location = " << glGetProgramResourceLocation(m_id, GL_PROGRAM_OUTPUT, name);
     }
 }

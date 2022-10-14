@@ -27,8 +27,13 @@ struct GLProgramUniform
     GLsizei size;
 
     // avoid redundant GL calls if current & provided values are the same
-    GLint ints[4];
-    GLfloat floats[16];
+	GLint ints[4] = { 0, 0, 0, 0 };
+    GLfloat floats[16] = {
+        0.0, 0.0, 0.0, 0.0, 
+        0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0
+    };
 
     bool isSet;
 
@@ -50,8 +55,8 @@ struct GLProgramOutput
 struct GLShader
 {
 	GLuint id;
-	GLenum type;
-	bool isValid;
+	GLenum type = 0;
+	bool isValid = true;
 
 	GLShader() : id(0) {}
 

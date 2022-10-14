@@ -76,12 +76,14 @@ Sequence::Sequence(int argc, const char* argv[]) :
             ("help,h", "Show help message.")
             ("version,v", "Show program version.")
 
-            ("verbosity,V", po::value<int>()->default_value(1),
+            ("verbosity,V", po::value<int>()->default_value(3),
                 "Log level (selection & above will be shown):\n"
-                " 0 - debug\n"
-                " 1 - info\n"
-                " 2 - warning\n"
-                " 3 - error")
+				" 0 - fatal error only\n"
+                " 1 - errors only\n"
+                " 2 - warnings only\n"
+                " 3 - info\n"
+				" 4 - debug\n"
+				" 5 - trace\n")
             ("pass_vertfrag,P", po::value<std::vector<std::string>>()->multitoken(),
                 "New pass using vertex & fragment shaders (in GLSL or SPIR-V format):\n"
                 " --pass_vertfrag s.vertfrag\n"
@@ -198,7 +200,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
             exit(1);
 
         // set the logger verbosity
-        Log_SetVerbosity(std::clamp(vm["verbosity"].as<int>(), 0, 3));
+		Log_SetVerbosity(std::clamp(vm["verbosity"].as<int>(), 0, 5));
 
         //
         // parse the multi-occurence, multi-token options here
