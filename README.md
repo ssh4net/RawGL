@@ -247,7 +247,8 @@ Technically you can use any size of Image buffer and img/lut sizes. For example,
    
 In this example RawGL will load image **EmptyPresetLUT.png** as **InSample** Uniform and process it in first **pass1** shader. Results of this pass will be saved as 32bit float **pass1.tif**. Pass #2 will use **Output** from pass #1 as **InSample2** Uniform using **OutSample 0** directive and results from this pass will be saved as **pass2.tif**. Pass #3 will use **Output** from pass #2 as **InSample3** Uniform using **OutSample2 1** directive, compute mip-maps (**min ll** directive to make mimp-maps using linear interpolation) and after shader pass save output as pass3.tif.
 
-Some examples available in Exmples folder. Also some examples can be found in tests folder.
+More examples available in Exmples folder. And some more examples can be found in tests folder. 
+Premium content can be found on Patreon https://www.patreon.com/3DScan
 
 License
 -------
