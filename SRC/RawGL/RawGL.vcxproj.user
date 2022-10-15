@@ -4,7 +4,7 @@
     <ShowAllFiles>true</ShowAllFiles>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LocalDebuggerCommandArguments>-V 5 -P data\empty.vert data\pass1.frag --pass_size 1024 1024 --in InSample data\EmptyPresetLUT.png min ll mag l wrps mr --out OutSample out\pass1.tif --out_format rgb32f --out_channels 3 --out_bits 32 -P data\empty.vert data\pass2.frag --in InSample2 OutSample 0 min ll mag l wrps mr --out OutSample2 out\pass2.tif --out_format rgb32f --out_channels 3 --out_bits 32 -P data\empty.vert data\pass3.frag --in InSample3 OutSample2 1 min ll mag l wrps mr --out OutSample3 out\pass3.tif --out_format rgb32f --out_channels 3 --out_bits 32</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-V 5 -P data\empty.vert data\pass1.frag --pass_size 1024 1024 --in InSample data\EmptyPresetLUT.png min ll mag l wrps mr --out OutSample out\pass1.tif --out_format rgb16 --out_channels 4 --out_bits 8 -P data\empty.vert data\pass2.frag --in InSample2 OutSample 0 min ll mag l wrps mr --out OutSample2 out\pass2.tif -P data\empty.vert data\pass3.frag --in InSample3 OutSample2 1 min ll mag l wrps mr --out OutSample3 out\pass3.tif --out_format rgb32f --out_channels 3 --out_bits 16</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <LocalDebuggerWorkingDirectory>$(SolutionDir)\..\bin\RawGL</LocalDebuggerWorkingDirectory>
   </PropertyGroup>

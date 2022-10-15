@@ -210,16 +210,24 @@ Sequence::Sequence(int argc, const char* argv[]) :
         PassInput* currentInput = nullptr;
         PassOutput* currentOutput = nullptr;
 
+        int currentPassN = 0;
+
+        // tired. Don't know correct way to store previous output parameters
+        std::string p_internalFormatText = "rgb32f";
+        int p_channels = 3;
+        int p_alphaChannel = -1;
+        int p_bits = 16;
+
         for (auto& o : parsedOptions.options)
         {
             //
             // Pass
             //
-
+			
             if (o.string_key == "pass_vertfrag" || o.string_key == "pass_comp")
             {
                 // Start a new pass
-                int currentPassN = m_passes.size();
+                currentPassN = m_passes.size();
                 LOG(debug) << "Loading pass " << currentPassN;
 
                 std::shared_ptr<GLProgram> program;
@@ -612,6 +620,14 @@ Sequence::Sequence(int argc, const char* argv[]) :
 
                 currentOutput = &outputIt->second;
 
+                // Set pass_size from previous pass
+                if (currentPassN > 0) {
+                    currentOutput->internalFormatText = p_internalFormatText;
+                    currentOutput->channels = p_channels;
+                    currentOutput->alphaChannel = p_alphaChannel;
+                    currentOutput->bits = p_bits;
+                }
+				
                 // TODO: Check for output path duplicates using a pass-wide map.
                 currentOutput->path = o.value[1];
 
@@ -639,6 +655,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
                     LOG(error) << "out (" << o.value[0] << "): program output not found.";
                     exit(1);
                 }
+
             }
             else if (o.string_key == "out_channels")
             {
@@ -649,6 +666,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 }
 
                 currentOutput->channels = str_to_numeric<int32_t>(o.value[0]);
+                p_channels = currentOutput->channels;
             }
             else if (o.string_key == "out_alpha_channel")
             {
@@ -665,6 +683,8 @@ Sequence::Sequence(int argc, const char* argv[]) :
                     LOG(error) << "out_alpha_channel (" << o.value[0] << "): index > 3 is unsupported.";
                     exit(1);
                 }
+
+                p_alphaChannel = currentOutput->alphaChannel;
             }
             else if (o.string_key == "out_bits")
             {
@@ -675,6 +695,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 }
 
                 currentOutput->bits = str_to_numeric<int32_t>(o.value[0]);
+                p_bits = currentOutput->bits;
             }
             else if (o.string_key == "out_format")
             {
@@ -685,6 +706,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 }
 
                 currentOutput->internalFormatText = o.value[0];
+                p_internalFormatText = o.value[0];
             }
             else if (o.string_key == "out_attr")
             {
