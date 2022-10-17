@@ -1085,9 +1085,14 @@ void Sequence::initCommon()
     };
 
     const unsigned int indices[] = {
-        0, 1, 2,
+        0, 2, 1,
         0, 3, 2
     };
+
+    // Definte winding order and face culling
+    GLCall(glFrontFace(GL_CCW));
+    GLCall(glCullFace(GL_BACK));
+    GLCall(glEnable(GL_CULL_FACE));
 
     GLCall(glGenVertexArrays(1, &m_vaoId));
     GLCall(glGenBuffers(1, &m_vboId));
