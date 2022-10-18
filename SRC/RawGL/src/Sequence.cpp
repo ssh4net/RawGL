@@ -397,11 +397,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
                         if (i < val_arr.size() - 1) {
                             val_data = val_arr[i + 1];
                         }
-                        // if val_data is empty this mean no previous pass values or hr_attributes
-                        if (val_data == "") {
-                            currentInput->path = val_key;
-                            continue;
-                        }
+						
                         // Search for texture attributes
                         hres hr_tex_attr = hres::OK;
                         currentInput->eval_tex_attr(hr_tex_attr, val_key, val_data);
