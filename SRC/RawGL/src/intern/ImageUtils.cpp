@@ -247,9 +247,20 @@ bool image_utils::load_image(
         height = spec.height;
         channels = spec.nchannels;
         alphaChannel = spec.alpha_channel;
-	    format = spec.format;
 
         LOG(debug) << " size: " << width << "x" << height;
+		
+		// fix for TIF with alpha channel
+		// Unassociated alpha treat as additional channel instead of alpha channel
+        // TODO: find a better way to do this
+        if (channels > 3 && alphaChannel == -1) {
+            LOG(debug) << "OIIO don't detected alpha channel.";
+			LOG(debug) << "Found " << channels << " channels, last set to alpha.";
+            alphaChannel = channels - 1;
+        }
+	    
+        format = spec.format;
+
         LOG(debug) << " channels: " << channels;
 
         if (alphaChannel > 3)
@@ -279,7 +290,7 @@ bool image_utils::load_image(
 	case OIIO::TypeDesc::HALF:
 		bytes = 2;
 		break;
-	//case OIIO::TypeDesc::UINT32:
+	case OIIO::TypeDesc::UINT32:
 	case OIIO::TypeDesc::FLOAT:
 		bytes = 4;
 		break;
@@ -289,8 +300,10 @@ bool image_utils::load_image(
 		exit(1);
 		return false;
 	}
-
-        pixels = malloc(width * height * channels * bytes);
+        // malloc requred size_t (unsinged int) so we need to cast to that.
+        // othwise we have int overflow for large textures.
+        std::size_t pmem_size = (std::size_t)width * (std::size_t)height * (std::size_t)(channels * bytes);
+		pixels = malloc(pmem_size);
 
         if (in->read_image(0, 0, 0, channels, format, pixels, OIIO::AutoStride, OIIO::AutoStride, OIIO::AutoStride, (*progress_callback)))
         {

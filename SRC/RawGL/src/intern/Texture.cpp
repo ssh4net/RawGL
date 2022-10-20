@@ -176,7 +176,10 @@ void* Texture::getData(GLenum type) const
         return nullptr;
     }
 
-    void* data = malloc(m_width * m_height * m_channels * bytes);
+	// malloc requred size_t (unsinged int) so we need to cast to that.
+	// othwise we have int overflow for large textures.
+    std::size_t mem_size = (std::size_t)m_width * (std::size_t)m_height * (std::size_t)(m_channels * bytes);
+    void* data = malloc(mem_size);
 
     //glGenerateTextureMipmap(m_id); // NOTE: OpenGL 4.5+
     glActiveTexture(GL_TEXTURE0);
