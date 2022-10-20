@@ -193,6 +193,19 @@ Sequence::Sequence(int argc, const char* argv[]) :
         if (vm.count("version"))
         {
             std::cout << APP_NAME << " version " << APP_VERSION[0] << "." << APP_VERSION[1] << " (build from " << __DATE__ << ", " << __TIME__ << ")." << std::endl;
+			std::cout << std::endl << "GPU features:" << std::endl;
+            int value;
+            glGetIntegerv(GL_MAX_TEXTURE_SIZE, &value);
+            std::cout << "GL_MAX_TEXTURE_SIZE: " << value << std::endl;
+            glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &value);
+            std::cout << "GL_MAX_3D_TEXTURE_SIZE: " << value << std::endl;
+            glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &value);
+			std::cout << "GL_MAX_CUBE_MAP_TEXTURE_SIZE: " << value << std::endl;
+			glGetIntegeri_v(GL_MAX_VIEWPORT_DIMS, 0, &value);
+            std::cout << "GL_MAX_VIEWPORT_DIMS: " << value;
+            glGetIntegeri_v(GL_MAX_VIEWPORT_DIMS, 1, &value);
+            std::cout << " x " << value << std::endl;
+
             infoExit = true;
         }
 
@@ -829,6 +842,10 @@ void Sequence::initCommon()
                         internalFormat = list[1][channels - 1];
                         type = GL_UNSIGNED_SHORT;
                         break;
+                    case OIIO::TypeDesc::UINT32:
+                        internalFormat = list[1][channels - 1];
+                        type = GL_UNSIGNED_INT;
+                        break;
                     case OIIO::TypeDesc::HALF:
                         internalFormat = list[2][channels - 1];
                         type = GL_HALF_FLOAT;
@@ -910,7 +927,7 @@ void Sequence::initCommon()
 
             pass.size[i] = i == 0 ? refInputIt->second.texture->getWidth() : refInputIt->second.texture->getHeight();
         }
-
+        LOG(debug) << "pass " << passIndex << " pass_size: " << pass.sizeText[0] << " x " << pass.sizeText[1];
         if (pass.isCompute)
         {
             //LOG(debug) << "Work group size: " << pass.workGroupSizeText[0] << " " << pass.workGroupSizeText[1];
@@ -1081,9 +1098,14 @@ void Sequence::initCommon()
     };
 
     const unsigned int indices[] = {
-        0, 1, 2,
+        0, 2, 1,
         0, 3, 2
     };
+
+    // Definte winding order and face culling
+    GLCall(glFrontFace(GL_CCW));
+    GLCall(glCullFace(GL_BACK));
+    GLCall(glEnable(GL_CULL_FACE));
 
     GLCall(glGenVertexArrays(1, &m_vaoId));
     GLCall(glGenBuffers(1, &m_vboId));
