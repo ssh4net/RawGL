@@ -192,8 +192,9 @@ Sequence::Sequence(int argc, const char* argv[]) :
 
         if (vm.count("version"))
         {
-            std::cout << APP_NAME << " version " << APP_VERSION[0] << "." << APP_VERSION[1] << " (build from " << __DATE__ << ", " << __TIME__ << ")." << std::endl;
-			std::cout << std::endl << "GPU features:" << std::endl;
+			std::cout << APP_NAME << " version " << APP_VERSION[0] << "." << APP_VERSION[1] << "." << APP_VERSION[2] << " Copyright (c) " << APP_AUTHOR << std::endl;
+            std::cout << "Build from: " << __DATE__ << ", " << __TIME__ << "." << std::endl;
+			std::cout << std::endl << "Available GPU features:" << std::endl;
             int value;
             glGetIntegerv(GL_MAX_TEXTURE_SIZE, &value);
             std::cout << "GL_MAX_TEXTURE_SIZE: " << value << std::endl;
@@ -927,7 +928,7 @@ void Sequence::initCommon()
 
             pass.size[i] = i == 0 ? refInputIt->second.texture->getWidth() : refInputIt->second.texture->getHeight();
         }
-        LOG(debug) << "pass " << passIndex << " pass_size: " << pass.sizeText[0] << " x " << pass.sizeText[1];
+        LOG(debug) << "Pass " << passIndex << ": pass_size is " << pass.sizeText[0] << " x " << pass.sizeText[1];
         if (pass.isCompute)
         {
             //LOG(debug) << "Work group size: " << pass.workGroupSizeText[0] << " " << pass.workGroupSizeText[1];

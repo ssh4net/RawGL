@@ -385,7 +385,7 @@ void GLProgram::compileUniformList()
         }
 
         m_uniforms.insert({ name, GLProgramUniform(type, location, size) });
-        LOG(trace) << "UNIFORM: " << name << " location = " << location;
+        LOG(trace) << "Uniform: " << name << " location = " << location;
     }
 }
 
@@ -417,6 +417,6 @@ void GLProgram::compileOutputList()
         //m_outputs.insert({ name, ShaderOutput(glGetProgramResourceIndex(m_id, GL_PROGRAM_OUTPUT, name)) });
         //LOG(info) << "OUTPUT LOCATION: %i %s\n\n", glGetProgramResourceLocation(m_id, GL_PROGRAM_OUTPUT, name), &name[0]);
         m_outputs.insert({ name, GLProgramOutput(glGetProgramResourceLocation(m_id, GL_PROGRAM_OUTPUT, name)) });
-        LOG(trace) << "OUTPUT: " << name << " location = " << glGetProgramResourceLocation(m_id, GL_PROGRAM_OUTPUT, name);
+        LOG(trace) << "Output: " << name << " location = " << glGetProgramResourceLocation(m_id, GL_PROGRAM_OUTPUT, name);
     }
 }

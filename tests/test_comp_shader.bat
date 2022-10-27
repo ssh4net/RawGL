@@ -10,3 +10,5 @@
 --out_channels 4 ^
 --out_alpha_channel 3 ^
 --out_bits 16
+
+pause

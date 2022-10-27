@@ -53,7 +53,9 @@ enum class ImageFileFormat {
 	TGA,
 	EXR,
 	HDR,
-	TIF
+	TIF,
+	JP2,
+	WEBP
 };
 
 /// <summary>
