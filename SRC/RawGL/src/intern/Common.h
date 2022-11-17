@@ -60,4 +60,5 @@
 #endif
 
 extern const char* APP_NAME;
+extern const char* APP_AUTHOR;
 extern const int APP_VERSION[];

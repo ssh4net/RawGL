@@ -55,7 +55,12 @@ static image_utils::ImageFileFormat get_file_format(const std::string& ext)
     else if (ext == "tif" || ext == "tiff" || ext == "tx" || ext == "env" || ext == "sm" || ext == "vsm") {
         return image_utils::ImageFileFormat::TIF;
     }
-
+    else if (ext == "jp2" || ext == "j2k") {
+		return image_utils::ImageFileFormat::JP2;
+	}
+	else if (ext == "webp") {
+		return image_utils::ImageFileFormat::WEBP;
+	}
     return image_utils::ImageFileFormat::UNKNOWN;
 }
 
@@ -143,7 +148,27 @@ OIIO::TypeDesc image_utils::get_output_format(const std::string& output_filename
             output_format = OIIO::TypeDesc::UINT16;
             r_defaulted = true;
         }
-        
+
+        break;
+    case image_utils::ImageFileFormat::JP2:
+        if (arg == 8) {
+            output_format = OIIO::TypeDesc::UINT8;
+        }
+        else if (arg == 16) {
+            output_format = OIIO::TypeDesc::UINT16;
+        }
+        else {
+            output_format = OIIO::TypeDesc::UINT16;
+            r_defaulted = true;
+        }
+		
+        break;
+    case image_utils::ImageFileFormat::WEBP:
+        output_format = OIIO::TypeDesc::UINT8;
+        if (arg != 8) {
+            r_defaulted = true;
+        }
+
         break;
     case image_utils::ImageFileFormat::UNKNOWN:
     default:

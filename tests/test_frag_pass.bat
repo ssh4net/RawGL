@@ -35,3 +35,5 @@
 --out_attr oiio:nchannels 3 ^
 --out_attr oiio:UnassociatedAlpha 2 ^
 --out_attr tiff:compression ZIP
+
+pause

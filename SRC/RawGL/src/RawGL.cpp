@@ -22,7 +22,8 @@
 #include "GLProgramManager.h"
 
 const char* APP_NAME = "RawGL";
-const int APP_VERSION[] = { 1, 5 };
+const char* APP_AUTHOR = "Erium Vladlen";
+const int APP_VERSION[] = { 1, 5, 2 };
 
 //#include "shader.hpp"
 
