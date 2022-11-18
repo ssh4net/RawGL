@@ -92,6 +92,13 @@ void PassOutput::saveTexture()
         pf = OIIO::TypeDesc::UINT16;
         type = GL_UNSIGNED_SHORT;
         break;
+    case GL_R32UI:
+    case GL_RG32UI:
+    case GL_RGB32UI:
+    case GL_RGBA32UI:
+        pf = OIIO::TypeDesc::UINT32;
+        type = GL_UNSIGNED_INT;
+        break;
     case GL_R16F:
     case GL_RG16F:
     case GL_RGB16F:

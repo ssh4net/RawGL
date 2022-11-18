@@ -24,12 +24,12 @@ class Texture
 {
 public:
 	Texture() : m_id(0) {}
-    Texture(int width, int height, GLenum internalFormat, GLenum type, const void* data = nullptr, int alphaChannel = -1);
+    Texture(GLsizei width, GLsizei height, GLenum internalFormat, GLenum type, const void* data = nullptr, int alphaChannel = -1);
     ~Texture();
 
     int getId() { return m_id; }
-    int getWidth() { return m_width; }
-    int getHeight() { return m_height; }
+	GLsizei getWidth() { return m_width; }
+	GLsizei getHeight() { return m_height; }
     int getChannels() { return m_channels; }
     GLenum getInternalFormat() { return m_internalFormat; }
     void* getData(GLenum type) const;
@@ -37,8 +37,8 @@ public:
 private:
 	GLuint m_id = 0;
 
-	int m_width = 0;
-	int m_height = 0;
+	GLsizei m_width = 0;
+	GLsizei m_height = 0;
 
 	GLenum m_baseFormat = 0;
 	int m_channels = 0;

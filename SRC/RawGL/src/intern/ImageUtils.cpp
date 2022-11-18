@@ -207,38 +207,6 @@ bool image_utils::load_image(
         specin.attribute(a.first, a.second);
     }
 
-    /*
-        if (colors == "ACES") {
-            specin.attribute("oiio:ColorSpace", "ACES");
-            specin.attribute("raw:ColorSpace", "ACES");
-        }
-        else if (colors == "raw") {
-            specin.attribute("oiio:ColorSpace", "Linear");
-            specin.attribute("raw:ColorSpace", "raw");
-        }
-        else if (colors == "ProPhoto") {
-            specin.attribute("oiio:ColorSpace", "Linear");
-            specin.attribute("raw:ColorSpace", "ProPhoto");
-        }
-        else if (colors == "ProPhoto-linear") {
-            specin.attribute("oiio:ColorSpace", "Linear");
-            specin.attribute("raw:ColorSpace", "ProPhoto-linear");
-        }
-        else if (colors == "XYZ") {
-            specin.attribute("oiio:ColorSpace", "Linear");
-            specin.attribute("raw:ColorSpace", "XYZ");
-        }
-        else {
-            specin.attribute("oiio:ColorSpace", "sRGB");
-            specin.attribute("raw:ColorSpace", "sRGB");
-        }
-
-        specin.attribute("raw:Demosaic", demosaic);
-        specin.attribute("raw:use_camera_wb", 0);
-        specin.attribute("raw:HighlightMode", 0);
-        specin.attribute("raw:user_flip", userFlip);
-    */
-
     // TODO: Fix this asap, OIIO crashes in GIFInput when a JPEG image file doesn't exist on disk.
     if (!OIIO::Filesystem::exists(filepath))
     {
@@ -318,6 +286,10 @@ bool image_utils::load_image(
 	case OIIO::TypeDesc::UINT32:
 	case OIIO::TypeDesc::FLOAT:
 		bytes = 4;
+		break;
+	case OIIO::TypeDesc::UINT64:
+    case OIIO::TypeDesc::DOUBLE:
+		bytes = 8;
 		break;
 	default:
         LOG(error) << "Unsupported pixel format " << format;

@@ -133,6 +133,7 @@ void GLProgramUniform::set(const GLfloat* values)
     for (i = 0; i < size; i++)
         floats[i] = values[i];
 
+    // setting uniform variables in current program
     switch (type)
     {
     case GL_FLOAT:

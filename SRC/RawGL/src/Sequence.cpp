@@ -129,6 +129,8 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 "BMP:      *.bmp\n"
                 "PNG:      *.png\n"
                 "JPEG:     *.jpg, *.jpe, *.jpeg, *.jif, *.jfif, *.jfi\n"
+                "JPEG2000: *.jp2, *.j2k\n"
+		"WEBP:     *.webp\n"
                 "Targa:    *.tga, *.tpic\n"
                 "OpenEXR:  *.exr\n"
                 "HDR/RGBE: *.hdr\n"
@@ -148,6 +150,8 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 "BMP:      8\n"
                 "PNG:      8, 16\n"
                 "JPEG:     8 \n"
+                "JPEG2000: 8, 16\n"
+                "WEBP:     8\n"
                 "Targa:    8, 16\n"
                 "OpenEXR:  16, 32 (half & float)\n"
                 "HDR/RGBE: 32\n"
@@ -825,10 +829,11 @@ void Sequence::initCommon()
                     // Determine texture internal format
                     GLenum internalFormat, type;
 
-                    const GLenum list[4][4] =
+                    const GLenum list[5][4] =
                     {
                         { GL_R8, GL_RG8, GL_RGB8, GL_RGBA8 },
                         { GL_R16, GL_RG16, GL_RGB16, GL_RGBA16 },
+                        { GL_R32UI,GL_RG32UI,GL_RGB32UI,GL_RGBA32UI},
                         { GL_R16F, GL_RG16F, GL_RGB16F, GL_RGBA16F },
                         { GL_R32F, GL_RG32F, GL_RGB32F, GL_RGBA32F },
                     };
@@ -844,15 +849,15 @@ void Sequence::initCommon()
                         type = GL_UNSIGNED_SHORT;
                         break;
                     case OIIO::TypeDesc::UINT32:
-                        internalFormat = list[1][channels - 1];
+                        internalFormat = list[2][channels - 1];
                         type = GL_UNSIGNED_INT;
                         break;
                     case OIIO::TypeDesc::HALF:
-                        internalFormat = list[2][channels - 1];
+                        internalFormat = list[3][channels - 1];
                         type = GL_HALF_FLOAT;
                         break;
                     case OIIO::TypeDesc::FLOAT:
-                        internalFormat = list[3][channels - 1];
+                        internalFormat = list[4][channels - 1];
                         type = GL_FLOAT;
                         break;
                     default:
@@ -928,7 +933,7 @@ void Sequence::initCommon()
 
             pass.size[i] = i == 0 ? refInputIt->second.texture->getWidth() : refInputIt->second.texture->getHeight();
         }
-        LOG(debug) << "Pass " << passIndex << ": pass_size is " << pass.sizeText[0] << " x " << pass.sizeText[1];
+        LOG(debug) << "Pass " << passIndex << ": pass_size is " << pass.size[0] << " x " << pass.size[1];
         if (pass.isCompute)
         {
             //LOG(debug) << "Work group size: " << pass.workGroupSizeText[0] << " " << pass.workGroupSizeText[1];
