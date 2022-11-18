@@ -94,7 +94,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\extern\glad\src\glad.c" />
     <ClCompile Include="src\intern\GLProgram.cpp" />
     <ClCompile Include="src\intern\GLProgramManager.cpp" />
     <ClCompile Include="src\intern\ImageUtils.cpp" />
