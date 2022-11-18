@@ -13,3 +13,5 @@
 --out_attr oiio:nchannels 3 ^
 --out_attr oiio:UnassociatedAlpha 2 ^
 --out_attr png:compressionLevel 0
+
+pause
