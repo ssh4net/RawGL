@@ -34,3 +34,12 @@ struct OpenGLHandle
     OpenGLHandle();
     ~OpenGLHandle();
 };
+
+struct glsl_type_set {
+    GLenum      type;
+    const char* name;
+};
+
+extern const glsl_type_set type_set[];
+extern int type_set_size;
+extern const char* glsl_type_name(GLenum type);
