@@ -13,7 +13,7 @@
 --out_attr oiio:UnassociatedAlpha 2 ^
 --out_attr tiff:compression ZIP ^
 -P shaders\empty.vert shaders\pass2.frag ^
---in InSample2 OutSample 0 ^
+--in InSample2 OutSample::0 ^
 --out OutSample2 outputs\pass2.tif ^
 --out_format rgb32f ^
 --out_channels 3 ^
@@ -25,7 +25,7 @@
 --out_attr tiff:compression ZIP ^
 -P shaders\empty.vert shaders\pass3.frag ^
 --in _LOD 5 ^
---in InSample3 OutSample2 1 min ll ^
+--in InSample3 OutSample2::1 min ll ^
 --out OutSample3 outputs\pass3.tif ^
 --out_format rgb32f ^
 --out_channels 3 ^
@@ -36,4 +36,4 @@
 --out_attr oiio:UnassociatedAlpha 2 ^
 --out_attr tiff:compression ZIP
 
-pause
+@pause
