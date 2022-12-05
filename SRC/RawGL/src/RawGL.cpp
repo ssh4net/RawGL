@@ -20,15 +20,22 @@
 #include "OpenGLUtils.h"
 #include "Timer.h"
 #include "GLProgramManager.h"
+#include <iostream>
 
 const char* APP_NAME = "RawGL";
 const char* APP_AUTHOR = "Erium Vladlen";
-const int APP_VERSION[] = { 1, 5, 2 };
+const int APP_VERSION[] = { 1, 5, 3 };
 
 //#include "shader.hpp"
 
 int main(int argc, const char* argv[])
 {
+// for renderdoc debugging
+#if 0 //_DEBUG
+	std::cout << "Debug mode" << std::endl;
+	system("pause");
+#endif
+	
 	Timer timer;
 
 	OpenGLHandle glhandle;
@@ -42,5 +49,8 @@ int main(int argc, const char* argv[])
 	LOG(info) << std::endl;
 	LOG(info) << "Total processing time : " << timer.nowText() << std::endl;
 
+#if 0 // _DEBUG
+	system("pause");
+#endif
     return 0;
 }
