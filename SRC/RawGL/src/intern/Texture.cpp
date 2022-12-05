@@ -17,7 +17,7 @@
 
 #include "Texture.h"
 
-Texture::Texture(int width, int height, GLenum internalFormat, GLenum type, const GLvoid* data, int alphaChannel) :
+Texture::Texture(GLsizei width, GLsizei height, GLenum internalFormat, GLenum type, const GLvoid* data, int alphaChannel) :
     Texture()
 {
     glActiveTexture(GL_TEXTURE0);
@@ -33,19 +33,7 @@ Texture::Texture(int width, int height, GLenum internalFormat, GLenum type, cons
 	// fix for compute shader textures?
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    /*
-    GL_LINEAR_MIPMAP_LINEAR
-    GL_NEAREST_MIPMAP_NEAREST
     
-    GL_NEAREST_MIPMAP_LINEAR
-    GL_LINEAR_MIPMAP_NEAREST
-    */
-    //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, -2);
-
     m_width = width;
     m_height = height;
     m_internalFormat = internalFormat;
@@ -141,6 +129,40 @@ Texture::Texture(int width, int height, GLenum internalFormat, GLenum type, cons
         break;
     }
 
+    int bytes = 1;
+    switch (type)
+    {
+    case GL_BYTE:
+    case GL_UNSIGNED_BYTE:  //OIIO::TypeDesc::UINT8:
+        bytes = 1;
+        break;
+	case GL_SHORT:
+    case GL_UNSIGNED_SHORT: //OIIO::TypeDesc::UINT16:
+    case GL_HALF_FLOAT:     //OIIO::TypeDesc::HALF:
+        bytes = 2;
+        break;
+	case GL_INT:
+    case GL_UNSIGNED_INT:   //OIIO::TypeDesc::UINT32:
+    case GL_FLOAT:          //OIIO::TypeDesc::FLOAT:
+        bytes = 4;
+        break;
+    case GL_DOUBLE:
+		bytes = 8;
+		break;
+    default:
+        bytes = 4;
+        break;
+    }
+	
+    if (m_channels != 4) {
+        if ((m_width * bytes * m_channels) % 4 != 0) {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, bytes);
+        }
+    }
+    else {
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    }
+	
     glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask.data());
 
     glTexImage2D(GL_TEXTURE_2D, 0, m_internalFormat, width, height, 0, m_baseFormat, type, data);
@@ -182,8 +204,10 @@ void* Texture::getData(GLenum type) const
     void* data = malloc(mem_size);
 
     //glGenerateTextureMipmap(m_id); // NOTE: OpenGL 4.5+
+
     glActiveTexture(GL_TEXTURE0);
 	
+    //glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glBindTexture(GL_TEXTURE_2D, m_id);
     glGetTexImage(GL_TEXTURE_2D, 0, m_baseFormat, type, data);
 
