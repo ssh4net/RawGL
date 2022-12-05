@@ -122,6 +122,47 @@ const void _pass_input_set_tex_mag(PassInput& pi, const GLint& val);
 const void _pass_input_set_tex_s(PassInput& pi, const GLint& val);
 const void _pass_input_set_tex_t(PassInput& pi, const GLint& val);
 
+struct PassInputCounters
+{
+	PassInputCounters();
+	
+    struct CounterParm;
+    struct CounterParmValue;
+	
+    // Counters parameters
+    struct CounterParm
+    {
+        // Attribute name(min, mag, s, t, ...)
+        std::string name;
+        // Setter function (see `_pass_input_set_tex_min` as an example)
+        // std::function<void(PassInputCounters&, const GLint&)> func;
+        // String description (for documentation and help messages purposes)
+        std::string desc;
+    };
+
+    const void eval_counter_parm(hres& hr, const std::string& parm_name);
+	
+    static const std::vector<CounterParm> COUNTER_PARM_ARR;
+	
+    GLint binding;
+	GLint offset;
+	GLint size;
+	GLint value;
+    std::string path;
+};
+
+struct PassOutputCounters
+{
+    PassOutputCounters();
+
+    std::string key;
+    GLint ref_pass;
+    GLint binding;
+    GLint offset;
+    GLint size;
+    GLint value;
+};
+
 //
 // File output
 //
@@ -162,6 +203,9 @@ struct PassOutput
     // Pointer to a uniform in pass' program object (compute shader)
     GLProgramUniform* uniform;
 
+	// Pointer to a atomic counter in pass' program object (compute shader)
+    GLProgramAtomicBuffers* atomicCounter;
+	
     // Texture attached to this output channel in the FBO
     std::shared_ptr<Texture> texture;
 
@@ -187,6 +231,9 @@ struct Pass
 
     // One for each user-specified data entry
     std::map<std::string, PassInput> inputs;
+
+	// One for each user-specified atomic counter
+	std::map<std::string, PassInputCounters> atomicCounters;
 
     // One for each last stage shader output (i.e. fragment)
     std::map<std::string, PassOutput> outputs;
@@ -237,7 +284,9 @@ private:
     // all resources used in the sequence
     std::map<std::string, std::shared_ptr<Texture>> m_textures;
     //std::map<std::string, std::shared_ptr<GLSLProgram>> m_shaders;
-
+    
+	// ? maybe not needed ?
+    std::map < std::string, std::shared_ptr<GLProgramAtomicBuffers>> m_counters;
     std::vector<Pass> m_passes;
 
     GLuint m_vaoId, m_vboId, m_iboId;

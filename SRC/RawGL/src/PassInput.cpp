@@ -28,11 +28,11 @@ template <> int32_t str_to_numeric(hres& hr, const std::string& str_val)
         }
         catch (const std::invalid_argument& e_arg) {
             hr = hres::ERR;
-            //LOG(error) << "Unable to parse invalid integer value (\"" << str_val << "\"):\n" << e_arg.what();
+			LOG(trace) << "\x1B[91mUnable to parse invalid integer value (\"" << str_val << "\"): " << e_arg.what() << "\x1B[0m" << std::endl;
         }
         catch (const std::out_of_range& e_oor) {
             hr = hres::ERR;
-            //LOG(error) << "Unable to parse integer value (\"" << str_val << "\") (out of range):\n" << e_oor.what();
+			LOG(trace) << "\x1B[91mUnable to parse integer value (\"" << str_val << "\") (out of range): " << e_oor.what() << "\x1B[0m" << std::endl;
         }
     }
 
@@ -49,11 +49,11 @@ template <> float_t str_to_numeric(hres& hr, const std::string& str_val)
         }
         catch (const std::invalid_argument& e_arg) {
             hr = hres::ERR;
-            //LOG(error) << "Unable to parse invalid float value (\"" << str_val << "\"):\n" << e_arg.what();
+            LOG(trace) << "\x1B[91mUnable to parse invalid float value (\"" << str_val << "\"):\n" << e_arg.what() << "\x1B[0m" << std::endl;
         }
         catch (const std::out_of_range& e_oor) {
             hr = hres::ERR;
-            //LOG(error) << "Unable to parse float value (\"" << str_val << "\") (out of range):\n" << e_oor.what();
+            LOG(trace) << "\x1B[91mUnable to parse float value (\"" << str_val << "\") (out of range):\n" << e_oor.what() << "\x1B[0m" << std::endl;
         }
     }
 
@@ -122,6 +122,24 @@ const std::vector<PassInput::TexAttr> PassInput::TEX_ATTR_ARR = {
     },
 };
 
+const std::vector<PassInputCounters::CounterParm> PassInputCounters::COUNTER_PARM_ARR = {
+    {
+        "bd",
+        //&_pass_input_set_binding,
+		"Actomic Counter Binding",
+    },
+    {
+		"of",
+		//&_pass_input_set_offset,
+		"Counter binding offset",
+    },
+    {
+		"vl",
+		//&_pass_input_set_value,
+		"Initial counter value",
+    },
+};
+
 const void _pass_input_set_tex_min(PassInput& pi, const GLint& val)
 {
     pi.tex_min = val;
@@ -185,6 +203,40 @@ std::string PassInput::get_possible_tex_attr_fmt()
     return ret;
 }
 
+/// <summary>
+const void PassInputCounters::eval_counter_parm(hres& hr, const std::string& parm)
+{
+    if (hres::OK == hr) {
+        for (const auto& tex_parm : PassInputCounters::COUNTER_PARM_ARR) {
+            if (parm == tex_parm.name) {
+				return;
+            }
+        }
+    }
+    hr = hres::ERR;
+}
+/// </summary>
+
+const void _pass_input_set_binding(PassInputCounters& pi, const GLint& val)
+{
+	pi.binding = val;
+}
+
+const void _pass_input_set_offset(PassInputCounters& pi, const GLint& val)
+{
+    pi.offset = val;
+}
+
+const void _pass_input_set_value(PassInputCounters& pi, const GLint& val)
+{
+    pi.value = val;
+}
+
+const void _pass_input_set_path(PassInputCounters& pi, const std::string& val)
+{
+    pi.path = val;
+}
+
 PassInput::PassInput()
 {
     memset(ints, 0, sizeof(GLint) * NUM_INTS);
@@ -205,6 +257,14 @@ PassInput::PassInput()
     }
 }
 
+PassInputCounters::PassInputCounters()
+{
+    binding = 0;
+    offset = 0;
+    size = 0;
+    value = 0;
+    path = "";
+}
 
 #if 0
 

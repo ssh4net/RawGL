@@ -92,6 +92,13 @@ void PassOutput::saveTexture()
         pf = OIIO::TypeDesc::UINT16;
         type = GL_UNSIGNED_SHORT;
         break;
+    case GL_R32UI:
+    case GL_RG32UI:
+    case GL_RGB32UI:
+    case GL_RGBA32UI:
+        pf = OIIO::TypeDesc::UINT32;
+        type = GL_UNSIGNED_INT;
+        break;
     case GL_R16F:
     case GL_RG16F:
     case GL_RGB16F:
@@ -114,6 +121,13 @@ void PassOutput::saveTexture()
 
     // Read the framebuffer data
     void* data = texture->getData(type);
+	
+#if 0   
+    // write data to binary file for debugging
+    FILE* fp = std::fopen("d:\oiio_write_debug.raw", "wb");
+    std::fwrite(data, texture->getWidth() * texture->getHeight() * texture->getChannels() * format.size(), 1, fp);
+    std::fclose(fp);
+#endif
 
     if (!output->write_image(pf, data, OIIO::AutoStride, OIIO::AutoStride, OIIO::AutoStride, (*image_utils::progress_callback)))
         LOG(error) << "Can't write file: " << OIIO::geterror();

@@ -23,6 +23,7 @@
 struct GLProgramUniform
 {
     GLenum type;
+	std::string type_name;
     GLint location;
     GLsizei size;
 
@@ -37,12 +38,44 @@ struct GLProgramUniform
 
     bool isSet;
 
-    GLProgramUniform(GLenum type, GLint location, GLsizei size) : type(type), location(location), size(size), isSet(false) {}
+    GLProgramUniform(GLenum type, std::string type_name, GLint location, GLsizei size) : type(type), type_name(type_name), location(location), size(size), isSet(false) {}
 
     void set(GLint value);
     void set(const GLint *values);
     void set(GLfloat value);
     void set(const GLfloat* values);
+};
+
+struct GLProgramNoUniform
+{
+	GLenum type;
+	std::string type_name;
+	GLint location;
+	GLsizei size = 0;
+
+	// avoid redundant GL calls if current & provided values are the same
+	GLuint value = 0;
+
+	bool isSet;
+	
+	GLProgramNoUniform(GLenum type, std::string type_name, GLint location, GLsizei size) : type(type), type_name(type_name), location(location), size(size), isSet(false) {}
+	
+	void set(GLuint value);
+};
+
+struct GLProgramAtomicBuffers
+{
+	std::string name = "";
+    GLsizei size = 0;
+
+	// avoid redundant GL calls if current & provided values are the same
+	GLuint value = 0;
+
+	bool isSet;
+
+	GLProgramAtomicBuffers(std::string name, GLint size) : name(name), size(size), isSet(false) {}
+
+	void set(GLuint value);
 };
 
 struct GLProgramOutput
@@ -78,6 +111,9 @@ public:
 	~GLProgram();
 
     GLProgramUniform* findUniform(const std::string& name);
+	GLProgramNoUniform* findNoUniform(const std::string& name);
+	GLProgramAtomicBuffers* findAtomicBuffer(GLint& binding);
+	int AtomicBuffersSize();
     GLProgramOutput* findOutput(const std::string& name);
 
     GLuint getId() const { return m_id; }
@@ -85,6 +121,8 @@ public:
 
 private:
 	std::map<std::string, GLProgramUniform> m_uniforms;
+    std::map<std::string, GLProgramNoUniform> m_no_uniforms;
+    std::map<GLint, GLProgramAtomicBuffers> m_atomicbuffers;
 	std::map<std::string, GLProgramOutput> m_outputs;
 
 	GLuint m_id;
@@ -95,4 +133,10 @@ private:
 
     // Compile a list of last program stage outputs
     void compileOutputList();
+
+    // Compile a list of last program stage outputs
+    void compileAtomicBufferList();
+
+	// Debug a list of shader variables
+	void DebugShaderVarList();
 };

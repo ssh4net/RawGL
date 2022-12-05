@@ -17,6 +17,7 @@
 
 #include "GLProgram.h"
 #include "Log.h"
+#include "OpenGLUtils.h"
 
 #include <sstream>
 #include <fstream>
@@ -133,6 +134,7 @@ void GLProgramUniform::set(const GLfloat* values)
     for (i = 0; i < size; i++)
         floats[i] = values[i];
 
+    // setting uniform variables in current program
     switch (type)
     {
     case GL_FLOAT:
@@ -314,7 +316,12 @@ GLProgram::GLProgram(const std::vector<std::shared_ptr<GLShader>>& shaders) :
 
 	LOG(debug) << "Program has linked successfully.";
 
+#if _DEBUG
+    DebugShaderVarList();
+#endif
+
 	compileUniformList();
+    compileAtomicBufferList();
 	compileOutputList();
 
 	m_isValid = true;
@@ -334,6 +341,33 @@ GLProgramUniform* GLProgram::findUniform(const std::string& name)
         return nullptr;
 
     return &it->second;
+}
+
+GLProgramNoUniform* GLProgram::findNoUniform(const std::string& name)
+{
+    auto it = m_no_uniforms.find(name);
+
+    if (it == m_no_uniforms.end())
+        return nullptr;
+
+    return &it->second;
+}
+
+GLProgramAtomicBuffers* GLProgram::findAtomicBuffer(GLint& binding)
+{
+	auto it = m_atomicbuffers.find(binding);
+
+    if (it == m_atomicbuffers.end())
+        return nullptr;
+
+    return &it->second;
+}
+
+int GLProgram::AtomicBuffersSize()
+{
+    int it = m_atomicbuffers.size();
+
+    return it;
 }
 
 GLProgramOutput* GLProgram::findOutput(const std::string& name)
@@ -378,15 +412,76 @@ void GLProgram::compileUniformList()
 
         GLint location = glGetUniformLocation(m_id, name);
 
+		const char* type_name = nullptr;
+		
+        //for (int j = 0; j < type_set_size; j++) {
+        //    if (type_set[j].type != type)
+        //        continue;
+        //    type_name = type_set[j].name;
+        //    break;
+        //}
+		
+        type_name = glsl_type_name(type);
+		
         if (location == -1)
         {
-            // internal uniform
+            // internal uniforms 
+			// atomic counters
+            if (type == GL_UNSIGNED_INT_ATOMIC_COUNTER) {
+                /* 
+                GLint binding;
+                GLint isize;
+                GLCall(glGetActiveAtomicCounterBufferiv(m_id, i, GL_ATOMIC_COUNTER_BUFFER_BINDING, &binding));
+                GLCall(glGetActiveAtomicCounterBufferiv(m_id, i, GL_ATOMIC_COUNTER_BUFFER_DATA_SIZE, &isize));
+                m_atomicbuffers.insert({ name, GLProgramAtomicBuffers(type, type_name, binding, isize)});
+                int count = isize / sizeof(GLuint);
+                LOG(trace) << "atomic counter #" << i << ": " << name << ": binding = " << binding << " size = " << count;
+                */
+            }
+            else {
+                m_no_uniforms.insert({ name, GLProgramNoUniform(type, type_name, location, size) });
+                LOG(trace) << type_name << ": " << name << " location = " << location << " size = " << size;
+            }
             continue;
         }
-
-        m_uniforms.insert({ name, GLProgramUniform(type, location, size) });
-        LOG(trace) << "Uniform: " << name << " location = " << location;
+        
+        m_uniforms.insert({ name, GLProgramUniform(type, type_name, location, size) });
+        LOG(trace) << type_name << ": " << name << " location = " << location;
     }
+}
+
+// compile a list of shader defined atomic buffers
+void GLProgram::compileAtomicBufferList()
+{
+	int count;
+
+	// returns the number of active attribute atomic counter buffers used by program.
+	GLCall(glGetProgramiv(m_id, GL_ACTIVE_ATOMIC_COUNTER_BUFFERS, &count));
+
+	if (!count)
+	{
+        m_atomicbuffers.clear();
+		return;
+	}
+
+	for (int i = 0; i < count; i++)
+	{
+		// char name[256] = "atomic counter";
+		// GLsizei length;
+
+        GLint binding;
+		GLint size;
+        std::string name = "";
+		
+		GLCall(glGetActiveAtomicCounterBufferiv(m_id, i, GL_ATOMIC_COUNTER_BUFFER_BINDING, &binding));
+		GLCall(glGetActiveAtomicCounterBufferiv(m_id, i, GL_ATOMIC_COUNTER_BUFFER_DATA_SIZE, &size));
+        //GLint binding = glGetUniformLocation(m_id, name);
+        // get atomic counter offset
+        m_atomicbuffers.insert({ binding, GLProgramAtomicBuffers(name, size) });
+
+        int count = size / sizeof(GLuint);
+		LOG(trace) << "Atomic counter #" << i << ": binding = " << binding << " size = " << count;
+	}
 }
 
 // compile a list of last program stage outputs
@@ -419,4 +514,167 @@ void GLProgram::compileOutputList()
         m_outputs.insert({ name, GLProgramOutput(glGetProgramResourceLocation(m_id, GL_PROGRAM_OUTPUT, name)) });
         LOG(trace) << "Output: " << name << " location = " << glGetProgramResourceLocation(m_id, GL_PROGRAM_OUTPUT, name);
     }
+}
+
+
+void GLProgram::DebugShaderVarList()
+{
+    std::cout << "\x1B[93m" <<
+    "GL_ACTIVE_UNIFORMS" << std::endl;
+	
+    GLint count;
+    GLCall(glGetProgramiv(m_id, GL_ACTIVE_UNIFORMS, &count));
+	
+    if (!count)
+    {
+        std::cout << "no GL_ACTIVE_UNIFORMS" << std::endl;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        char name[256];
+        GLsizei length;
+        GLint size;
+        GLenum type;
+
+        GLCall(glGetActiveUniform(m_id, i, sizeof(name), &length, &size, &type, name));
+
+        if (length > sizeof(name))
+        {
+            std::cout << "program: uniform name length exceeds " << sizeof(name) << std::endl;
+        }
+
+        GLint location = glGetUniformLocation(m_id, name);
+
+        const char* type_name = nullptr;
+
+        type_name = glsl_type_name(type);
+
+        std::cout << type_name << ": " << name << " location = " << location << " size = " << size << std::endl;
+    }
+
+    std::cout << "VERTEX GL_ACTIVE_ATTRIBUTES" << std::endl;
+
+    GLCall(glGetProgramiv(m_id, GL_ACTIVE_ATTRIBUTES, &count));
+
+    if (!count)
+    {
+        std::cout << "no VERTEX GL_ACTIVE_ATTRIBUTES" << std::endl;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        char name[256];
+        GLsizei length;
+        GLint size;
+        GLenum type;
+
+        GLCall(glGetActiveAttrib(m_id, i, sizeof(name), &length, &size, &type, name));
+
+        if (length > sizeof(name))
+        {
+            std::cout << "program: attribute name length exceeds " << sizeof(name) << std::endl;
+        }
+
+        GLint location = glGetUniformLocation(m_id, name);
+
+        const char* type_name = nullptr;
+
+        type_name = glsl_type_name(type);
+
+        std::cout << type_name << ": " << name << " location = " << location << " size = " << size << std::endl;
+    }
+
+    std::cout << "GL_ACTIVE_ATOMIC_COUNTER_BUFFERS" << std::endl;
+
+    GLCall(glGetProgramiv(m_id, GL_ACTIVE_ATOMIC_COUNTER_BUFFERS, &count));
+
+    if (!count)
+    {
+        std::cout << "no GL_ACTIVE_ATOMIC_COUNTER_BUFFERS" << std::endl;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        GLint binding;
+        GLint size;
+
+        GLCall(glGetActiveAtomicCounterBufferiv(m_id, i, GL_ATOMIC_COUNTER_BUFFER_BINDING, &binding));
+        GLCall(glGetActiveAtomicCounterBufferiv(m_id, i, GL_ATOMIC_COUNTER_BUFFER_DATA_SIZE, &size));
+
+        int count = size / sizeof(GLuint);
+        std::cout << "shader atomic counter #" << i << ": binding = " << binding << " size = " << count << std::endl;
+    }
+
+    std::cout << "GL_PROGRAM_OUTPUT" << std::endl;
+
+    GLCall(glGetProgramInterfaceiv(m_id, GL_PROGRAM_OUTPUT, GL_ACTIVE_RESOURCES, &count));
+
+    if (!count)
+    {
+        std::cout << "no GL_PROGRAM_OUTPUT" << std::endl;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        char name[64];
+        GLsizei length;
+
+        glGetProgramResourceName(m_id, GL_PROGRAM_OUTPUT, i, sizeof(name), &length, name);
+
+        if (length > sizeof(name)) {
+            std::cout << "program: output name length exceeds " << sizeof(name) << std::endl;
+        }
+
+        std::cout << "Output: " << name << " location = " << glGetProgramResourceLocation(m_id, GL_PROGRAM_OUTPUT, name) << std::endl;
+    }
+
+/*    std::cout << "GL_UNIFORM" << std::endl;
+
+    GLCall(glGetProgramInterfaceiv(m_id, GL_UNIFORM, GL_ACTIVE_RESOURCES, &count));
+
+    if (!count)
+    {
+        std::cout << "no GL_UNIFORM" << std::endl;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        char name[64];
+        GLsizei length;
+
+        glGetProgramResourceName(m_id, GL_UNIFORM, i, sizeof(name), &length, name);
+
+        if (length > sizeof(name)) {
+            std::cout << "program: output name length exceeds " << sizeof(name) << std::endl;
+        }
+
+        std::cout << "Uniform: " << name << " location = " << glGetProgramResourceLocation(m_id, GL_UNIFORM, name) << std::endl;
+    }
+
+    std::cout << "GL_PROGRAM_INPUT" << std::endl;
+
+    GLCall(glGetProgramInterfaceiv(m_id, GL_PROGRAM_INPUT, GL_ACTIVE_RESOURCES, &count));
+
+    if (!count)
+    {
+        std::cout << "no GL_PROGRAM_INPUT" << std::endl;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        char name[64];
+        GLsizei length;
+
+        glGetProgramResourceName(m_id, GL_PROGRAM_INPUT, i, sizeof(name), &length, name);
+
+        if (length > sizeof(name)) {
+            std::cout << "program: output name length exceeds " << sizeof(name) << std::endl;
+        }
+
+        std::cout << "PROGRAM_INPUT: " << name << " location = " << glGetProgramResourceLocation(m_id, GL_PROGRAM_INPUT, name) << std::endl;
+    }
+    */
+	
+    std::cout << "\x1B[0m";
 }

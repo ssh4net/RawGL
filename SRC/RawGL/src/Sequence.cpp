@@ -112,6 +112,9 @@ Sequence::Sequence(int argc, const char* argv[]) :
                     + PassInput::get_possible_tex_attr_fmt()
                     ).c_str()
                 )
+			("in_acnt", po::value<std::vector<std::string>>()->multitoken(),
+                "Atomic counter\n"
+				"Counter uniform name, binding, [initial value]")
             ("in_attr,t", po::value<std::vector<std::string>>()->multitoken(), "OpenImageIO/plugin attribute value (e.g.: --in_attr oiio:colorspace sRGB).")
             /*
                         ("in_color_space,s", po::value<std::vector<std::string>>(), "Color space of input images (e.g.: --in_color_space raw).")
@@ -129,6 +132,8 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 "BMP:      *.bmp\n"
                 "PNG:      *.png\n"
                 "JPEG:     *.jpg, *.jpe, *.jpeg, *.jif, *.jfif, *.jfi\n"
+				"JPEG2000: *.jp2, *.j2k\n"
+				"WEBP:     *.webp\n"
                 "Targa:    *.tga, *.tpic\n"
                 "OpenEXR:  *.exr\n"
                 "HDR/RGBE: *.hdr\n"
@@ -148,6 +153,8 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 "BMP:      8\n"
                 "PNG:      8, 16\n"
                 "JPEG:     8 \n"
+				"JPEG2000: 8, 16\n"
+				"WEBP:     8\n"
                 "Targa:    8, 16\n"
                 "OpenEXR:  16, 32 (half & float)\n"
                 "HDR/RGBE: 32\n"
@@ -223,7 +230,8 @@ Sequence::Sequence(int argc, const char* argv[]) :
         Pass* currentPass = nullptr;
         PassInput* currentInput = nullptr;
         PassOutput* currentOutput = nullptr;
-
+        PassInputCounters* currentInputCounters = nullptr;
+        PassOutputCounters* currentOutputCounters = nullptr;
         int currentPassN = 0;
 
         // tired. Don't know correct way to store previous output parameters
@@ -297,6 +305,9 @@ Sequence::Sequence(int argc, const char* argv[]) :
 
             if (o.string_key == "pass_size")
             {
+				// TODO:
+                // mtp/mp/scl/sc option for size scale vec2() positive only
+				// mg/mrgn option for image margin vec4() (left, right, top, bottom) positive or negative
                 if (!currentPass)
                 {
                     LOG(error) << "pass_size: no preceeding pass declaration.";
@@ -359,19 +370,6 @@ Sequence::Sequence(int argc, const char* argv[]) :
                     exit(1);
                 }
 
-#if 0
-                // get pass index
-                int passIndex = str_to_numeric<int>(o.value[0]);
-
-                if (passIndex < 0 || passIndex >= m_passes.size())
-                {
-                    LOG(error) << "in (" << o.value[0] << "): pass index " << passIndex << " out of range.";
-                    exit(1);
-                }
-
-                auto& pass = m_passes[passIndex];
-#endif
-
                 // get uniform reference
                 auto shaderUniform = currentPass->program->findUniform(o.value[0]);
 
@@ -408,28 +406,23 @@ Sequence::Sequence(int argc, const char* argv[]) :
                         std::string val_key = val_arr[i];
                         std::string val_data;
 
-                        if (i < val_arr.size() - 1) {
-                            val_data = val_arr[i + 1];
-                        }
-
-                        // Search for texture attributes
-                        hres hr_tex_attr = hres::OK;
-                        currentInput->eval_tex_attr(hr_tex_attr, val_key, val_data);
-
-                        if (hres::OK == hr_tex_attr) {
-                            i++; // Jump over next iteration, it contains only value which was already read
-                        }
-                        else {
-                            // Search for value from previous passes.
+                        /////////////
+                        if (val_key.find("::") != std::string::npos) {
                             hres hr_convert = hres::OK;
-                            const int32_t ref_pass_index = str_to_numeric<int>(hr_convert, val_data);
+                            const size_t split = val_key.find("::");
+                            const auto val_name = val_key.substr(0, split);
+                            const int ref_pass_index = str_to_numeric<int32_t>(hr_convert, val_key.substr(split + 2));
 
                             if (hres::OK == hr_convert && ref_pass_index >= 0 && ref_pass_index < m_passes.size() - 1) {
                                 auto& ref_pass = m_passes[ref_pass_index];
-                                auto ref_output_it = ref_pass.outputs.find(val_key);
-
+								// looks into Outputs list ins ref pass
+                                auto ref_output_it = ref_pass.outputs.find(val_name);
+                                
                                 if (ref_output_it == ref_pass.outputs.end()) {
-                                    ref_output_it = ref_pass.outputs.insert({ val_key, PassOutput() }).first;
+									// if output not found in Ouptut list,
+									// that can be a output defined in a shader but not used as a cli output
+                                    // create a new Output in that Shader Pass 
+                                    ref_output_it = ref_pass.outputs.insert({ val_name, PassOutput() }).first;
                                 }
 
                                 auto& ref_output = ref_output_it->second;
@@ -437,14 +430,14 @@ Sequence::Sequence(int argc, const char* argv[]) :
                                 hres hr_find_uniform = hres::OK;
 
                                 if (ref_pass.isCompute) {
-                                    ref_output.uniform = ref_pass.program->findUniform(val_key);
+                                    ref_output.uniform = ref_pass.program->findUniform(val_name);
 
                                     if (!ref_output.output) {
                                         hr_find_uniform = hres::ERR;
                                     }
                                 }
                                 else {
-                                    ref_output.output = ref_pass.program->findOutput(val_key);
+                                    ref_output.output = ref_pass.program->findOutput(val_name);
 
                                     if (!ref_output.output) {
                                         hr_find_uniform = hres::ERR;
@@ -455,17 +448,78 @@ Sequence::Sequence(int argc, const char* argv[]) :
                                     i++; // Jump over next iteration, it contains only value which was already read
                                 }
                                 else {
-                                    LOG(error) << "in (" << o.value[0] << "): referenced program output " << val_data.c_str() << " not found.";
+                                    LOG(error) << "in (" << o.value[0] << "): referenced program output " << val_key << " not found.";
                                     exit(1);
                                 }
-                                //hacky fix for previous pass output 
-                                currentInput->path = (val_key + "::" + val_data);
                             }
-                            else {
-                                // no usable hr_attrib was found
-                                currentInput->path = val_key;
-                            }
+                            currentInput->path = val_key;
+                            i++;
+                            continue;
                         }
+						
+                        if (i == val_arr.size() - 1) // if only Texture name and Path
+                            currentInput->path = val_key;
+                            break;
+						
+                        val_data = val_arr[i + 1];
+                        // Search for texture attributes
+                        hres hr_tex_attr = hres::OK;
+                        currentInput->eval_tex_attr(hr_tex_attr, val_key, val_data);
+
+                        if (hres::OK == hr_tex_attr) {
+                            i++;
+                        }
+                        else {
+                            //LOG(error) << "in (" << o.value[0] << "): " << val_key << "invalid ( " << val_data << " ) value";
+                            currentInput->path = val_key;
+                        }
+                        //else {
+                        //    // Search for value from previous passes.
+                        //    hres hr_convert = hres::OK;
+                        //    const int32_t ref_pass_index = str_to_numeric<int32_t>(hr_convert, val_data);
+
+                        //    if (hres::OK == hr_convert && ref_pass_index >= 0 && ref_pass_index < m_passes.size() - 1) {
+                        //        auto& ref_pass = m_passes[ref_pass_index];
+                        //        auto ref_output_it = ref_pass.outputs.find(val_key);
+
+                        //        if (ref_output_it == ref_pass.outputs.end()) {
+                        //            ref_output_it = ref_pass.outputs.insert({ val_key, PassOutput() }).first;
+                        //        }
+
+                        //        auto& ref_output = ref_output_it->second;
+
+                        //        hres hr_find_uniform = hres::OK;
+
+                        //        if (ref_pass.isCompute) {
+                        //            ref_output.uniform = ref_pass.program->findUniform(val_key);
+
+                        //            if (!ref_output.output) {
+                        //                hr_find_uniform = hres::ERR;
+                        //            }
+                        //        }
+                        //        else {
+                        //            ref_output.output = ref_pass.program->findOutput(val_key);
+
+                        //            if (!ref_output.output) {
+                        //                hr_find_uniform = hres::ERR;
+                        //            }
+                        //        }
+
+                        //        if (hres::OK == hr_find_uniform) {
+                        //            i++; // Jump over next iteration, it contains only value which was already read
+                        //        }
+                        //        else {
+                        //            LOG(error) << "in (" << o.value[0] << "): referenced program output " << val_data.c_str() << " not found.";
+                        //            exit(1);
+                        //        }
+                        //        //hacky fix for previous pass output 
+                        //        currentInput->path = (val_key + "::" + val_data);
+                        //    }
+                        //    else {
+                        //        // no usable hr_attrib was found
+                        //        currentInput->path = val_key;
+                        //    }
+                        //}
                     }
                 }
                 else { // Numeric values
@@ -570,6 +624,142 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 }
 
             }
+            else if (o.string_key == "in_acnt")
+            {
+                if (!currentPass)
+                {
+                    LOG(error) << "in_acnt (" << o.value[0] << "): no preceeding input declaration.";
+                    exit(1);
+                }
+                if (o.value.size() < 2)
+                {
+                    LOG(error) << "in_acnt (" << o.value[0] << "): must have at least 2 parameters.";
+                    exit(1);
+                }
+				
+                // link the input to its atomic counters
+                auto [inputIt, success] = currentPass->atomicCounters.insert({ o.value[0], PassInputCounters() });
+				
+                hres hr = hres::OK;
+                std::vector<std::string> val_arr;
+                val_arr.reserve(o.value.size() - 1);
+                std::copy(o.value.begin() + 1, o.value.end(), std::back_inserter(val_arr));
+				
+                int cntr_binding = 0;
+                int cntr_offset = 0;
+                GLuint cntr_val = 0;
+
+                for (size_t i = 0; i < val_arr.size(); ++i) {
+                    std::string val_key = val_arr[i];
+                    std::string val_data;
+
+                    if (i < val_arr.size() - 1) {
+                        val_data = val_arr[i + 1];
+                    }
+
+                    // Search for texture attributes
+                    hres hr_tex_parm = hres::OK;
+                    currentInputCounters->eval_counter_parm(hr_tex_parm, val_key);
+
+                    if (hres::OK != hr_tex_parm) {
+                        LOG(error) << "in_acnt (" << o.value[0] << "): -> " << val_key << " <- is invalid parameters";
+                        exit(1);
+                    }
+                    int tmp_int = str_to_numeric<int32_t>(hr, val_data);
+                    
+                    //if (hr == hres::ERR) {
+                    //    LOG(error) << "in_acnt (" << o.value[0] << "): -> " << val_data << " <- is invalid parameters";
+                    //    exit(1);
+                    //}
+
+                    if (val_key == "bd") {
+                        if (hr == hres::ERR) {
+                            LOG(error) << "in_acnt (" << o.value[0] << "): incorrect binding value: " << val_data << " must use integers only";
+                            exit(1);
+                        }
+                        cntr_binding = tmp_int;
+                    } 
+                    else if (val_key == "of") {
+                        if (hr == hres::ERR) {
+                            LOG(error) << "in_acnt (" << o.value[0] << "): incorrect offset value: " << val_data << " must use integers only";
+                            exit(1);
+                        }
+                        if (tmp_int % sizeof(GLuint) != 0) {
+                            LOG(error) << "in_acnt (" << o.value[0] << "): offset value " << val_data << " must be mod 4";
+                            exit(1);
+                        }
+                        cntr_offset = tmp_int;
+                    }
+                    else if (val_key == "vl") {
+						
+                        if (hr == hres::ERR && val_data.find("::") != std::string::npos)
+                        {
+                            const size_t split = val_data.find("::");
+                            const auto refInputAtomicName = val_data.substr(0, split);
+                            const int refPassIndex = str_to_numeric<int32_t>(val_data.substr(split + 2));
+                            auto refPass = m_passes[refPassIndex].atomicCounters.find(refInputAtomicName);
+							
+						    if (refPass == m_passes[refPassIndex].atomicCounters.end()) {
+                                LOG(error) << "in_acnt (" << o.value[0] << "): -> " << val_data << " <- reference counter not found";
+                                exit(1);
+                            }
+                            if (currentPassN <= refPassIndex) {
+                                LOG(error) << "in_acnt (" << o.value[0] << "): -> " << val_data << " <- reffering to counter from same or future pass";
+                                exit(1);
+                            }
+                            inputIt->second.path = val_data;
+                            //std::cout << "Atomic Name :" << refInputAtomicName << " from pass: " << refPassIndex;
+                            break;
+                        }
+                        cntr_val = tmp_int;
+                    }
+                    else if (hr == hres::ERR) {
+                        LOG(error) << "in_acnt (" << o.value[0] << "): -> " << val_data << " <- is invalid parameters";
+                           exit(1);
+                    }
+					
+                    i++;
+                }
+                // get atomic counter reference from Atomic Buffers list by defined binding
+                //auto shaderAtomics = currentPass->program->findAtomicBuffer(o.value[1]);
+
+                int counterBinding = cntr_binding + cntr_offset / sizeof(GLuint);
+				
+                auto shaderCounter = currentPass->program->findAtomicBuffer(counterBinding);
+
+                if (!shaderCounter)
+                {
+                    LOG(error) << "in_acnt (" << o.value[0] << " (binding = " << cntr_binding 
+                        << " ,offset = " << cntr_offset << " ): program atomic counter not found.";
+                    continue;
+                    //exit(1);
+                }
+                inputIt->second.binding = cntr_binding;
+                inputIt->second.offset = cntr_offset;
+                if (inputIt->second.path == "") {
+                    inputIt->second.value = cntr_val;
+                }
+
+                switch ( val_arr.size() )
+                {
+				case 2:
+                    LOG(trace) << "Atomic counter: " << o.value[0] << " " << "( binding = " << val_arr[1] << " ), initial value = " << 0;
+                    break;
+                case 4:
+                    LOG(trace) << "Atomic counter: " << o.value[0] << " " << "( binding = " << val_arr[1] << " ), initial value = " << val_arr[3];
+                    break;
+                case 6:
+                    LOG(trace) << "Atomic counter: " << o.value[0] << " " << "( binding = " << val_arr[1] << " , offset = " << val_arr[3] << " ), initial value = " << val_arr[5];
+                    break;
+                default:
+                    break;
+                }
+				
+				//LOG(trace) << "Atomic counter: " << o.value[0] << " " << "( binding = " << o.value[1] << " ), initial value = " << o.value[2];
+
+				//currentInput->counter = o.value[1];
+                LOG(trace) << "Test output only.";
+			}
             else if (o.string_key == "in_attr")
             {
                 if (!currentInput)
@@ -757,7 +947,17 @@ Sequence::Sequence(int argc, const char* argv[]) :
         std::cerr << e.what() << std::endl;
         exit(1);
     }
-
+    {
+        int i = 0;
+        for (auto& pass : m_passes) {
+            int p = pass.atomicCounters.size();
+            int a = pass.program->AtomicBuffersSize();
+            if (p < a) {
+                LOG(debug) << "Pass #" << i << ": " << p << " from " << a << " atomic counters are initialized";
+                i++;
+            }
+        }
+    };    
     initCommon();
     dump();
 }
@@ -802,6 +1002,7 @@ void Sequence::initCommon()
             {
                 //if (input.path.empty())
                 //    break;
+                // To Delete 
                 if (input.path.find("::") != std::string::npos)
                     break;
 
@@ -825,10 +1026,11 @@ void Sequence::initCommon()
                     // Determine texture internal format
                     GLenum internalFormat, type;
 
-                    const GLenum list[4][4] =
+                    const GLenum list[5][4] =
                     {
                         { GL_R8, GL_RG8, GL_RGB8, GL_RGBA8 },
                         { GL_R16, GL_RG16, GL_RGB16, GL_RGBA16 },
+                        { GL_R32UI,GL_RG32UI,GL_RGB32UI,GL_RGBA32UI},
                         { GL_R16F, GL_RG16F, GL_RGB16F, GL_RGBA16F },
                         { GL_R32F, GL_RG32F, GL_RGB32F, GL_RGBA32F },
                     };
@@ -844,15 +1046,15 @@ void Sequence::initCommon()
                         type = GL_UNSIGNED_SHORT;
                         break;
                     case OIIO::TypeDesc::UINT32:
-                        internalFormat = list[1][channels - 1];
+                        internalFormat = list[2][channels - 1];
                         type = GL_UNSIGNED_INT;
                         break;
                     case OIIO::TypeDesc::HALF:
-                        internalFormat = list[2][channels - 1];
+                        internalFormat = list[3][channels - 1];
                         type = GL_HALF_FLOAT;
                         break;
                     case OIIO::TypeDesc::FLOAT:
-                        internalFormat = list[3][channels - 1];
+                        internalFormat = list[4][channels - 1];
                         type = GL_FLOAT;
                         break;
                     default:
@@ -860,6 +1062,12 @@ void Sequence::initCommon()
                         exit(1);
                         break;
                     }
+
+#if 0   			// write data to binary file for debugging
+                    FILE* fp = std::fopen("d:/oiio_read_debug.raw", "wb");
+                    std::fwrite(data, width * height * channels * format.size(), 1, fp);
+					std::fclose(fp);
+#endif
 
                     textureIt = m_textures.insert({ input.path, std::make_shared<Texture>(width, height, internalFormat, type, data, alphaChannel) }).first;
 
@@ -928,7 +1136,7 @@ void Sequence::initCommon()
 
             pass.size[i] = i == 0 ? refInputIt->second.texture->getWidth() : refInputIt->second.texture->getHeight();
         }
-        LOG(debug) << "Pass " << passIndex << ": pass_size is " << pass.sizeText[0] << " x " << pass.sizeText[1];
+        LOG(debug) << "Pass " << passIndex << ": pass_size is " << pass.size[0] << " x " << pass.size[1];
         if (pass.isCompute)
         {
             //LOG(debug) << "Work group size: " << pass.workGroupSizeText[0] << " " << pass.workGroupSizeText[1];
@@ -1125,6 +1333,9 @@ void Sequence::initCommon()
 
     GLCall(glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(2 * sizeof(float))));
     GLCall(glEnableVertexAttribArray(1));
+	
+	// adding atomic buffer
+	//GLCall(glGenBuffers(1, &m_atomicBufferId));
 }
 
 void Sequence::run()
