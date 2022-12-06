@@ -457,9 +457,10 @@ Sequence::Sequence(int argc, const char* argv[]) :
                             continue;
                         }
 						
-                        if (i == val_arr.size() - 1) // if only Texture name and Path
+                        if (i == val_arr.size() - 1) {// if only Texture name and Path
                             currentInput->path = val_key;
                             break;
+                        }
 						
                         val_data = val_arr[i + 1];
                         // Search for texture attributes
