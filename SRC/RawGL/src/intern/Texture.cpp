@@ -201,7 +201,13 @@ void* Texture::getData(GLenum type) const
 
     //glGenerateTextureMipmap(m_id); // NOTE: OpenGL 4.5+
     glActiveTexture(GL_TEXTURE0);
-	
+    
+    if (m_channels != 4) {
+        if ((m_width * bytes * m_channels) % 4 != 0) {
+            glPixelStorei(GL_PACK_ALIGNMENT, bytes);
+        }
+    }
+
     glBindTexture(GL_TEXTURE_2D, m_id);
     glGetTexImage(GL_TEXTURE_2D, 0, m_baseFormat, type, data);
 
