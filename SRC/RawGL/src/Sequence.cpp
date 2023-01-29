@@ -1343,7 +1343,7 @@ void Sequence::run()
 {
     Timer timer;
 
-    LOG(debug) << "Rendering.";
+    LOG(debug) << "Rendering...";
 
     glDisable(GL_BLEND);
     glBlendEquation(GL_FUNC_ADD);
