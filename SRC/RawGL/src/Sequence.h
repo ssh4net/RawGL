@@ -289,7 +289,7 @@ private:
     std::map < std::string, std::shared_ptr<GLProgramAtomicBuffers>> m_counters;
     std::vector<Pass> m_passes;
 
-    GLuint m_vaoId, m_vboId, m_iboId;
+    GLuint m_vaoId, m_vboId, m_tboId, m_cboId, m_iboId;
 
     void initCommon();
 };

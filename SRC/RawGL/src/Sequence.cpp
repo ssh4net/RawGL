@@ -232,7 +232,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
         PassOutput* currentOutput = nullptr;
         PassInputCounters* currentInputCounters = nullptr;
         PassOutputCounters* currentOutputCounters = nullptr;
-        int currentPassN = 0;
+        size_t currentPassN = 0;
 
         // tired. Don't know correct way to store previous output parameters
         std::string p_internalFormatText = "rgb32f";
@@ -951,8 +951,8 @@ Sequence::Sequence(int argc, const char* argv[]) :
     {
         int i = 0;
         for (auto& pass : m_passes) {
-            int p = pass.atomicCounters.size();
-            int a = pass.program->AtomicBuffersSize();
+            size_t p = pass.atomicCounters.size();
+            size_t a = pass.program->AtomicBuffersSize();
             if (p < a) {
                 LOG(debug) << "Pass #" << i << ": " << p << " from " << a << " atomic counters are initialized";
                 i++;
@@ -975,6 +975,10 @@ Sequence::~Sequence()
         glDeleteVertexArrays(1, &m_vaoId);
     if (m_vboId)
         glDeleteBuffers(1, &m_vboId);
+    if (m_cboId)
+        glDeleteBuffers(1, &m_cboId);
+    if (m_tboId)
+        glDeleteBuffers(1, &m_tboId);
     if (m_iboId)
         glDeleteBuffers(1, &m_iboId);
 }
@@ -1296,15 +1300,28 @@ void Sequence::initCommon()
     }
 
     //
-    // Create unit quad
-    //
+// Create unit quad
+//
 
     const float vertices[] = {
-        // position    // uv
-        -1.0, -1.0,    0.0, 0.0,
-        -1.0,  1.0,    0.0, 1.0,
-        1.0,  1.0,    1.0, 1.0,
-        1.0, -1.0,    1.0, 0.0
+        -1.0, -1.0,
+        -1.0,  1.0,
+        1.0,  1.0,
+        1.0, -1.0
+    };
+
+    const float texCoords[] = {
+        0.0, 0.0,
+        0.0, 1.0,
+        1.0, 1.0,
+        1.0, 0.0
+    };
+
+    const float vertColors[] = {
+        1.0, 1.0, 1.0,
+        1.0, 1.0, 1.0,
+        1.0, 1.0, 1.0,
+        1.0, 1.0, 1.0 
     };
 
     const unsigned int indices[] = {
@@ -1312,7 +1329,7 @@ void Sequence::initCommon()
         0, 3, 2
     };
 
-    // Definte winding order and face culling
+    // Define winding order and face culling
     GLCall(glFrontFace(GL_CCW));
     GLCall(glCullFace(GL_BACK));
     GLCall(glEnable(GL_CULL_FACE));
@@ -1323,17 +1340,31 @@ void Sequence::initCommon()
 
     GLCall(glBindVertexArray(m_vaoId));
 
+    // Generate and bind position buffer
+    GLCall(glGenBuffers(1, &m_vboId));
     GLCall(glBindBuffer(GL_ARRAY_BUFFER, m_vboId));
     GLCall(glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW));
-
-    GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_iboId));
-    GLCall(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW));
-
-    GLCall(glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)0));
+    GLCall(glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*)0));
     GLCall(glEnableVertexAttribArray(0));
 
-    GLCall(glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(2 * sizeof(float))));
+    // Generate and bind texture coordinate buffer
+    GLCall(glGenBuffers(1, &m_tboId));
+    GLCall(glBindBuffer(GL_ARRAY_BUFFER, m_tboId));
+    GLCall(glBufferData(GL_ARRAY_BUFFER, sizeof(texCoords), texCoords, GL_STATIC_DRAW));
+    GLCall(glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0));
     GLCall(glEnableVertexAttribArray(1));
+
+    // Generate and bind color buffer
+    GLCall(glGenBuffers(1, &m_cboId));
+    GLCall(glBindBuffer(GL_ARRAY_BUFFER, m_cboId));
+    GLCall(glBufferData(GL_ARRAY_BUFFER, sizeof(vertColors), vertColors, GL_STATIC_DRAW));
+    GLCall(glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0));
+    GLCall(glEnableVertexAttribArray(2));
+
+    // Generate and bind index buffer
+    GLCall(glGenBuffers(1, &m_iboId));
+    GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_iboId));
+    GLCall(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW));
 	
 	// adding atomic buffer
 	//GLCall(glGenBuffers(1, &m_atomicBufferId));
