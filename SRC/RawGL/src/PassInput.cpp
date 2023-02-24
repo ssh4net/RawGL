@@ -240,7 +240,7 @@ const void _pass_input_set_path(PassInputCounters& pi, const std::string& val)
 PassInput::PassInput()
 {
     memset(ints, 0, sizeof(GLint) * NUM_INTS);
-    memset(floats, 0.0f, sizeof(GLfloat) * NUM_FLOATS);
+    memset(floats, 0, sizeof(GLfloat) * NUM_FLOATS);
     uniform = nullptr;
 
     // set some default values for unspecificed attributes
