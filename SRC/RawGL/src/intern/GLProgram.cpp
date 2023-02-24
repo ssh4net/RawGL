@@ -363,9 +363,9 @@ GLProgramAtomicBuffers* GLProgram::findAtomicBuffer(GLint& binding)
     return &it->second;
 }
 
-int GLProgram::AtomicBuffersSize()
+size_t GLProgram::AtomicBuffersSize()
 {
-    int it = m_atomicbuffers.size();
+    size_t it = m_atomicbuffers.size();
 
     return it;
 }

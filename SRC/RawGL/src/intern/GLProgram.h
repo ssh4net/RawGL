@@ -113,7 +113,7 @@ public:
     GLProgramUniform* findUniform(const std::string& name);
 	GLProgramNoUniform* findNoUniform(const std::string& name);
 	GLProgramAtomicBuffers* findAtomicBuffer(GLint& binding);
-	int AtomicBuffersSize();
+	size_t AtomicBuffersSize();
     GLProgramOutput* findOutput(const std::string& name);
 
     GLuint getId() const { return m_id; }
