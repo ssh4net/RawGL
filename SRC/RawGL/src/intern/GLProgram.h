@@ -29,12 +29,19 @@ struct GLProgramUniform
 
     // avoid redundant GL calls if current & provided values are the same
 	GLint ints[4] = { 0, 0, 0, 0 };
+	GLuint uints[4] = { 0, 0, 0, 0 };
     GLfloat floats[16] = {
-        0.0, 0.0, 0.0, 0.0, 
-        0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0
+        0.0f, 0.0f, 0.0f, 0.0f, 
+        0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 0.0f
     };
+	GLdouble doubles[16] = {
+		0.0, 0.0, 0.0, 0.0,
+		0.0, 0.0, 0.0, 0.0,
+		0.0, 0.0, 0.0, 0.0,
+		0.0, 0.0, 0.0, 0.0
+	};
 
     bool isSet;
 
@@ -42,8 +49,12 @@ struct GLProgramUniform
 
     void set(GLint value);
     void set(const GLint *values);
+	void set(GLuint value);
+	void set(const GLuint* values);
     void set(GLfloat value);
     void set(const GLfloat* values);
+	void set(GLdouble value);
+	void set(const GLdouble* values);
 };
 
 struct GLProgramNoUniform

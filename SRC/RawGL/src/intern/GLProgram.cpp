@@ -26,6 +26,7 @@
 // Uniform
 //
 
+// Int Uniforms
 void GLProgramUniform::set(GLint value)
 {
     if (isSet)
@@ -51,7 +52,6 @@ void GLProgramUniform::set(GLint value)
     //    break;
     }
 }
-
 void GLProgramUniform::set(const GLint *values)
 {
     int i;
@@ -93,7 +93,69 @@ void GLProgramUniform::set(const GLint *values)
         break;
     }
 }
+// Unsigned Int Uniforms
+void GLProgramUniform::set(GLuint value)
+{
+    if (isSet)
+    {
+        if (uints[0] == value)
+            return;
+    }
+    else
+        isSet = true;
 
+    uints[0] = value;
+
+    switch (type)
+    {
+    case GL_UNSIGNED_INT_SAMPLER_2D:
+    case GL_UNSIGNED_INT_IMAGE_2D:
+    case GL_UNSIGNED_INT:
+        glUniform1i(location, value);
+        break;
+        //default:
+        //    assert(0);
+        //    break;
+    }
+}
+void GLProgramUniform::set(const GLuint* values)
+{
+    int i;
+
+    if (isSet)
+    {
+        for (i = 0; i < size; i++)
+        {
+            if (uints[i] != values[i])
+                break;
+        }
+
+        if (i == size)
+            return;
+    }
+    else
+        isSet = true;
+
+    for (i = 0; i < size; i++)
+        uints[i] = values[i];
+
+    switch (type)
+    {
+    case GL_UNSIGNED_INT:
+        glUniform1uiv(location, 1, values);
+        break;
+    case GL_UNSIGNED_INT_VEC2:
+        glUniform2uiv(location, 1, values);
+        break;
+    case GL_UNSIGNED_INT_VEC3:
+        glUniform3uiv(location, 1, values);
+        break;
+    case GL_UNSIGNED_INT_VEC4:
+        glUniform4uiv(location, 1, values);
+        break;
+    }
+}
+// Float Unifroms
 void GLProgramUniform::set(GLfloat value)
 {
     if (isSet)
@@ -175,6 +237,91 @@ void GLProgramUniform::set(const GLfloat* values)
         break;
     case GL_FLOAT_MAT4x3:
         glUniformMatrix4x3fv(location, 1, false, values);
+        break;
+    }
+}
+// Double Unifroms
+void GLProgramUniform::set(GLdouble value)
+{
+    if (isSet)
+    {
+        if (doubles[0] == value)
+            return;
+    }
+    else
+        isSet = true;
+
+    doubles[0] = value;
+
+    switch (type)
+    {
+    case GL_DOUBLE:
+        glUniform1d(location, value);
+        break;
+    }
+};
+void GLProgramUniform::set(const GLdouble* values)
+{
+    int i;
+
+    if (isSet)
+    {
+        for (i = 0; i < size; i++)
+        {
+            if (doubles[i] != values[i])
+                break;
+        }
+
+        if (i == size)
+            return;
+    }
+    else
+        isSet = true;
+
+    for (i = 0; i < size; i++)
+        doubles[i] = values[i];
+
+    // setting uniform variables in current program
+    switch (type)
+    {
+    case GL_DOUBLE:
+        glUniform1dv(location, 1, values);
+        break;
+    case GL_DOUBLE_VEC2:
+        glUniform2dv(location, 1, values);
+        break;
+    case GL_DOUBLE_VEC3:
+        glUniform3dv(location, 1, values);
+        break;
+    case GL_DOUBLE_VEC4:
+        glUniform4dv(location, 1, values);
+        break;
+    case GL_DOUBLE_MAT2:
+        glUniformMatrix2dv(location, 1, false, values);
+        break;
+    case GL_DOUBLE_MAT2x3:
+        glUniformMatrix2x3dv(location, 1, false, values);
+        break;
+    case GL_DOUBLE_MAT2x4:
+        glUniformMatrix2x4dv(location, 1, false, values);
+        break;
+    case GL_DOUBLE_MAT3:
+        glUniformMatrix3dv(location, 1, false, values);
+        break;
+    case GL_DOUBLE_MAT3x2:
+        glUniformMatrix3x2dv(location, 1, false, values);
+        break;
+    case GL_DOUBLE_MAT3x4:
+        glUniformMatrix3x4dv(location, 1, false, values);
+        break;
+    case GL_DOUBLE_MAT4:
+        glUniformMatrix4dv(location, 1, false, values);
+        break;
+    case GL_DOUBLE_MAT4x2:
+        glUniformMatrix4x2dv(location, 1, false, values);
+        break;
+    case GL_DOUBLE_MAT4x3:
+        glUniformMatrix4x3dv(location, 1, false, values);
         break;
     }
 }
@@ -520,6 +667,7 @@ void GLProgram::compileOutputList()
 void GLProgram::DebugShaderVarList()
 {
     std::cout << "\x1B[93m" <<
+    "Program ID: " << m_id << std::endl <<
     "GL_ACTIVE_UNIFORMS" << std::endl;
 	
     GLint count;
