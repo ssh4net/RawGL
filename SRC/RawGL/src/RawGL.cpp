@@ -24,7 +24,7 @@
 
 const char* APP_NAME = "RawGL";
 const char* APP_AUTHOR = "Erium Vladlen";
-const int APP_VERSION[] = { 1, 5, 3 };
+const int APP_VERSION[] = { 1, 6, 1 };
 
 //#include "shader.hpp"
 
@@ -46,7 +46,7 @@ int main(int argc, const char* argv[])
     // start the sequence
     Sequence sequence(argc, argv);
     sequence.run();
-	LOG(info) << std::endl;
+	std::cout << std::endl;
 	LOG(info) << "Total processing time : " << timer.nowText() << std::endl;
 
 #if 0 // _DEBUG
