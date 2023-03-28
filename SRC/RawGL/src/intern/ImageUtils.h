@@ -85,3 +85,6 @@ extern bool progress_callback(void* opaque_data, float portion_done);
 /// <returns></returns>
 extern bool load_image(const std::string& filepath, const std::map<std::string, std::string>& attributes, int& width, int& height, void*& pixels, int& channels, int& alphaChannel, OIIO::TypeDesc &format);
 }
+
+// TODO: Move function to File_IO
+extern std::string get_file_ext(const std::string& filepath);

@@ -19,13 +19,19 @@
 #include "Timer.h"
 #include "Log.h"
 #include "GLProgramManager.h"
+#include "ImageUtils.h"
 
 #include <boost/program_options.hpp>
 #include <boost/program_options/option.hpp>
 #include <boost/lexical_cast/try_lexical_convert.hpp>
 #include <boost/program_options/value_semantic.hpp>
 
+#include "rapidobj/rapidobj.hpp"
+#include "miniply.h"
+#include "mesh_io.h"
+
 namespace po = boost::program_options;
+namespace ro = rapidobj;
 
 // we don't use positional options, so this is ok
 static std::vector<po::option> ignore_numbers(std::vector<std::string>& args)
@@ -101,6 +107,25 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 "Number of threads per work group on each axis:\n"
                 " --pass_workgroupsize X [Y]\n"
                 "Must be equal to the 'local_size' layout constant inside compute shader.")
+            ("bg_color", po::value<std::vector<std::string>>()->multitoken()->default_value(std::vector<std::string>{ "0.0", "0.0", "0.0", "1.0" }),
+                "Background color (RGBA):\n"
+                " --bg_color R G B A\n"
+                )
+            ("pass_mesh,M", po::value<std::vector<std::string>>()->multitoken(),
+				(
+                    "3D mesh (*.PLY) to use for this pass:\n"
+                    "no pass_mesh directive = render using quad or\n"
+                    "--pass_mesh quad - render using quad\n"
+                    "loading mesh from file:\n"
+                    "--pass_mesh mesh::0 tris true rndr poly path¥to¥mesh.exe\n"
+                    + MeshInput::get_possible_mesh_parm_fmt() +
+                    "Supported mesh attributes:\n"
+                    " Vertex coodinates: vec3 pos\n"
+                    " Vertex normals: vec3 normals\n"
+                    " UVs: vec2 uvs\n"
+                    " Vertex colors: vec4 colors\n"
+                    ).c_str()
+                )
             ("in,i", po::value<std::vector<std::string>>()->multitoken(),
                 (
                     "Uniform pass index, name & value\n"
@@ -213,6 +238,8 @@ Sequence::Sequence(int argc, const char* argv[]) :
             std::cout << "GL_MAX_VIEWPORT_DIMS: " << value;
             glGetIntegeri_v(GL_MAX_VIEWPORT_DIMS, 1, &value);
             std::cout << " x " << value << std::endl;
+            glGetIntegerv(GL_MAX_SAMPLES, &value);
+            std::cout << "Max samples: " << value << std::endl;
 
             infoExit = true;
         }
@@ -230,6 +257,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
         Pass* currentPass = nullptr;
         PassInput* currentInput = nullptr;
         PassOutput* currentOutput = nullptr;
+        MeshInput* currentMeshInput = nullptr;
         PassInputCounters* currentInputCounters = nullptr;
         PassOutputCounters* currentOutputCounters = nullptr;
         size_t currentPassN = 0;
@@ -350,7 +378,137 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 currentPass->workGroupSizeText[1] = o.value.size() > 1 ? o.value[1] : "1";
                 //currentPass->workGroupSizeText[2] = o.value.size() > 2 ? o.value[2] : "1";
             }
+            // background color
+            // 
+            if (o.string_key == "bg_color")
+            {
+                if (!currentPass)
+                {
+                    LOG(error) << "pass_mesh: no preceeding pass declaration.";
+                    exit(1);
+                }
+                int size = o.value.size();
+                if (size < 1 && size > 4)
+                {
+					LOG(error) << "bg_color: must have at least 1 parameter.";
+					exit(1);
+				}
+                // set clearColor
+                hres hr = hres::OK;
+                std::vector<std::string> val_arr;
+                val_arr.reserve(size);
+                std::copy(o.value.begin(), o.value.end(), std::back_inserter(val_arr));
 
+                GLfloat tmp_floats[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+                for (uint8_t i = 0; i < size; ++i) {
+                    const std::string& str_val = val_arr[i];
+                    tmp_floats[i] = str_to_numeric<float_t>(hr, str_val);
+                }
+
+                if (hres::OK == hr) {
+                    memcpy(&currentPass->clearColor, &tmp_floats, sizeof(GLfloat) * 4);
+                }
+			}
+            //
+            // mesh parsing
+            // 
+            if (o.string_key == "pass_mesh")
+            {
+                if (!currentPass)
+                {
+                    LOG(error) << "pass_mesh: no preceeding pass declaration.";
+                    exit(1);
+                }
+
+                if (o.value.size() < 1)
+                {
+                    LOG(error) << "pass_mesh: must have at least 1 parameter.";
+                    exit(1);
+                }
+
+                auto val_key = o.value[0];
+                auto type_name = o.value[0];
+
+                const size_t split = o.value[0].find("::");
+                type_name = o.value[0].substr(0, split);
+                
+                auto [meshesIt, success] = currentPass->meshes.insert({ o.value[0], MeshInput() });
+                currentMeshInput = &meshesIt->second;
+
+                if (type_name == "mesh")
+                {
+
+                    currentMeshInput->mesh.isQuad = false;
+
+                    if (!success)
+                    {
+                        LOG(error) << "mesh (" << o.value[0] << "): duplicate id.";
+                        exit(1);
+                    }
+
+                    // Not work at this moment: Mesh_name::Pass# 
+                    // in a future for support variable meshes per passess
+                    if (split != std::string::npos) {
+                        hres hr_convert = hres::OK;
+                        const int ref_pass_index = str_to_numeric<int32_t>(hr_convert, val_key.substr(split + 2));
+
+                        if (hres::OK == hr_convert && ref_pass_index >= 0 && ref_pass_index < m_passes.size() - 1) {
+                            auto& ref_pass = m_passes[ref_pass_index];
+
+                            auto ref_input_it = ref_pass.inputs.find(type_name);
+                            if (ref_input_it != ref_pass.inputs.end()) {
+                                auto& ref_input = ref_input_it->second;
+                            }
+                            else {
+                                LOG(error) << "pass_mesh: reference input not found.";
+                                exit(1);
+                            }
+                        };
+                    };
+
+                    hres hr = hres::OK;
+                    std::vector<std::string> val_arr;
+                    val_arr.reserve(o.value.size() - 1);
+                    std::copy(o.value.begin() + 1, o.value.end(), std::back_inserter(val_arr));
+
+                    
+                    std::string mesh_path = val_arr.back();
+                    std::string file_ext = get_file_ext(mesh_path);
+                    if (file_ext != "ply" && file_ext != "obj") {
+                        LOG(error) << "Only PLY and OBJ meshes supported.";
+                        exit(1);
+                    }
+                    currentMeshInput->mesh.isQuad = false;
+                    currentMeshInput->mesh.FileName = mesh_path;
+
+                    for (size_t i = 0; i < val_arr.size() - 1; ++i) {
+                        val_key = val_arr[i];
+                        std::string val_data;
+
+                        val_data = val_arr[i + 1];
+
+                        // Search for texture attributes
+                        hres hr_tex_attr = hres::OK;
+                        currentMeshInput->eval_mesh_parm(hr_tex_attr, val_key, val_data);
+
+                        if (hr_tex_attr != hres::OK) {
+							LOG(error) << "pass_mesh: unknown mesh parameter.";
+							exit(1);
+						}
+                        i++;
+                    }
+                    
+                }
+                else if (type_name == "quad") {
+                    currentMeshInput->mesh.isQuad = true;
+                    LOG(info) << "pass_mesh: Default Quad";
+                }
+                else {
+                    LOG(error) << "pass_mesh: unknown mesh type.";
+                    exit(1);
+                }
+            };
             //
             // input & its parameters
             //
@@ -969,18 +1127,19 @@ Sequence::~Sequence()
     {
         if (pass.fboId)
             glDeleteFramebuffers(1, &pass.fboId);
+        if (pass.meshes.begin()->second.VBO.vaoId)
+			glDeleteVertexArrays(1, &pass.meshes.begin()->second.VBO.vaoId);
+        if (pass.meshes.begin()->second.VBO.vboId)
+            glDeleteBuffers(1, &pass.meshes.begin()->second.VBO.vboId);
+        if (pass.meshes.begin()->second.VBO.nboId)
+            glDeleteBuffers(1, &pass.meshes.begin()->second.VBO.nboId);
+        if (pass.meshes.begin()->second.VBO.tboId)
+            glDeleteBuffers(1, &pass.meshes.begin()->second.VBO.tboId);
+        if (pass.meshes.begin()->second.VBO.cboId)
+            glDeleteBuffers(1, &pass.meshes.begin()->second.VBO.cboId);
+        if (pass.meshes.begin()->second.VBO.iboId)
+            glDeleteBuffers(1, &pass.meshes.begin()->second.VBO.iboId);
     }
-
-    if (m_vaoId)
-        glDeleteVertexArrays(1, &m_vaoId);
-    if (m_vboId)
-        glDeleteBuffers(1, &m_vboId);
-    if (m_cboId)
-        glDeleteBuffers(1, &m_cboId);
-    if (m_tboId)
-        glDeleteBuffers(1, &m_tboId);
-    if (m_iboId)
-        glDeleteBuffers(1, &m_iboId);
 }
 
 void Sequence::initCommon()
@@ -1299,73 +1458,199 @@ void Sequence::initCommon()
         passIndex++;
     }
 
-    //
-// Create unit quad
 //
-
-    const float vertices[] = {
-        -1.0, -1.0,
-        -1.0,  1.0,
-        1.0,  1.0,
-        1.0, -1.0
+// Create mesh
+//
+    // Default unit quad arrays
+    // Warning! New version use vec3 pos, old was vec2
+    float def_verts[] = {
+        -1.0f,-1.0f, 0.0f,   -1.0f,  1.0f, 0.0f,
+        1.0f,  1.0f, 0.0f,    1.0f, -1.0f, 0.0f
+    };
+    float def_texCrds[] = {
+        0.f, 0.f,       0.f, 1.f,
+        1.f, 1.f,       1.f, 0.f
+    };
+    float def_vNormals[] = {
+        0.f, 0.f, 1.f,  0.f, 0.f, 1.f,
+        0.f, 0.f, 1.f,  0.f, 0.f, 1.f
     };
 
-    const float texCoords[] = {
-        0.0, 0.0,
-        0.0, 1.0,
-        1.0, 1.0,
-        1.0, 0.0
+    unsigned char def_vColors[] = {
+        255, 255, 255, 255,  255, 255, 255, 255,
+        255, 255, 255, 255,  255, 255, 255, 255
+    };
+    // CW winding order
+    // for CCW use: 0, 2, 1, 0, 3, 2
+    // for CW use: 0, 1, 2, 0, 2, 3
+    unsigned int def_indxs[] = {
+        0, 1, 2,        0, 2, 3
     };
 
-    const float vertColors[] = {
-        1.0, 1.0, 1.0,
-        1.0, 1.0, 1.0,
-        1.0, 1.0, 1.0,
-        1.0, 1.0, 1.0 
-    };
+    // for this moment mesh is the same in all passes
+    Pass* defPass = &m_passes[0];
+    MeshInput* cMesh = &defPass->meshes.begin()->second;
+    MeshInput::Mesh& crntMesh = cMesh->mesh;
 
-    const unsigned int indices[] = {
-        0, 2, 1,
-        0, 3, 2
-    };
+    crntMesh.pVerts = def_verts;
+    crntMesh.pTexts = def_texCrds;
+    crntMesh.pNorms = def_vNormals;
+    crntMesh.pColrs = def_vColors;
+    crntMesh.pIndxs = def_indxs;
+
+    // size of default arrays
+    crntMesh.vrtSize = static_cast<GLsizei>(sizeof(def_verts));
+    crntMesh.texSize = static_cast<GLsizei>(sizeof(def_texCrds));
+    crntMesh.nrmSize = static_cast<GLsizei>(sizeof(def_vNormals));
+    crntMesh.clrSize = static_cast<GLsizei>(sizeof(def_vColors));
+    crntMesh.idxSize = static_cast<GLsizei>(sizeof(def_indxs));
+
+    crntMesh.numIndxs = static_cast<GLsizei>(sizeof(def_indxs) / sizeof(unsigned int));
+
+    // if not a quad
+    // load PLY mesh from file using miniply library
+    if (!crntMesh.isQuad)
+    {
+        Timer timer;
+
+        const int kFilenameBufferLen = 16 * 1024 - 1;
+        char* filenameBuffer = new char[kFilenameBufferLen + 1];
+        filenameBuffer[kFilenameBufferLen] = '\0';
+
+        LOG(debug) << "Loading mesh...";
+
+        TriMesh* trimesh = parse_file_with_miniply(crntMesh.FileName.c_str(), crntMesh.Triangles);
+        bool ok = trimesh != nullptr;
+
+        if (ok)
+        {
+            // get the data
+            crntMesh.pVerts = trimesh->pos;
+            crntMesh.pTexts = trimesh->uv;
+            crntMesh.pNorms = trimesh->normal;
+            crntMesh.pColrs = trimesh->color;
+            crntMesh.pIndxs = trimesh->indices;
+
+            // size of the data
+            crntMesh.vrtSize = static_cast<GLsizei>(trimesh->numVerts * 3 * sizeof(float));
+            crntMesh.texSize = static_cast<GLsizei>(trimesh->numVerts * 2 * sizeof(float));
+            crntMesh.nrmSize = static_cast<GLsizei>(trimesh->numVerts * 3 * sizeof(float));
+            crntMesh.clrSize = static_cast<GLsizei>(trimesh->numVerts * 4 * sizeof(unsigned char));
+            crntMesh.idxSize = static_cast<GLsizei>(trimesh->numIndices * sizeof(unsigned int));
+            // number of indices
+            crntMesh.numIndxs = static_cast<GLsizei>(trimesh->numIndices);
+        }
+        else
+        {
+            LOG(error) << "Failed to load mesh: " << crntMesh.FileName << std::endl;
+            exit(-1);
+        }
+        LOG(debug) << "Mesh loading completed in " << timer.nowText();
+    }
+        // end of PLY read
+    /*
+    ro::Result result = ro::ParseFile("w:/cube.obj");
+    if (result.error)
+	{
+		LOG(error) << "Failed to parse file: " << result.error.code.message();
+		exit(-1);
+	}
+    bool success = ro::Triangulate(result);
+
+    if (success)
+	{
+		// get the data
+		ptr_Verts = result.attributes.positions.data();
+        ptr_Texts = result.attributes.texcoords.data();
+        ptr_Norms = result.attributes.normals.data();
+        ptr_Colrs = result.attributes.colors.data();
+        //ptr_Indxs = result.shapes.back().mesh.indices.data();
+		// size of the data
+		m_vrtSize = static_cast<GLsizei>(result.attributes.positions.size() * sizeof(float));
+		m_texSize = static_cast<GLsizei>(result.attributes.texcoords.size() * sizeof(float));
+		m_nrmSize = static_cast<GLsizei>(result.attributes.normals.size() * sizeof(float));
+		m_clrSize = static_cast<GLsizei>(result.attributes.colors.size() * sizeof(float));
+		//m_idxSize = static_cast<GLsizei>(result.m_indices.size() * sizeof(unsigned int));
+	}
+
+    */
 
     // Define winding order and face culling
-    GLCall(glFrontFace(GL_CCW));
+    // Use non standard OpenGL winding order
+    // to match 3D models order.
+    GLCall(glFrontFace(GL_CW));
     GLCall(glCullFace(GL_BACK));
     GLCall(glEnable(GL_CULL_FACE));
+    
+    // Enable polygon smooth
+    //GLCall(glEnable(GL_POLYGON_SMOOTH));
 
-    GLCall(glGenVertexArrays(1, &m_vaoId));
+    // Enable multisample anti-aliasing
+    //GLCall(glEnable(GL_MULTISAMPLE));
+    // Set the sample coverage value to 1.0
+    //GLCall(glSampleCoverage(1.0, GL_FALSE));
+    // Set the sample mask to enable all 16 samples
+    //GLCall(glSampleMaski(0, 0xFFFF));
+
+    // for this moment mesh is the same in all passes
+    defPass = &m_passes[0];
+    cMesh = &defPass->meshes.begin()->second;
+    crntMesh = cMesh->mesh;
+    MeshInput::VertexBuffer& crntVBO = cMesh->VBO;
+    
+    //crntMesh = crntPass.mesh;
+
+    //GLuint* m_vaoId, m_vboId, m_tboId, m_nboId, m_cboId, m_iboId;
+    auto& m_vaoId = crntVBO.vaoId;
+    auto& m_vboId = crntVBO.vboId;
+    auto& m_iboId = crntVBO.iboId;
+    auto& m_tboId = crntVBO.tboId;
+    auto& m_nboId = crntVBO.nboId;
+    auto& m_cboId = crntVBO.cboId;
+
+    GLCall(glCreateVertexArrays(1, &m_vaoId));
     GLCall(glGenBuffers(1, &m_vboId));
     GLCall(glGenBuffers(1, &m_iboId));
 
     GLCall(glBindVertexArray(m_vaoId));
-
+    
     // Generate and bind position buffer
-    GLCall(glGenBuffers(1, &m_vboId));
-    GLCall(glBindBuffer(GL_ARRAY_BUFFER, m_vboId));
-    GLCall(glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW));
-    GLCall(glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*)0));
-    GLCall(glEnableVertexAttribArray(0));
+    GLCall(glCreateBuffers(1, &m_vboId));
+    GLCall(glNamedBufferData(m_vboId, crntMesh.vrtSize, static_cast<const void*>(crntMesh.pVerts), GL_STATIC_DRAW));
+    GLCall(glVertexArrayVertexBuffer(m_vaoId, 0, m_vboId, 0, 3 * sizeof(float)));
+    GLCall(glVertexArrayAttribFormat(m_vaoId, 0, 3, GL_FLOAT, GL_FALSE, 0));
+    GLCall(glVertexArrayAttribBinding(m_vaoId, 0, 0));
+    GLCall(glEnableVertexArrayAttrib(m_vaoId, 0));
 
     // Generate and bind texture coordinate buffer
-    GLCall(glGenBuffers(1, &m_tboId));
-    GLCall(glBindBuffer(GL_ARRAY_BUFFER, m_tboId));
-    GLCall(glBufferData(GL_ARRAY_BUFFER, sizeof(texCoords), texCoords, GL_STATIC_DRAW));
-    GLCall(glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0));
-    GLCall(glEnableVertexAttribArray(1));
+    GLCall(glCreateBuffers(1, &m_tboId));
+    GLCall(glNamedBufferData(m_tboId, crntMesh.texSize, static_cast<const void*>(crntMesh.pTexts), GL_STATIC_DRAW));
+    GLCall(glVertexArrayVertexBuffer(m_vaoId, 1, m_tboId, 0, 2 * sizeof(float)));
+    GLCall(glVertexArrayAttribFormat(m_vaoId, 1, 2, GL_FLOAT, GL_FALSE, 0));
+    GLCall(glVertexArrayAttribBinding(m_vaoId, 1, 1));
+    GLCall(glEnableVertexArrayAttrib(m_vaoId, 1));
+
+    // Generate and bind normals buffer
+    GLCall(glCreateBuffers(1, &m_nboId));
+    GLCall(glNamedBufferData(m_nboId, crntMesh.nrmSize, static_cast<const void*>(crntMesh.pNorms), GL_STATIC_DRAW));
+    GLCall(glVertexArrayVertexBuffer(m_vaoId, 2, m_nboId, 0, 3 * sizeof(float)));
+    GLCall(glVertexArrayAttribFormat(m_vaoId, 2, 3, GL_FLOAT, GL_FALSE, 0));
+    GLCall(glVertexArrayAttribBinding(m_vaoId, 2, 2));
+    GLCall(glEnableVertexArrayAttrib(m_vaoId, 2));
 
     // Generate and bind color buffer
-    GLCall(glGenBuffers(1, &m_cboId));
-    GLCall(glBindBuffer(GL_ARRAY_BUFFER, m_cboId));
-    GLCall(glBufferData(GL_ARRAY_BUFFER, sizeof(vertColors), vertColors, GL_STATIC_DRAW));
-    GLCall(glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0));
-    GLCall(glEnableVertexAttribArray(2));
+    GLCall(glCreateBuffers(1, &m_cboId));
+    GLCall(glNamedBufferData(m_cboId, crntMesh.clrSize, static_cast<const void*>(crntMesh.pColrs), GL_STATIC_DRAW));
+    GLCall(glVertexArrayVertexBuffer(m_vaoId, 3, m_cboId, 0, 4 * sizeof(unsigned char)));
+    GLCall(glVertexArrayAttribIFormat(m_vaoId, 3, 4, GL_UNSIGNED_BYTE, 0));
+    GLCall(glVertexArrayAttribBinding(m_vaoId, 3, 3));
+    GLCall(glEnableVertexArrayAttrib(m_vaoId, 3));
 
     // Generate and bind index buffer
-    GLCall(glGenBuffers(1, &m_iboId));
-    GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_iboId));
-    GLCall(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW));
-	
+    GLCall(glCreateBuffers(1, &m_iboId));
+    GLCall(glNamedBufferData(m_iboId, crntMesh.idxSize, static_cast<const void*>(crntMesh.pIndxs), GL_STATIC_DRAW));
+    GLCall(glVertexArrayElementBuffer(m_vaoId, m_iboId));
+
 	// adding atomic buffer
 	//GLCall(glGenBuffers(1, &m_atomicBufferId));
 }
@@ -1450,7 +1735,18 @@ void Sequence::run()
                 break;
             }
         }
-
+        //
+        // Internal uniforms
+        
+        // Frame buffer size
+        GLint uniform_loc = glGetUniformLocation(pass.program->getId(), "iFBsize");
+        GLCall(glUniform2uiv(uniform_loc, 1, reinterpret_cast<unsigned int*>(pass.size)));
+        uniform_loc = glGetUniformLocation(pass.program->getId(), "iFBaspect");
+        GLCall(glUniform1f(uniform_loc, pass.size[0] / (float)pass.size[1]));
+        // Quad boolean
+        uniform_loc = glGetUniformLocation(pass.program->getId(), "isQuad");
+        GLCall(glUniform1i(uniform_loc, pass.meshes.begin()->second.mesh.isQuad));
+        
         //
         // Render/compute
         //
@@ -1494,16 +1790,41 @@ void Sequence::run()
                 //buffers.push_back(GL_COLOR_ATTACHMENT0 + i);
 
             //glReadBuffer(buffers[0]);
-            glDrawBuffers((GLsizei)buffers.size(), &buffers[0]);
 
-            glViewport(0, 0, pass.size[0], pass.size[1]);
+            GLuint depthBuffer;
+            GLCall(glCreateRenderbuffers(1, &depthBuffer));
+            GLCall(glNamedRenderbufferStorage(depthBuffer, GL_DEPTH_COMPONENT, pass.size[0], pass.size[1]));
+            GLCall(glNamedFramebufferRenderbuffer(pass.fboId, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthBuffer));
 
-            glClearColor(0.f, 0.f, 0.f, 0.f);
-            glClear(GL_COLOR_BUFFER_BIT);
+            GLCall(glDrawBuffers((GLsizei)buffers.size(), &buffers[0]));
 
-            glBindVertexArray(m_vaoId);
+            GLCall(glViewport(0, 0, pass.size[0], pass.size[1]));
 
-            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+            GLCall(glClearColor(pass.clearColor[0],pass.clearColor[1],pass.clearColor[2], pass.clearColor[3]));
+
+            // Enable depth Buffering and test
+            GLCall(glEnable(GL_DEPTH_TEST));
+            GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+            GLCall(glDepthFunc(GL_LEQUAL));
+
+
+            // for this moment mesh only one for all passes
+            Pass* defPass = &m_passes[0];
+            MeshInput* crntMesh = &defPass->meshes.begin()->second;
+
+            //auto& m_vaoId = crntMesh.VBO.vaoId;
+            GLCall(glBindVertexArray(crntMesh->VBO.vaoId));
+
+            GLCall(glPolygonMode(GL_FRONT_AND_BACK, GL_FILL));
+            GLCall(glDrawElements(crntMesh->mesh.render, crntMesh->mesh.numIndxs, GL_UNSIGNED_INT, 0));
+
+            // get error code if any
+            GLenum err = glGetError();
+            if (err != GL_NO_ERROR)
+			{
+				LOG(error) << "OpenGL error: " << err;
+			}
+
         }
 
         glFinish();

@@ -18,6 +18,7 @@
 #include "Sequence.h"
 #include "Timer.h"
 
+// String to bool
 template <> int32_t str_to_numeric(hres& hr, const std::string& str_val)
 {
     int ret = 0;
@@ -39,6 +40,7 @@ template <> int32_t str_to_numeric(hres& hr, const std::string& str_val)
     return ret;
 }
 
+// String to float
 template <> float_t str_to_numeric(hres& hr, const std::string& str_val)
 {
     float ret = 0.0f;
@@ -60,6 +62,25 @@ template <> float_t str_to_numeric(hres& hr, const std::string& str_val)
     return ret;
 }
 
+// String to double
+template <> double_t str_to_numeric(hres& hr, const std::string& str_val)
+{
+    double ret = 0.0;
+    try {
+        ret = std::stod(str_val);
+    }
+    catch (const std::invalid_argument& e_arg) {
+		hr = hres::ERR;
+		LOG(trace) << "\x1B[91mUnable to parse invalid double value (\"" << str_val << "\"):\n" << e_arg.what() << "\x1B[0m" << std::endl;
+	}
+	catch (const std::out_of_range& e_oor) {
+		hr = hres::ERR;
+		LOG(trace) << "\x1B[91mUnable to parse double value (\"" << str_val << "\") (out of range):\n" << e_oor.what() << "\x1B[0m" << std::endl;
+	}
+
+    return ret;
+}
+
 template <> int32_t str_to_numeric(const std::string& str_val)
 {
     hres hr = hres::OK;
@@ -70,6 +91,12 @@ template <> float_t str_to_numeric(const std::string& str_val)
 {
     hres hr = hres::OK;
     return str_to_numeric<float_t>(hr, str_val);
+}
+
+template <> double_t str_to_numeric(const std::string& str_val)
+{
+	hres hr = hres::OK;
+	return str_to_numeric<double_t>(hr, str_val);
 }
 
 // NOTE: First attribute value key should be a default value
@@ -122,21 +149,95 @@ const std::vector<PassInput::TexAttr> PassInput::TEX_ATTR_ARR = {
     },
 };
 
+const std::vector<MeshInput::MeshParm> MeshInput::MESH_PARM_ARR = {
+    {
+        "tris",
+        &_pass_input_set_triangles,
+        {
+            {"true", 1, "Triangles only"},
+            {"false", 0, "Triangles and faces"},
+        },
+        "Mesh have triangles only",
+    },
+    {
+        "rend",
+        &_pass_input_set_render,
+        {
+            {"tr", GL_TRIANGLES, "GL_TRIANGLES"},
+            {"ln", GL_LINES, "GL_LINES"},
+            {"pt", GL_POINTS, "GL_POINTS"},
+        },
+        "Mesh rendering mode",
+    },
+};
+
+const void _pass_input_set_triangles(MeshInput& pi, const GLuint& val)
+{
+    pi.mesh.Triangles = val;
+}
+const void _pass_input_set_render(MeshInput& pi, const GLuint& val)
+{
+    pi.mesh.render = val;
+}
+
+const void MeshInput::eval_mesh_parm(hres& hr, const std::string& name, const std::string& attr_val_name)
+{
+    if (hres::OK == hr) {
+        for (const auto& tex_attr : MeshInput::MESH_PARM_ARR) {
+            if (name == tex_attr.name) {
+                for (const auto& possible_val : tex_attr.possible_values) {
+                    if (attr_val_name == possible_val.key) {
+                        tex_attr.func(*this, possible_val.gl_value);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    hr = hres::ERR;
+}
+
+std::string MeshInput::get_possible_mesh_parm_fmt()
+{
+    std::string ret;
+
+    for (const auto& tex_attr : MeshInput::MESH_PARM_ARR) {
+        ret += tex_attr.name + " - " + tex_attr.desc + ": [";
+
+        for (size_t i = 0; i < tex_attr.possible_values.size(); ++i) {
+            auto& possible_val = tex_attr.possible_values[i];
+            ret += possible_val.key + " (";
+            if (i == 0) {
+                ret += "default, ";
+            }
+            ret += possible_val.desc + ")";
+
+            if (i < tex_attr.possible_values.size() - 1) {
+                ret += ", ";
+            }
+        }
+        ret += "]\n";
+    }
+
+    return ret;
+}
+
 const std::vector<PassInputCounters::CounterParm> PassInputCounters::COUNTER_PARM_ARR = {
     {
         "bd",
         //&_pass_input_set_binding,
-		"Actomic Counter Binding",
+        "Actomic Counter Binding",
     },
     {
-		"of",
-		//&_pass_input_set_offset,
-		"Counter binding offset",
+        "of",
+        //&_pass_input_set_offset,
+        "Counter binding offset",
     },
     {
-		"vl",
-		//&_pass_input_set_value,
-		"Initial counter value",
+        "vl",
+        //&_pass_input_set_value,
+        "Initial counter value",
     },
 };
 

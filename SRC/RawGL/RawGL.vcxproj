@@ -69,11 +69,18 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>-DBOOST_USE_WINAPI_VERSION=BOOST_WINAPI_VERSION_WIN7 %(AdditionalOptions)</AdditionalOptions>
+      <UseStandardPreprocessor>true</UseStandardPreprocessor>
+      <AdditionalIncludeDirectories>e:\GH\RapidOBJ\build\RELEASE\include;e:\GH\MiniPLY;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <PostBuildEvent>
+      <Command>
+      </Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -85,6 +92,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>-DBOOST_USE_WINAPI_VERSION=BOOST_WINAPI_VERSION_WIN7 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>e:\GH\RapidOBJ\build\RELEASE\include;e:\GH\MiniPLY;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -94,10 +102,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="E:\GH\MiniPLY\miniply.cpp" />
     <ClCompile Include="src\intern\GLProgram.cpp" />
     <ClCompile Include="src\intern\GLProgramManager.cpp" />
     <ClCompile Include="src\intern\ImageUtils.cpp" />
     <ClCompile Include="src\intern\Log.cpp" />
+    <ClCompile Include="src\intern\mesh_io.cpp" />
     <ClCompile Include="src\intern\OpenGLUtils.cpp" />
     <ClCompile Include="src\intern\Texture.cpp" />
     <ClCompile Include="src\PassInput.cpp" />
@@ -109,12 +119,14 @@
     <None Include="src\testshader.glsl" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="E:\GH\MiniPLY\miniply.h" />
     <ClInclude Include="src\intern\AssetManager.h" />
     <ClInclude Include="src\intern\Common.h" />
     <ClInclude Include="src\intern\GLProgram.h" />
     <ClInclude Include="src\intern\GLProgramManager.h" />
     <ClInclude Include="src\intern\ImageUtils.h" />
     <ClInclude Include="src\intern\Log.h" />
+    <ClInclude Include="src\intern\mesh_io.h" />
     <ClInclude Include="src\intern\OpenGLUtils.h" />
     <ClInclude Include="src\intern\Texture.h" />
     <ClInclude Include="src\intern\Timer.h" />

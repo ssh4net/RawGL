@@ -45,6 +45,12 @@
     <ClCompile Include="src\intern\GLProgramManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="E:\GH\MiniPLY\miniply.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\intern\mesh_io.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="src\testshader.glsl" />
@@ -78,6 +84,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\intern\Timer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="E:\GH\MiniPLY\miniply.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\intern\mesh_io.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -34,12 +34,14 @@ T str_to_numeric(hres& hr, const std::string& str_val);
 
 template<> int32_t str_to_numeric(hres& hr, const std::string& str_val);
 template<> float_t str_to_numeric(hres& hr, const std::string& str_val);
+template<> double_t str_to_numeric(hres& hr, const std::string& str_val);
 
 template <typename T>
 T str_to_numeric(const std::string& str_val);
 
 template<> int32_t str_to_numeric(const std::string& str_val);
 template<> float_t str_to_numeric(const std::string& str_val);
+template<> double_t str_to_numeric(const std::string& str_val);
 
 // 
 // Uniform input (numeric or texture data)
@@ -121,6 +123,102 @@ const void _pass_input_set_tex_min(PassInput& pi, const GLint& val);
 const void _pass_input_set_tex_mag(PassInput& pi, const GLint& val);
 const void _pass_input_set_tex_s(PassInput& pi, const GLint& val);
 const void _pass_input_set_tex_t(PassInput& pi, const GLint& val);
+
+struct MeshInput
+{
+    // Mesh data
+    struct Mesh;
+    struct VertexBuffer;
+
+    struct Mesh
+    {
+        bool isQuad;
+        bool Triangles;
+        GLuint render;
+        std::string FileName;
+
+        float* pVerts = nullptr;
+        float* pTexts = nullptr;
+        float* pNorms = nullptr;
+        unsigned char* pColrs = nullptr;
+        uint32_t* pIndxs = nullptr;
+
+        GLsizei vrtSize, texSize, nrmSize, clrSize, idxSize, numIndxs;
+    };
+    Mesh mesh;
+
+    // Vertex attributes buffer
+    struct VertexBuffer
+    {
+        GLuint vaoId = 0; // Vertex array object ID
+        GLuint vboId = 0; // Vertex buffer object ID
+        GLuint tboId = 0; // Texture coordinates buffer object ID
+        GLuint nboId = 0; // Normals buffer object ID
+        GLuint cboId = 0; // Colors buffer object ID
+        GLuint iboId = 0; // Indices buffer object ID
+    };
+    VertexBuffer VBO;
+
+    // Forward declaration of texture attribute structures
+    struct MeshParm;
+    struct MeshParmValue;
+
+    // Mesh attribute
+    struct MeshParm
+    {
+        // Attribute name(tris, rend, ...)
+        std::string name;
+        // Setter function (see `_pass_input_set_triangles` as an example)
+        std::function<void(MeshInput&, const GLuint&)> func;
+        // Array of possible attribute values
+        std::vector<MeshParmValue> possible_values;
+        // String description (for documentation and help messages purposes)
+        std::string desc;
+    };
+    //MeshParm meshParm;
+    //  See:
+    // `MeshParm->possible_values`
+    struct MeshParmValue
+    {
+        // String value key
+        std::string key;
+        // GLSL integer flag value it holds
+        GLuint gl_value;
+        // String description (for documentation and help messages purposes)
+        std::string desc;
+    };
+    //MeshParmValue meshParmValue;
+
+    friend const void _pass_input_set_triangles(MeshInput& pi, const GLuint& val);
+    friend const void _pass_input_set_render(MeshInput& pi, const GLuint& val);
+
+    /// @brief Evaluates texture attribute from string attribute name and key value
+    /// @param hr - Result handle
+    /// @param name - Attribute name
+    /// @param attr_val_name - Attribute value key name
+    const void eval_mesh_parm(hres& hr, const std::string& name, const std::string& attr_val_name);
+
+    static std::string get_possible_mesh_parm_fmt();
+
+    static const std::vector<MeshParm> MESH_PARM_ARR;
+
+    MeshInput() :
+        mesh{
+            true, true, GL_TRIANGLES,                       // isQuad, Triangles
+            "",                                             // FileName
+            nullptr, nullptr, nullptr, nullptr, nullptr,    // pointers to attributes
+            0,0,0,0,0,0                                     // atribute sizes
+        },
+        VBO()
+        //,
+        //meshParm(),
+        //meshParmValue()
+    {
+	}
+};
+
+const void _pass_input_set_triangles(MeshInput& pi, const GLuint& val);
+const void _pass_input_set_render(MeshInput& pi, const GLuint& val);
 
 struct PassInputCounters
 {
@@ -238,11 +336,17 @@ struct Pass
     // One for each last stage shader output (i.e. fragment)
     std::map<std::string, PassOutput> outputs;
 
+    // MeshInput
+    std::map<std::string, MeshInput> meshes;
+
     // Size description
     std::string sizeText[2];
 
     // Threads description
     std::string workGroupSizeText[2];
+
+    // background color
+    float clearColor[4];
 
     //
     // Post-parse data
@@ -254,15 +358,16 @@ struct Pass
     // Number of threads
 	int workGroupSize[2] = { 16, 16 };
 
-    GLuint fboId;
+    GLuint fboId, msaCboID;
 
     Pass(const std::shared_ptr<GLProgram>& p, bool isCompute) :
         program(p),
         isCompute(isCompute),
-        // TODO: Here because defaulted options only work with po::variables_map
         sizeText{ "512", "512" },
         workGroupSizeText{ "16", "16" },
-        fboId(0)
+        fboId(0),
+        msaCboID(0),
+        clearColor{ 0.0f, 0.0f, 0.0f, 0.0f }
     {}
 };
 
@@ -288,8 +393,6 @@ private:
 	// ? maybe not needed ?
     std::map < std::string, std::shared_ptr<GLProgramAtomicBuffers>> m_counters;
     std::vector<Pass> m_passes;
-
-    GLuint m_vaoId, m_vboId, m_tboId, m_cboId, m_iboId;
 
     void initCommon();
 };

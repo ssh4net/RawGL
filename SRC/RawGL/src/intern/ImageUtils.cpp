@@ -24,7 +24,8 @@
 #include <LibRaw/libraw.h>
 #include <libraw/libraw_version.h>
 
-static std::string get_file_ext(const std::string& filepath)
+// TODO: Move function to File_IO
+extern std::string get_file_ext(const std::string& filepath)
 {
     std::string::size_type idx = filepath.rfind('.');
     std::string ext = (idx == std::string::npos) ? "" : filepath.substr(idx + 1);
