@@ -62,7 +62,7 @@ std::shared_ptr<GLProgram> GLProgramManager::loadVertFrag(const std::string& pat
 
 std::shared_ptr<GLProgram> GLProgramManager::loadVertFrag(const std::string paths[])
 {
-	LOG(info) << "Loading program from files (vertex, fragment): " << std::endl << paths[0] << "," << std::endl << paths[1];
+	LOG(info) << "Loading program from files (vertex, fragment): " << std::endl << "\t" << paths[0] << std::endl << "\t" << paths[1];
 
 	auto name = paths[0] + ":" + paths[1];
 	auto it = m_list.find(name);

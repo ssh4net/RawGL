@@ -44,6 +44,7 @@ int main(int argc, const char* argv[])
 	Log_Init();
 
     // start the sequence
+	LOG(debug) << "Starting RawGL sequence" << std::endl;
     Sequence sequence(argc, argv);
     sequence.run();
 	std::cout << std::endl;

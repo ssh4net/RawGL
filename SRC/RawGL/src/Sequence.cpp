@@ -384,7 +384,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
             {
                 if (!currentPass)
                 {
-                    LOG(error) << "pass_mesh: no preceeding pass declaration.";
+                    LOG(error) << "bg_color: no preceeding pass declaration.";
                     exit(1);
                 }
                 int size = o.value.size();
@@ -409,6 +409,8 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 if (hres::OK == hr) {
                     memcpy(&currentPass->clearColor, &tmp_floats, sizeof(GLfloat) * 4);
                 }
+                LOG(debug) << "Clear color (bg_color) set as RGBA [" << std::fixed << std::setprecision(4) <<
+                    tmp_floats[0] << ", " << tmp_floats[1] << ", " << tmp_floats[2] << ", " << tmp_floats[3] << "]";
 			}
             //
             // mesh parsing
