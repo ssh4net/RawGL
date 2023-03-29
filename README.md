@@ -57,6 +57,7 @@ Dependencies
 * openimageio
 * glfw (included in repo)
 * glad (included in repo)
+* miniply (from my fork https://github.com/ssh4net/miniply)
 
 ### Optional dependencies -- features may be disabled if not found
 * If you want support for camera "RAW" formats:
@@ -87,7 +88,7 @@ Please use gpu_delays.reg from tools/registry folder to change the required regi
 Documentation
 =============
 
-RawGL.exe
+**RawGL.exe**
 |    Options       |        Definition        |
 | -------------    | ------------------------ |
 | -h [ --help ]    | Show help message        |
@@ -107,26 +108,48 @@ RawGL.exe
 | | (sources separated with macros RAWGL_VERTEX_SHADER, RAWGL_FRAGMENT_SHADER) |
 | | --pass_vertfrag s.vert_spv s.frag_spv |
 | |  (SPIR-V binary shaders) |
+| |
+| --bg_color arg | Optional. Define background color (OpenGL clear color) in RGBA |
+| | --bg_color 0.5 0.5 0.5 1.0 |
+| | default background color: RGBA(0.0, 0.0, 0.0, 0.0) |
+| | --bg_color 0.5 - will be parsed as RGBA(0.5, 0.0, 0.0, 1.0) |
+| | --bg_color 0.5 0.5 - as RGBA(0.5, 0.5, 0.0, 1.0) | 
+| | at least one arg is mandatory, more than 4 will end with error. |
+| |
+| -M [ --pass_mesh ] arg | Use default quad or external Mesh from file |
+| | --pass_mesh quad |
+| | --pass_mesh mesh tris true rend tr path\to\file.ply |
+| | **tris:** |
+| | **true (default)** - inform PLY parser that mesh is triangles only (faster loading on big meshes) |
+| | false - arbitrary meshes. |
+| | In both cases mesh will be triangulated in render time. |
+| | **rend:** |
+| | **tr (default)** - GL_TRIANGLES: render as polygons |
+| | ln - GL_LINES: render as lines |
+| | pt - GL_POINTS - render as a point cloud |
+| |
 | -C [ --pass_comp ] arg | New pass using a compute shader: |
 | |  --pass_comp s.comp |
+| |
 | -S [ --pass_size ] arg | Output size of this pass (default 512x512px): |
 | |  --pass_size X [Y] |
 | |  X and Y can also reference the size of an input texture from any pass: |
 | |  --pass_size Texture0::0 [Texture1::1] |
+| |
 | -W [ --pass_workgroupsize ] arg | Number of threads per work group in compute shader on each axis:
 | |  --pass_workgroupsize X [Y] |
 | |  **Must be equal to the 'local_size' layout constant inside compute shader.** |
 | |
 | -i [ --in ] arg | Uniform pass index, name & value (numeric or texture path) |
 | | (e.g.: --in Texture0 BasicTex.png). |
-| |  as output from #-pass: --in outTexture 0 |
+| |  as output from #-pass: --in outTexture::0 **<- Changed in this version!** |
 | |  **Texture filtering and sampling:** |
 | |  **min - Texture minification function:** |
 | |  **l - GL_LINEAR (default)** |
 | |  n - GL_NEAREST |
 | |  ll - GL_LINEAR_MIPMAP_LINEAR |
 | |  ln - GL_LINEAR_MIPMAP_NEAREST |
-| |  nl - GL_NEAREST_MIPMAP_LINEAR) |
+| |  nl - GL_NEAREST_MIPMAP_LINEAR |
 | |  nn - GL_NEAREST_MIPMAP_NEAREST |
 | |  **mag - Texture magnification function:** |
 | |  **l - GL_LINEAR (default)** |
@@ -143,7 +166,6 @@ RawGL.exe
 | |  cb - GL_CLAMP_TO_BORDER | 
 | |  mr - GL_MIRRORED_REPEAT) |
 | |  mce - GL_MIRROR_CLAMP_TO_EDGE |
-| |
 | | **Uniform can be float, integer, boolean, vec/ivec/bvec 2/3/4,** |
 | | **matrices 2x2, 2x3, ... and 4x4** |  
 | | --in UniformBoolName True |
@@ -171,16 +193,21 @@ RawGL.exe
 | | OpenEXR:  \*.exr |
 | | HDR/RGBE: \*.hdr |
 | | TIFF:     \*.tif, \*.tiff, \*.tx, \*.env, \*.sm, \*.vsm |
+| |
 | -f [ --out_format ] arg | Output framebuffer format (default rgba32f): |
 | | r8, rg8, rgb8, rgba8, |
 | | r16, rg16, rgb16, rgba16, |
 | | r16f, rg16f, rgb16f, rgba16f, |
 | | r32f, rg32f, rgb32f, rgba32f |
 | | If format not support this bit depth OpenImageIO automatically convert to supported bit depth. |
+| |
 | -r [ --out_attr ] arg | OpenImageIO/plugin attribute value |
 | | (e.g.: --out_attr oiio:colorspace sRGB). |
+| |
 | -n [ --out_channels ] arg | # of channels in output image |
+| |
 | -a [ --out_alpha_channel ] arg | Alpha channel index hint for output image (-1 = off, 0-3 = RGBA). |
+| |
 | -b [ --out_bits ] arg |  # of bits per output image channel |
 | | (depends on file format): |
 | |  BMP:      8 |
@@ -215,7 +242,7 @@ Technically you can use any size of Image buffer and img/lut sizes. For example,
 
 
     RawGL.exe" ^
-    --verbosity 5 ^
+    -V 5 ^
     -P shaders\empty.vert shaders\pass1.frag ^
     --pass_size 1024 ^
     --in InSample inputs\EmptyPresetLUT.png ^
@@ -227,7 +254,7 @@ Technically you can use any size of Image buffer and img/lut sizes. For example,
     --out_attr oiio:UnassociatedAlpha 2 ^
     --out_attr tiff:compression ZIP ^
     -P shaders\empty.vert shaders\pass2.frag ^
-    --in InSample2 OutSample 0 ^
+    --in InSample2 OutSample::0 ^
     --out OutSample2 outputs\pass2.tif ^
     --out_format rgb32f --out_channels 3 --out_bits 32 ^
     --out_attr oiio:ColorSpace linear ^
@@ -237,7 +264,7 @@ Technically you can use any size of Image buffer and img/lut sizes. For example,
     --out_attr tiff:compression ZIP ^
     -P shaders\empty.vert shaders\pass3.frag ^
     --in _LOD 5 ^
-    --in InSample3 OutSample2 1 min ll ^
+    --in InSample3 OutSample2::1 min ll ^
     --out OutSample3 outputs\pass3.tif ^
     --out_format rgb32f --out_channels 3 --out_bits 32 ^
     --out_attr oiio:ColorSpace linear ^
@@ -248,8 +275,23 @@ Technically you can use any size of Image buffer and img/lut sizes. For example,
    
 In this example RawGL will load image **EmptyPresetLUT.png** as **InSample** Uniform and process it in first **pass1** shader. Results of this pass will be saved as 32bit float **pass1.tif**. Pass #2 will use **Output** from pass #1 as **InSample2** Uniform using **OutSample 0** directive and results from this pass will be saved as **pass2.tif**. Pass #3 will use **Output** from pass #2 as **InSample3** Uniform using **OutSample2 1** directive, compute mip-maps (**min ll** directive to make mimp-maps using linear interpolation) and after shader pass save output as pass3.tif.
 
-More examples available in Exmples folder. And some more examples can be found in tests folder. 
-Premium content can be found on Patreon https://www.patreon.com/3DScan
+    RawGL.exe ^
+    -V 5 ^
+    -P color.vert color.frag ^
+    --pass_size 2048 2048 ^
+    -M mesh tris true rend pt Shell.ply ^
+    --bg_color 0.1 0.4 0.6 ^
+    --in inTexture "s:\3D\MATCAPS\coldsteel.png" ^
+    --out outColor render.jpg ^
+    --out_format rgba16 ^
+    --out_channels 4 ^
+    --out_bits 16 ^
+    --out_attr oiio:ColorSpace linear ^
+    --out_attr oiio:RawColor 1 ^
+    --out_attr oiio:nchannels 4 ^
+    --out_attr compression jpeg:100
+
+More examples available in **Examples** folder. And some more examples can be found in **Tests** folder. 
 
 License
 -------
