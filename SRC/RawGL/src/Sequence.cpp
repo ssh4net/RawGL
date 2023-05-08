@@ -1852,25 +1852,22 @@ void Sequence::run()
 				exit(-1);
 			}
 
-            auto u_counterIt = pass.u_aCounters.insert({ passCounter->second->binding, PassInputCounters() });
+            auto u_counterIt = pass.u_aCounters.insert({ passCounter->second->binding, passCounters()});
+            u_counterIt->second.buffer = passCounter->second;
 
-            u_counterIt->second.name = inputCounterIt.first;
-            u_counterIt->second.binding = passCounter->second->binding;
-            u_counterIt->second.offset = passCounter->second->offset;
-            u_counterIt->second.size = passCounter->second->size;
-// here
-            u_counterIt->second.value.resize(u_counterIt->second.size);
-            u_counterIt->second.result.resize(u_counterIt->second.size);
+            u_counterIt->second.value.resize(passCounter->second->size);
+            u_counterIt->second.result.resize(passCounter->second->size);
 
             if (inputCounterIt.second.value.size() > u_counterIt->second.value.size())
             {
 				LOG(warning) << "Atomic counter " << inputCounterIt.first << " has more values than the shader";
 				exit(-1);
 			}
-            std::memcpy(u_counterIt->second.value.data(), inputCounterIt.second.value.data(), u_counterIt->second.size * sizeof(GLuint));
+            
+            std::memcpy(u_counterIt->second.value.data(), inputCounterIt.second.value.data(), passCounter->second->size * sizeof(GLuint));
 
+            //u_counterIt->second.passIn = pass.fboId;
             u_counterIt->second.passIn = pass.fboId;
-
             passCounter->second->userInput = true;
         }
 
@@ -1879,15 +1876,12 @@ void Sequence::run()
             if (counterIt.second->userInput)
                 continue;
 
-            auto u_counterIt = pass.u_aCounters.insert({ counterIt.second->binding, PassInputCounters() });
+            auto u_counterIt = pass.u_aCounters.insert({ counterIt.second->binding, passCounters() });
 
-            u_counterIt->second.name = counterIt.first;
-            u_counterIt->second.binding = counterIt.second->binding;
-            u_counterIt->second.offset = counterIt.second->offset;
-            u_counterIt->second.size = counterIt.second->size;
-// here
-            u_counterIt->second.value.resize(u_counterIt->second.size);
-            u_counterIt->second.result.resize(u_counterIt->second.size);
+            u_counterIt->second.buffer = counterIt.second;
+
+            u_counterIt->second.value.resize(counterIt.second->size);
+            u_counterIt->second.result.resize(counterIt.second->size);
 
             u_counterIt->second.passIn = pass.fboId;
 
@@ -1922,21 +1916,21 @@ void Sequence::run()
             
             for (auto groupIt = range.first; groupIt != range.second; ++groupIt) {
                 // if new offset + counter size is bigger than buffer size than increase buffer size
-                GLuint groupSize = groupIt->second.offset + groupIt->second.size * sizeof(GLuint);
+                GLuint groupSize = groupIt->second.buffer->offset + groupIt->second.buffer->size * sizeof(GLuint);
                 buff_size = std::max(buff_size, groupSize);
-                LOG(trace) << groupIt->second.name << " buff_size: " << buff_size / sizeof(GLuint) << std::endl;
+                LOG(trace) << groupIt->second.buffer->name << " buff_size: " << buff_size / sizeof(GLuint) << std::endl;
             }
             // Allocate the buffer with null data
             GLCall(glBufferData(GL_ATOMIC_COUNTER_BUFFER, buff_size, nullptr, GL_DYNAMIC_DRAW));
 
             // set the value of the counter / per counter
             for (auto groupIt = range.first; groupIt != range.second; ++groupIt) {
-
-                GLCall(glBufferSubData(GL_ATOMIC_COUNTER_BUFFER, groupIt->second.offset, sizeof(GLuint) * groupIt->second.size, groupIt->second.value.data()));
-                LOG(trace) << groupIt->second.name << " offset: " << groupIt->second.offset << " size: " << groupIt->second.size << std::endl;
+                auto buffer = groupIt->second.buffer;
+                GLCall(glBufferSubData(GL_ATOMIC_COUNTER_BUFFER, buffer->offset, sizeof(GLuint) * buffer->size, groupIt->second.value.data()));
+                LOG(trace) << buffer->name << " offset: " << buffer->offset << " size: " << buffer->size << std::endl;
 
                 groupIt->second.bufferID = it->second.bufferID;
-                pass_acounters[groupIt->second.name]->isSet = true;
+                buffer->isSet = true;
             }
 
             GLCall(glBindBufferRange(GL_ATOMIC_COUNTER_BUFFER, it->first, it->second.bufferID, 0, buff_size));
@@ -2076,11 +2070,12 @@ void Sequence::run()
             it = pass.u_aCounters.begin();
 
             while (it != pass.u_aCounters.end()) {
-                std::vector<GLint> boundBuffer(it->second.size);
+                auto buffer = it->second.buffer;
+                std::vector<GLint> boundBuffer(buffer->size);
                 GLCall(glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, it->second.bufferID));
-                GLCall(glGetBufferSubData(GL_ATOMIC_COUNTER_BUFFER, it->second.offset, it->second.size * sizeof(GLuint), boundBuffer.data()));
+                GLCall(glGetBufferSubData(GL_ATOMIC_COUNTER_BUFFER, buffer->offset, buffer->size * sizeof(GLuint), boundBuffer.data()));
 
-                LOG(trace) << it->second.name << " offset: " << it->second.offset << " size: " << it->second.size;
+                LOG(trace) << buffer->name << " offset: " << buffer->offset << " size: " << buffer->size;
                 for (const auto& elem : boundBuffer) { std::cout << elem << ' '; }
 
                 std::cout << std::endl;

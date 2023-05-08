@@ -260,6 +260,29 @@ struct PassInputCounters
     //std::string path;
 };
 
+struct passCounters
+{
+    //passCounters();
+    
+    GLuint bufferID;
+
+    std::vector<GLuint> value;
+    std::vector<GLuint> result;
+
+    std::shared_ptr<GLProgramBuffers> buffer;
+
+    int passIn; // Index of pass input
+
+    passCounters() :
+        bufferID(0),
+        value(0),
+        result(0),
+        buffer(nullptr),
+        passIn(-1)
+    {
+	}
+};
+
 //
 // File output
 //
@@ -423,8 +446,8 @@ struct Pass
     std::map<std::string, inputCounter> inputCounters;
 
 	// One for each user-specified atomic counter
-	//std::map<std::string, PassInputCounters> u_aCounters;
-    std::multimap<GLint, PassInputCounters> u_aCounters;
+    std::multimap<GLint, passCounters> u_aCounters;
+
     std::map<std::string, PassInputCounters> u_aBuffers;
     
 
