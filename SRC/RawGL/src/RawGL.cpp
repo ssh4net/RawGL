@@ -17,7 +17,7 @@
 
 #include "Common.h"
 #include "Sequence.h"
-#include "OpenGLUtils.h"
+//#include "OpenGLUtils.h"
 #include "Timer.h"
 #include "GLProgramManager.h"
 #include <iostream>
@@ -44,7 +44,6 @@ int main(int argc, const char* argv[])
 	Log_Init();
 
     // start the sequence
-	LOG(debug) << "Starting RawGL sequence" << std::endl;
     Sequence sequence(argc, argv);
     sequence.run();
 	std::cout << std::endl;

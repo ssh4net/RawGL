@@ -18,6 +18,7 @@
 #pragma once
 
 #include <glad/glad.h>
+#include <unordered_map>
 
 #ifdef APIENTRY
 #undef APIENTRY
@@ -35,11 +36,14 @@ struct OpenGLHandle
     ~OpenGLHandle();
 };
 
-struct glsl_type_set {
-    GLenum      type;
-    const char* name;
-};
+//struct glsl_type_set {
+//    GLenum      type;
+//    const char* name;
+//};
 
-extern const glsl_type_set type_set[];
-extern int type_set_size;
+//extern const glsl_type_set type_set[];
+extern const std::unordered_map<GLenum, const char* > glsl_type_map;
+//extern int type_set_size;
 extern const char* glsl_type_name(GLenum type);
+
+void get_GPUfeatures();

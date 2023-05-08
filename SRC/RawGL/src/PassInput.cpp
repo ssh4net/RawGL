@@ -18,7 +18,27 @@
 #include "Sequence.h"
 #include "Timer.h"
 
-// String to bool
+// String to unsigned int
+template <> uint32_t str_to_numeric(hres& hr, const std::string& str_val)
+{
+	uint32_t ret = 0;
+    if (hres::OK == hr) {
+		try {
+			ret = std::stoul(str_val);
+		}
+		catch (const std::invalid_argument& e_arg) {
+			hr = hres::ERR;
+			LOG(trace) << "\x1B[91mUnable to parse invalid unsigned integer value (\"" << str_val << "\"):\n" << e_arg.what() << "\x1B[0m" << std::endl;
+		}
+		catch (const std::out_of_range& e_oor) {
+			hr = hres::ERR;
+			LOG(trace) << "\x1B[91mUnable to parse unsigned integer value (\"" << str_val << "\") (out of range):\n" << e_oor.what() << "\x1B[0m" << std::endl;
+		}
+	}
+	return ret;
+}
+
+// String to bool, int
 template <> int32_t str_to_numeric(hres& hr, const std::string& str_val)
 {
     int ret = 0;
@@ -79,6 +99,12 @@ template <> double_t str_to_numeric(hres& hr, const std::string& str_val)
 	}
 
     return ret;
+}
+
+template <> uint32_t str_to_numeric(const std::string& str_val)
+{
+	hres hr = hres::OK;
+	return str_to_numeric<uint32_t>(hr, str_val);
 }
 
 template <> int32_t str_to_numeric(const std::string& str_val)
@@ -223,23 +249,23 @@ std::string MeshInput::get_possible_mesh_parm_fmt()
     return ret;
 }
 
-const std::vector<PassInputCounters::CounterParm> PassInputCounters::COUNTER_PARM_ARR = {
-    {
-        "bd",
-        //&_pass_input_set_binding,
-        "Actomic Counter Binding",
-    },
-    {
-        "of",
-        //&_pass_input_set_offset,
-        "Counter binding offset",
-    },
-    {
-        "vl",
-        //&_pass_input_set_value,
-        "Initial counter value",
-    },
-};
+//const std::vector<PassInputCounters::CounterParm> PassInputCounters::COUNTER_PARM_ARR = {
+//    {
+//        "bd",
+//        //&_pass_input_set_binding,
+//        "Actomic Counter Binding",
+//    },
+//    {
+//        "of",
+//        //&_pass_input_set_offset,
+//        "Counter binding offset",
+//    },
+//    {
+//        "vl",
+//        //&_pass_input_set_value,
+//        "Initial counter value",
+//    },
+//};
 
 const void _pass_input_set_tex_min(PassInput& pi, const GLint& val)
 {
@@ -305,43 +331,44 @@ std::string PassInput::get_possible_tex_attr_fmt()
 }
 
 /// <summary>
-const void PassInputCounters::eval_counter_parm(hres& hr, const std::string& parm)
-{
-    if (hres::OK == hr) {
-        for (const auto& tex_parm : PassInputCounters::COUNTER_PARM_ARR) {
-            if (parm == tex_parm.name) {
-				return;
-            }
-        }
-    }
-    hr = hres::ERR;
-}
+//const void PassInputCounters::eval_counter_parm(hres& hr, const std::string& parm)
+//{
+//    if (hres::OK == hr) {
+//        for (const auto& tex_parm : PassInputCounters::COUNTER_PARM_ARR) {
+//            if (parm == tex_parm.name) {
+//				return;
+//            }
+//        }
+//    }
+//    hr = hres::ERR;
+//}
 /// </summary>
 
-const void _pass_input_set_binding(PassInputCounters& pi, const GLint& val)
-{
-	pi.binding = val;
-}
+//const void _pass_input_set_binding(PassInputCounters& pi, const GLint& val)
+//{
+//	pi.binding = val;
+//}
+//
+//const void _pass_input_set_offset(PassInputCounters& pi, const GLint& val)
+//{
+//    pi.offset = val;
+//}
 
-const void _pass_input_set_offset(PassInputCounters& pi, const GLint& val)
-{
-    pi.offset = val;
-}
+//const void _pass_input_set_value(PassInputCounters& pi, const GLint& val)
+//{
+//    pi.value = val;
+//}
 
-const void _pass_input_set_value(PassInputCounters& pi, const GLint& val)
-{
-    pi.value = val;
-}
-
-const void _pass_input_set_path(PassInputCounters& pi, const std::string& val)
-{
-    pi.path = val;
-}
+//const void _pass_input_set_path(PassInputCounters& pi, const std::string& val)
+//{
+//    pi.path = val;
+//}
 
 PassInput::PassInput()
 {
     memset(ints, 0, sizeof(GLint) * NUM_INTS);
     memset(floats, 0, sizeof(GLfloat) * NUM_FLOATS);
+    memset(doubles, 0, sizeof(GLdouble) * NUM_DOUBLES);
     uniform = nullptr;
 
     // set some default values for unspecificed attributes
@@ -360,11 +387,16 @@ PassInput::PassInput()
 
 PassInputCounters::PassInputCounters()
 {
+    name = "";
+    bufferID = 0;
+
     binding = 0;
     offset = 0;
     size = 0;
-    value = 0;
-    path = "";
+    value = { 0 };
+    result = { 0 };
+
+    passIn = -1;
 }
 
 #if 0

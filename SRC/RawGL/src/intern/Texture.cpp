@@ -20,19 +20,19 @@
 Texture::Texture(GLsizei width, GLsizei height, GLenum internalFormat, GLenum type, const GLvoid* data, int alphaChannel) :
     Texture()
 {
-    glActiveTexture(GL_TEXTURE0);
+    GLCall(glActiveTexture(GL_TEXTURE0));
 	
-    glGenTextures(1, &m_id);
-    glBindTexture(GL_TEXTURE_2D, m_id);
+    GLCall(glGenTextures(1, &m_id));
+    GLCall(glBindTexture(GL_TEXTURE_2D, m_id));
 	// default texture parameters.
 	// GL_CLAMP_TO_EDGE works better with convolution filters.
 	// GL_REPEAT default for texturing (not filtering).
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+    GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
 	
 	// fix for compute shader textures?
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
+    GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
     
     m_width = width;
     m_height = height;
@@ -156,16 +156,16 @@ Texture::Texture(GLsizei width, GLsizei height, GLenum internalFormat, GLenum ty
 	
     if (m_channels != 4) {
         if ((m_width * bytes * m_channels) % 4 != 0) {
-            glPixelStorei(GL_UNPACK_ALIGNMENT, bytes);
+            GLCall(glPixelStorei(GL_UNPACK_ALIGNMENT, bytes));
         }
     }
     else {
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        GLCall(glPixelStorei(GL_UNPACK_ALIGNMENT, 4));
     }
 	
-    glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask.data());
+    GLCall(glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask.data()));
 
-    glTexImage2D(GL_TEXTURE_2D, 0, m_internalFormat, width, height, 0, m_baseFormat, type, data);
+    GLCall(glTexImage2D(GL_TEXTURE_2D, 0, m_internalFormat, width, height, 0, m_baseFormat, type, data));
 
     //glGenerateTextureMipmap(m_id); // NOTE: OpenGL 4.5+
 }
@@ -173,7 +173,7 @@ Texture::Texture(GLsizei width, GLsizei height, GLenum internalFormat, GLenum ty
 Texture::~Texture()
 {
     if (m_id)
-        glDeleteTextures(1, &m_id);
+        GLCall(glDeleteTextures(1, &m_id));
 }
 
 void* Texture::getData(GLenum type) const

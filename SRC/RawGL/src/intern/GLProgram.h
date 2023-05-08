@@ -57,7 +57,7 @@ struct GLProgramUniform
 	void set(const GLdouble* values);
 };
 
-struct GLProgramNoUniform
+struct GLProgramAttributes
 {
 	GLenum type;
 	std::string type_name;
@@ -69,31 +69,70 @@ struct GLProgramNoUniform
 
 	bool isSet;
 	
-	GLProgramNoUniform(GLenum type, std::string type_name, GLint location, GLsizei size) : type(type), type_name(type_name), location(location), size(size), isSet(false) {}
+	GLProgramAttributes(GLenum type, std::string type_name, GLint location, GLsizei size) : type(type), type_name(type_name), location(location), size(size), isSet(false) {}
 	
 	void set(GLuint value);
 };
 
-struct GLProgramAtomicBuffers
+struct GLProgramBuffers
 {
 	std::string name = "";
+	GLenum type;
+	std::string type_name;
+	GLint index, binding, offset, location;
     GLsizei size = 0;
 
-	// avoid redundant GL calls if current & provided values are the same
-	GLuint value = 0;
-
 	bool isSet;
+	bool userInput;
 
-	GLProgramAtomicBuffers(std::string name, GLint size) : name(name), size(size), isSet(false) {}
+	GLProgramBuffers() :
+		name(""),
+		type(0), type_name(""),
+		index(0),binding(0),offset(0),location(0),size(0),
+		isSet(false), userInput(false)
+	{};
 
-	void set(GLuint value);
+	GLProgramBuffers(std::string name, GLenum type, GLint binding, GLint size) : 
+		name(name), type(type), binding(binding), size(size), isSet(false), userInput(false)
+	{
+		type_name = static_cast<std::string>(glsl_type_name(type));
+	}
+
+	GLProgramBuffers(std::string name, GLenum type, GLint binding, GLint offset, GLint size) :
+		name(name), type(type), binding(binding), offset(offset), size(size), isSet(false), userInput(false)
+	{
+		type_name = static_cast<std::string>(glsl_type_name(type));
+	}
+
+	static GLProgramBuffers AtomicCounterBuffer(std::string name, GLint index, GLint binding, GLint offset, GLsizei size) {
+		GLProgramBuffers buffer;
+		buffer.name = name;
+		buffer.type = GL_UNSIGNED_INT_ATOMIC_COUNTER;
+		buffer.type_name = static_cast<std::string>(glsl_type_name(buffer.type));
+		buffer.index = index;
+		buffer.binding = binding;
+		buffer.offset = offset;
+		buffer.size = size;
+		buffer.isSet = false;
+		buffer.userInput = false;
+		return buffer;
+	}
+
+	~GLProgramBuffers() = default;
 };
 
 struct GLProgramOutput
 {
-    GLuint location;
+    GLenum type;
+	std::string type_name;
+	GLuint location;
 
-    GLProgramOutput(GLuint location) : location(location) {}
+    GLProgramOutput(GLuint location) : type(NULL), type_name(""), location(location) {}
+	GLProgramOutput(GLenum type, GLuint location) 
+		: type(type), location(location)
+	{
+		type_name = static_cast<std::string>(glsl_type_name(type));
+	}
 };
 
 struct GLShader
@@ -122,18 +161,26 @@ public:
 	~GLProgram();
 
     GLProgramUniform* findUniform(const std::string& name);
-	GLProgramNoUniform* findNoUniform(const std::string& name);
-	GLProgramAtomicBuffers* findAtomicBuffer(GLint& binding);
-	size_t AtomicBuffersSize();
+	GLProgramAttributes* findAttributes(const std::string& name);
+	std::shared_ptr<GLProgramBuffers> findCounter(std::string name);
+	std::vector<GLProgramBuffers*> findBuffers(std::string name);
     GLProgramOutput* findOutput(const std::string& name);
+
+	size_t BuffersSize();
+
+	// get compiled shader atomic counters
+	std::map<std::string, std::shared_ptr<GLProgramBuffers>>& get_m_acounters()
+	{
+		return m_acounters;
+	}
 
     GLuint getId() const { return m_id; }
 	bool isValid() const { return m_isValid; }
 
 private:
 	std::map<std::string, GLProgramUniform> m_uniforms;
-    std::map<std::string, GLProgramNoUniform> m_no_uniforms;
-    std::map<GLint, GLProgramAtomicBuffers> m_atomicbuffers;
+    std::map<std::string, std::shared_ptr<GLProgramBuffers>> m_acounters;
+	std::multimap<std::string, std::pair<std::string, GLProgramBuffers>> m_abuffers; // < buffer_name , < buffer_var_name, buffer_parms > >
 	std::map<std::string, GLProgramOutput> m_outputs;
 
 	GLuint m_id;
@@ -146,7 +193,7 @@ private:
     void compileOutputList();
 
     // Compile a list of last program stage outputs
-    void compileAtomicBufferList();
+    void compileBuffersList();
 
 	// Debug a list of shader variables
 	void DebugShaderVarList();

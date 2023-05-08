@@ -16,6 +16,8 @@
  */
 
 #include "Sequence.h"
+
+#include "OpenGLUtils.h"
 #include "Timer.h"
 #include "Log.h"
 #include "GLProgramManager.h"
@@ -25,6 +27,8 @@
 #include <boost/program_options/option.hpp>
 #include <boost/lexical_cast/try_lexical_convert.hpp>
 #include <boost/program_options/value_semantic.hpp>
+
+#include <termcolor/termcolor.hpp>
 
 #include "rapidobj/rapidobj.hpp"
 #include "miniply.h"
@@ -137,9 +141,9 @@ Sequence::Sequence(int argc, const char* argv[]) :
                     + PassInput::get_possible_tex_attr_fmt()
                     ).c_str()
                 )
-			("in_acnt", po::value<std::vector<std::string>>()->multitoken(),
+			("atomic,B", po::value<std::vector<std::string>>()->multitoken(),
                 "Atomic counter\n"
-				"Counter uniform name, binding, [initial value]")
+				"Counter/buffer uniform name, binding, [size], [initial value]")
             ("in_attr,t", po::value<std::vector<std::string>>()->multitoken(), "OpenImageIO/plugin attribute value (e.g.: --in_attr oiio:colorspace sRGB).")
             /*
                         ("in_color_space,s", po::value<std::vector<std::string>>(), "Color space of input images (e.g.: --in_color_space raw).")
@@ -224,22 +228,11 @@ Sequence::Sequence(int argc, const char* argv[]) :
 
         if (vm.count("version"))
         {
+            std::cout << termcolor::bright_yellow << termcolor::bold;
 			std::cout << APP_NAME << " version " << APP_VERSION[0] << "." << APP_VERSION[1] << "." << APP_VERSION[2] << " Copyright (c) " << APP_AUTHOR << std::endl;
             std::cout << "Build from: " << __DATE__ << ", " << __TIME__ << "." << std::endl;
-			std::cout << std::endl << "Available GPU features:" << std::endl;
-            int value;
-            glGetIntegerv(GL_MAX_TEXTURE_SIZE, &value);
-            std::cout << "GL_MAX_TEXTURE_SIZE: " << value << std::endl;
-            glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &value);
-            std::cout << "GL_MAX_3D_TEXTURE_SIZE: " << value << std::endl;
-            glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &value);
-			std::cout << "GL_MAX_CUBE_MAP_TEXTURE_SIZE: " << value << std::endl;
-			glGetIntegeri_v(GL_MAX_VIEWPORT_DIMS, 0, &value);
-            std::cout << "GL_MAX_VIEWPORT_DIMS: " << value;
-            glGetIntegeri_v(GL_MAX_VIEWPORT_DIMS, 1, &value);
-            std::cout << " x " << value << std::endl;
-            glGetIntegerv(GL_MAX_SAMPLES, &value);
-            std::cout << "Max samples: " << value << std::endl;
+            // Get available GPU features
+            get_GPUfeatures();
 
             infoExit = true;
         }
@@ -253,13 +246,13 @@ Sequence::Sequence(int argc, const char* argv[]) :
         //
         // parse the multi-occurence, multi-token options here
         //
+        LOG(debug) << "Starting RawGL sequence" << std::endl;
 
         Pass* currentPass = nullptr;
         PassInput* currentInput = nullptr;
         PassOutput* currentOutput = nullptr;
         MeshInput* currentMeshInput = nullptr;
         PassInputCounters* currentInputCounters = nullptr;
-        PassOutputCounters* currentOutputCounters = nullptr;
         size_t currentPassN = 0;
 
         // tired. Don't know correct way to store previous output parameters
@@ -686,26 +679,23 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 else { // Numeric values
                     uint8_t num_fields = 1;
                     bool is_floats = false;
+                    bool is_double = false;
 
                     switch (currentInput->uniform->type) {
                     case GL_BOOL:
                     case GL_INT:
-                        //is_floats = false;
                         num_fields = 1;
                         break;
                     case GL_BOOL_VEC2:
                     case GL_INT_VEC2:
-                        //is_floats = false;
                         num_fields = 2;
                         break;
                     case GL_BOOL_VEC3:
                     case GL_INT_VEC3:
-                        //is_floats = false;
                         num_fields = 3;
                         break;
                     case GL_BOOL_VEC4:
                     case GL_INT_VEC4:
-                        //is_floats = false;
                         num_fields = 4;
                         break;
 
@@ -749,6 +739,49 @@ Sequence::Sequence(int argc, const char* argv[]) :
                         is_floats = true;
                         num_fields = 16;
                         break;
+                    case GL_DOUBLE:
+						is_double = true;
+						num_fields = 1;
+						break;
+                    case GL_DOUBLE_VEC2:
+                        is_double = true;
+                        num_fields = 2;
+                        break;
+                    case GL_DOUBLE_VEC3:
+                        is_double = true;
+						num_fields = 3;
+						break;
+                    case GL_DOUBLE_VEC4:
+						is_double = true;
+                        num_fields = 4;
+                        break;
+                    case GL_DOUBLE_MAT2:
+                        is_double = true;
+						num_fields = 4;
+						break;
+                    case GL_DOUBLE_MAT2x3:
+                    case GL_DOUBLE_MAT3x2:
+						is_double = true;
+                        num_fields = 6;
+						break;
+                    case GL_DOUBLE_MAT2x4:
+                    case GL_DOUBLE_MAT4x2:
+                        is_double = true;
+						num_fields = 8;
+                        break;
+                    case GL_DOUBLE_MAT3:
+                        is_double = true;
+                        num_fields = 9;
+                        break;
+                    case GL_DOUBLE_MAT3x4:
+                    case GL_DOUBLE_MAT4x3:
+						is_double = true;
+						num_fields = 12;
+						break;
+                    case GL_DOUBLE_MAT4:
+						is_double = true;
+                        num_fields = 16;
+                        break;
                     default:
                         hr = hres::ERR;
                         break;
@@ -762,6 +795,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
 
                     GLint tmp_ints[PassInput::NUM_INTS] = { 0 };
                     GLfloat tmp_floats[PassInput::NUM_FLOATS] = { 0.0f };
+                    GLdouble tmp_doubles[PassInput::NUM_DOUBLES] = { 0.0 };
 
                     for (uint8_t i = 0; i < num_fields; ++i) {
                         const std::string& str_val = val_arr[i];
@@ -769,6 +803,9 @@ Sequence::Sequence(int argc, const char* argv[]) :
                         if (is_floats) {
                             tmp_floats[i] = str_to_numeric<float_t>(hr, str_val);
                         }
+						else if (is_double) {
+							tmp_doubles[i] = str_to_numeric<double_t>(hr, str_val);
+						}
                         else {
                             tmp_ints[i] = str_to_numeric<int32_t>(hr, str_val);
                         }
@@ -778,6 +815,9 @@ Sequence::Sequence(int argc, const char* argv[]) :
                         if (is_floats) {
                             memcpy(&currentInput->floats, &tmp_floats, sizeof(GLfloat) * PassInput::NUM_FLOATS);
                         }
+                        else if (is_double) {
+                            memcpy(&currentInput->doubles, &tmp_doubles, sizeof(GLdouble) * PassInput::NUM_DOUBLES);
+						}
                         else {
                             memcpy(&currentInput->ints, &tmp_ints, sizeof(GLint) * PassInput::NUM_INTS);
                         }
@@ -785,22 +825,69 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 }
 
             }
-            else if (o.string_key == "in_acnt")
+            else if (o.string_key == "atomic")
             {
                 if (!currentPass)
                 {
-                    LOG(error) << "in_acnt (" << o.value[0] << "): no preceeding input declaration.";
+                    LOG(error) << "atomic (" << o.value[0] << "): no preceeding input declaration.";
                     exit(1);
                 }
                 if (o.value.size() < 2)
                 {
-                    LOG(error) << "in_acnt (" << o.value[0] << "): must have at least 2 parameters.";
+                    LOG(error) << "atomic (" << o.value[0] << "): must have at least 2 parameters.";
                     exit(1);
                 }
-				
+
+                if (o.value[0] == "cntr") {
+                    hres hr = hres::OK;
+                    std::vector<std::string> val_arr;
+                    val_arr.reserve(o.value.size() - 1);
+                    std::copy(o.value.begin() + 1, o.value.end(), std::back_inserter(val_arr));
+
+                    GLuint tmp_uint = 0;
+                    
+                    if (val_arr.size() > 2) {
+                        LOG(error) << "atomic (" << o.value[0] << "): can only have a single value";
+                    }
+                    else {
+						tmp_uint = static_cast<GLuint>(str_to_numeric<uint32_t>(hr, val_arr[1]));
+					}
+                    if (hr == hres::ERR) {
+                        LOG(error) << "atomic (" << o.value[0] << "): -> " << o.value[1] << " <- is invalid parameters";
+                        exit(1);
+                    }
+
+                    auto counterSh = currentPass->program->findCounter(val_arr[0]);
+                    if (!counterSh) {
+						LOG(error) << "atomic (" << o.value[0] << "): referenced counter " << val_arr[0].c_str() << " not found.";
+						exit(1);
+					}
+
+                    auto [i_counterIt, success] = currentPass->inputCounters.insert({ val_arr[0], Pass::inputCounter() });
+                    //auto [counterIt, success] = m_aCounters.insert({ val_arr[0], PassInputCounters() });
+                    i_counterIt->second.size = counterSh->size;
+                    i_counterIt->second.value = { tmp_uint };
+
+                    LOG(debug) << "atomic counter: " << val_arr[0].c_str() << " set to " << tmp_uint;
+
+                    if (!success) {
+                        LOG(error) << "atomic counter: " << val_arr[0].c_str() << " already exists.";
+                        exit(1);
+                    }
+                }
+                else if (o.value[0] == "buff") {
+                    hres hr = hres::OK;
+                    std::vector<std::string> val_arr;
+                    val_arr.reserve(o.value.size() - 1);
+                    std::copy(o.value.begin() + 1, o.value.end(), std::back_inserter(val_arr));
+                }
+                else {
+                    LOG(error) << "atomic (" << o.value[0] << "): unknown atomic buffer type";
+					//exit(1);
+                };
                 // link the input to its atomic counters
-                auto [inputIt, success] = currentPass->atomicCounters.insert({ o.value[0], PassInputCounters() });
-				
+                //auto [inputIt, success] = currentPass->u_aBuffers.insert({ o.value[0], PassInputCounters() });
+/*
                 hres hr = hres::OK;
                 std::vector<std::string> val_arr;
                 val_arr.reserve(o.value.size() - 1);
@@ -823,49 +910,31 @@ Sequence::Sequence(int argc, const char* argv[]) :
                     currentInputCounters->eval_counter_parm(hr_tex_parm, val_key);
 
                     if (hres::OK != hr_tex_parm) {
-                        LOG(error) << "in_acnt (" << o.value[0] << "): -> " << val_key << " <- is invalid parameters";
+                        LOG(error) << "atomic (" << o.value[0] << "): -> " << val_key << " <- is invalid parameters";
                         exit(1);
                     }
                     int tmp_int = str_to_numeric<int32_t>(hr, val_data);
                     
                     //if (hr == hres::ERR) {
-                    //    LOG(error) << "in_acnt (" << o.value[0] << "): -> " << val_data << " <- is invalid parameters";
+                    //    LOG(error) << "atomic (" << o.value[0] << "): -> " << val_data << " <- is invalid parameters";
                     //    exit(1);
                     //}
 
-                    if (val_key == "bd") {
-                        if (hr == hres::ERR) {
-                            LOG(error) << "in_acnt (" << o.value[0] << "): incorrect binding value: " << val_data << " must use integers only";
-                            exit(1);
-                        }
-                        cntr_binding = tmp_int;
-                    } 
-                    else if (val_key == "of") {
-                        if (hr == hres::ERR) {
-                            LOG(error) << "in_acnt (" << o.value[0] << "): incorrect offset value: " << val_data << " must use integers only";
-                            exit(1);
-                        }
-                        if (tmp_int % sizeof(GLuint) != 0) {
-                            LOG(error) << "in_acnt (" << o.value[0] << "): offset value " << val_data << " must be mod 4";
-                            exit(1);
-                        }
-                        cntr_offset = tmp_int;
-                    }
-                    else if (val_key == "vl") {
+                    if (val_key == "vl") {
 						
                         if (hr == hres::ERR && val_data.find("::") != std::string::npos)
                         {
                             const size_t split = val_data.find("::");
                             const auto refInputAtomicName = val_data.substr(0, split);
                             const int refPassIndex = str_to_numeric<int32_t>(val_data.substr(split + 2));
-                            auto refPass = m_passes[refPassIndex].atomicCounters.find(refInputAtomicName);
+                            auto refPass = m_passes[refPassIndex].u_aCounters.find(refInputAtomicName);
 							
-						    if (refPass == m_passes[refPassIndex].atomicCounters.end()) {
-                                LOG(error) << "in_acnt (" << o.value[0] << "): -> " << val_data << " <- reference counter not found";
+						    if (refPass == m_passes[refPassIndex].u_aCounters.end()) {
+                                LOG(error) << "atomic (" << o.value[0] << "): -> " << val_data << " <- reference counter not found";
                                 exit(1);
                             }
                             if (currentPassN <= refPassIndex) {
-                                LOG(error) << "in_acnt (" << o.value[0] << "): -> " << val_data << " <- reffering to counter from same or future pass";
+                                LOG(error) << "atomic (" << o.value[0] << "): -> " << val_data << " <- reffering to counter from same or future pass";
                                 exit(1);
                             }
                             inputIt->second.path = val_data;
@@ -875,22 +944,22 @@ Sequence::Sequence(int argc, const char* argv[]) :
                         cntr_val = tmp_int;
                     }
                     else if (hr == hres::ERR) {
-                        LOG(error) << "in_acnt (" << o.value[0] << "): -> " << val_data << " <- is invalid parameters";
+                        LOG(error) << "atomic (" << o.value[0] << "): -> " << val_data << " <- is invalid parameters";
                            exit(1);
                     }
 					
                     i++;
                 }
                 // get atomic counter reference from Atomic Buffers list by defined binding
-                //auto shaderAtomics = currentPass->program->findAtomicBuffer(o.value[1]);
+                //auto shaderAtomics = currentPass->program->findBuffer(o.value[1]);
 
                 int counterBinding = cntr_binding + cntr_offset / sizeof(GLuint);
-				
-                auto shaderCounter = currentPass->program->findAtomicBuffer(counterBinding);
+                std::string name = "test";
+                auto passCounter = currentPass->program->findCounter(name);
 
-                if (!shaderCounter)
+                if (!passCounter)
                 {
-                    LOG(error) << "in_acnt (" << o.value[0] << " (binding = " << cntr_binding 
+                    LOG(error) << "atomic (" << o.value[0] << " (binding = " << cntr_binding 
                         << " ,offset = " << cntr_offset << " ): program atomic counter not found.";
                     continue;
                     //exit(1);
@@ -917,7 +986,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 }
 				
 				//LOG(trace) << "Atomic counter: " << o.value[0] << " " << "( binding = " << o.value[1] << " ), initial value = " << o.value[2];
-
+*/
 				//currentInput->counter = o.value[1];
                 LOG(trace) << "Test output only.";
 			}
@@ -1111,8 +1180,8 @@ Sequence::Sequence(int argc, const char* argv[]) :
     {
         int i = 0;
         for (auto& pass : m_passes) {
-            size_t p = pass.atomicCounters.size();
-            size_t a = pass.program->AtomicBuffersSize();
+            size_t p = pass.u_aCounters.size();
+            size_t a = pass.program->BuffersSize();
             if (p < a) {
                 LOG(debug) << "Pass #" << i << ": " << p << " from " << a << " atomic counters are initialized";
                 i++;
@@ -1314,8 +1383,9 @@ void Sequence::initCommon()
         else
         {
             // Create offscreen buffer
-            glGenFramebuffers(1, &pass.fboId);
-            glBindFramebuffer(GL_FRAMEBUFFER, pass.fboId);
+            GLCall(glGenFramebuffers(1, &pass.fboId));
+            GLCall(glBindFramebuffer(GL_FRAMEBUFFER, pass.fboId));
+m_passes[passIndex].glbObject.FBO.push_back(Pass::FBOobject{ pass.fboId });
         }
 
         //
@@ -1407,7 +1477,7 @@ void Sequence::initCommon()
             {
                 // Attach it to the FBO
                 LOG(debug) << "Pass " << passIndex << ": attaching output " << output.output->location << " " << outputIt.first << " to FBO";
-                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + output.output->location, GL_TEXTURE_2D, textureIt->second->getId(), 0);
+                GLCall(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + output.output->location, GL_TEXTURE_2D, textureIt->second->getId(), 0));
             }
         }
 
@@ -1695,15 +1765,15 @@ void Sequence::run()
                 {
                     //GLCall(glBindImageTexture(textureIndex, textureId, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F));
                     //GLCall(glBindImageTexture(textureIndex, textureId, 0, GL_FALSE, 0, GL_READ_ONLY, input.texture->getInternalFormat()));
-                    glActiveTexture(GL_TEXTURE0 + textureIndex);
-                    glBindTexture(GL_TEXTURE_2D, textureId);
+                    GLCall(glActiveTexture(GL_TEXTURE0 + textureIndex));
+                    GLCall(glBindTexture(GL_TEXTURE_2D, textureId));
 
                     LOG(debug) << "Texture " << textureId << " binding is " << textureIndex;
                 }
                 else
                 {
-                    glActiveTexture(GL_TEXTURE0 + textureIndex);
-                    glBindTexture(GL_TEXTURE_2D, textureId);
+                    GLCall(glActiveTexture(GL_TEXTURE0 + textureIndex));
+                    GLCall(glBindTexture(GL_TEXTURE_2D, textureId));
                 }
 
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, input.tex_min);
@@ -1713,8 +1783,9 @@ void Sequence::run()
 
                 if (input.tex_min != GL_LINEAR && input.tex_min != GL_NEAREST) {
                     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1000); // Default LOD level is 1000
                     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, 0);
-                    glGenerateTextureMipmap(textureId); // NOTE: OpenGL 4.5+
+                    GLCall(glGenerateTextureMipmap(textureId)); // NOTE: OpenGL 4.5+
                     LOG(debug) << "Generated mip-maps for " << inputIt.first << " at " << inputIt.second.texture;
                 }
 
@@ -1732,6 +1803,18 @@ void Sequence::run()
             case GL_INT_VEC4:
                 input.uniform->set(&input.ints[0]);
                 break;
+            case GL_FLOAT:
+            case GL_FLOAT_VEC2:
+            case GL_FLOAT_VEC3:
+            case GL_FLOAT_VEC4:
+                input.uniform->set(&input.floats[0]);
+                break;
+            case GL_DOUBLE:
+            case GL_DOUBLE_VEC2:
+            case GL_DOUBLE_VEC3:
+            case GL_DOUBLE_VEC4:
+                input.uniform->set(&input.doubles[0]);
+                break;
             default:
                 input.uniform->set(&input.floats[0]);
                 break;
@@ -1743,12 +1826,149 @@ void Sequence::run()
         // Frame buffer size
         GLint uniform_loc = glGetUniformLocation(pass.program->getId(), "iFBsize");
         GLCall(glUniform2uiv(uniform_loc, 1, reinterpret_cast<unsigned int*>(pass.size)));
+        // Frame buffer aspect ratio
         uniform_loc = glGetUniformLocation(pass.program->getId(), "iFBaspect");
         GLCall(glUniform1f(uniform_loc, pass.size[0] / (float)pass.size[1]));
         // Quad boolean
         uniform_loc = glGetUniformLocation(pass.program->getId(), "isQuad");
         GLCall(glUniform1i(uniform_loc, pass.meshes.begin()->second.mesh.isQuad));
         
+//
+// Atomic buffers
+//
+
+        // Setup atomic counters list
+
+        auto& pass_acounters = pass.program->get_m_acounters();
+        
+        for (auto& inputCounterIt : pass.inputCounters)
+        {
+            // check if the counter counterName is used in the shader
+            auto passCounter = pass_acounters.find(inputCounterIt.first);
+
+            if (passCounter == pass_acounters.end())
+			{
+				LOG(warning) << "Atomic counter " << inputCounterIt.first << " is not used in the shader";
+				exit(-1);
+			}
+
+            auto u_counterIt = pass.u_aCounters.insert({ passCounter->second->binding, PassInputCounters() });
+
+            u_counterIt->second.name = inputCounterIt.first;
+            u_counterIt->second.binding = passCounter->second->binding;
+            u_counterIt->second.offset = passCounter->second->offset;
+            u_counterIt->second.size = passCounter->second->size;
+// here
+            u_counterIt->second.value.resize(u_counterIt->second.size);
+            u_counterIt->second.result.resize(u_counterIt->second.size);
+
+            if (inputCounterIt.second.value.size() > u_counterIt->second.value.size())
+            {
+				LOG(warning) << "Atomic counter " << inputCounterIt.first << " has more values than the shader";
+				exit(-1);
+			}
+            std::memcpy(u_counterIt->second.value.data(), inputCounterIt.second.value.data(), u_counterIt->second.size * sizeof(GLuint));
+
+            u_counterIt->second.passIn = pass.fboId;
+
+            passCounter->second->userInput = true;
+        }
+
+        for (auto& counterIt : pass_acounters)
+		{
+            if (counterIt.second->userInput)
+                continue;
+
+            auto u_counterIt = pass.u_aCounters.insert({ counterIt.second->binding, PassInputCounters() });
+
+            u_counterIt->second.name = counterIt.first;
+            u_counterIt->second.binding = counterIt.second->binding;
+            u_counterIt->second.offset = counterIt.second->offset;
+            u_counterIt->second.size = counterIt.second->size;
+// here
+            u_counterIt->second.value.resize(u_counterIt->second.size);
+            u_counterIt->second.result.resize(u_counterIt->second.size);
+
+            u_counterIt->second.passIn = pass.fboId;
+
+            LOG(trace) << "Atomic counter " << counterIt.first << " binding is " << counterIt.second->binding << std::endl;
+		}
+
+        // Binding atomic counters
+        std::cout << termcolor::bright_green;
+        LOG(trace) << "Binding atomic counters" << std::endl;
+        std::cout << termcolor::reset;
+
+        auto it = pass.u_aCounters.begin();
+
+        while (it != pass.u_aCounters.end()) {
+            // Check if pass is the first pass
+            
+            if (pass.fboId > 1) {
+                break;
+            }
+
+            GLuint buff_size = 0;
+            //GLuint atomicCounterBufferID;
+
+            auto range = pass.u_aCounters.equal_range(it->first);
+
+            size_t range_size = std::distance(range.first, range.second);
+            LOG(trace) << "Binding: " << it->first << " have " << range_size << " counter[s]." << std::endl;
+
+            // Bind the buffer to the binding point
+            GLCall(glGenBuffers(range_size, &it->second.bufferID));
+            GLCall(glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, it->second.bufferID));
+            
+            for (auto groupIt = range.first; groupIt != range.second; ++groupIt) {
+                // if new offset + counter size is bigger than buffer size than increase buffer size
+                GLuint groupSize = groupIt->second.offset + groupIt->second.size * sizeof(GLuint);
+                buff_size = std::max(buff_size, groupSize);
+                LOG(trace) << groupIt->second.name << " buff_size: " << buff_size / sizeof(GLuint) << std::endl;
+            }
+            // Allocate the buffer with null data
+            GLCall(glBufferData(GL_ATOMIC_COUNTER_BUFFER, buff_size, nullptr, GL_DYNAMIC_DRAW));
+
+            // set the value of the counter / per counter
+            for (auto groupIt = range.first; groupIt != range.second; ++groupIt) {
+
+                GLCall(glBufferSubData(GL_ATOMIC_COUNTER_BUFFER, groupIt->second.offset, sizeof(GLuint) * groupIt->second.size, groupIt->second.value.data()));
+                LOG(trace) << groupIt->second.name << " offset: " << groupIt->second.offset << " size: " << groupIt->second.size << std::endl;
+
+                groupIt->second.bufferID = it->second.bufferID;
+                pass_acounters[groupIt->second.name]->isSet = true;
+            }
+
+            GLCall(glBindBufferRange(GL_ATOMIC_COUNTER_BUFFER, it->first, it->second.bufferID, 0, buff_size));
+
+            glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
+
+            it = range.second;
+        }
+
+#if 0 //_DEBUG
+        std::cout << termcolor::bright_yellow;
+        LOG(trace) << "Check Binding atomic counters" << std::endl;
+        std::cout << termcolor::reset;
+
+        it = pass.u_aCounters.begin();
+
+        while (it != pass.u_aCounters.end()) {
+            std::vector<GLint> boundBuffer(it->second.size);
+            GLCall(glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, it->second.bufferID));
+            GLCall(glGetBufferSubData(GL_ATOMIC_COUNTER_BUFFER, it->second.offset, it->second.size * sizeof(GLuint), boundBuffer.data()));
+
+            LOG(trace) << it->second.name << " offset: " << it->second.offset << " size: " << it->second.size;
+            for (const auto& elem : boundBuffer) { std::cout << elem << ' '; }
+
+            std::cout << std::endl;
+
+            // Unbind the buffer after checking
+            glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
+
+            it++;
+        } 
+#endif
         //
         // Render/compute
         //
@@ -1780,7 +2000,7 @@ void Sequence::run()
         {
             glBindFramebuffer(GL_FRAMEBUFFER, pass.fboId);
 
-            std::vector<GLenum> buffers(8, GL_NONE);
+            std::vector<GLenum> buffers(8, GL_NONE); // 8 is the maximum number of color attachments
 
             for (auto& outputIt : pass.outputs)
             {
@@ -1788,11 +2008,26 @@ void Sequence::run()
                 buffers[output.output->location] = GL_COLOR_ATTACHMENT0 + output.output->location;
             }
 
-            //for (int i = 0; i < 8; i++)
-                //buffers.push_back(GL_COLOR_ATTACHMENT0 + i);
+//
+// atomic buffers
+//
+            GLuint ssbo;
+            GLuint bindingPoint = 3;
+            const GLint bufSize = 3;
+            // make GLuint array bufSize with 0
+            GLint initValues[bufSize] = { 0,65535,0 };
+            GLCall(glGenBuffers(1, &ssbo));
+            GLCall(glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo));
+            GLCall(glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(GLuint) * bufSize, initValues, GL_DYNAMIC_DRAW));
 
-            //glReadBuffer(buffers[0]);
+            GLCall(glBindBufferBase(GL_SHADER_STORAGE_BUFFER, bindingPoint, ssbo));
 
+            Pass::SSBObject ssbObject(GL_SHADER_STORAGE_BUFFER, ssbo, bindingPoint, bufSize, initValues);
+            pass.glbObject.SSBO.insert({ "AtBuf",ssbObject });
+
+            // 
+
+            //
             GLuint depthBuffer;
             GLCall(glCreateRenderbuffers(1, &depthBuffer));
             GLCall(glNamedRenderbufferStorage(depthBuffer, GL_DEPTH_COMPONENT, pass.size[0], pass.size[1]));
@@ -1802,7 +2037,7 @@ void Sequence::run()
 
             GLCall(glViewport(0, 0, pass.size[0], pass.size[1]));
 
-            GLCall(glClearColor(pass.clearColor[0],pass.clearColor[1],pass.clearColor[2], pass.clearColor[3]));
+            GLCall(glClearColor(pass.clearColor[0], pass.clearColor[1], pass.clearColor[2], pass.clearColor[3]));
 
             // Enable depth Buffering and test
             GLCall(glEnable(GL_DEPTH_TEST));
@@ -1823,10 +2058,87 @@ void Sequence::run()
             // get error code if any
             GLenum err = glGetError();
             if (err != GL_NO_ERROR)
-			{
-				LOG(error) << "OpenGL error: " << err;
+            {
+                LOG(error) << "OpenGL error: " << err;
+                exit(1);
+            }
+
+            //  Atomic counters get values after draw
+            GLCall(glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT));
+
+            std::cout << termcolor::bright_cyan;
+            LOG(trace) << "Atomic counters results:" << std::endl;
+            std::cout << termcolor::reset;
+
+// here
+            pass = m_passes[0];
+
+            it = pass.u_aCounters.begin();
+
+            while (it != pass.u_aCounters.end()) {
+                std::vector<GLint> boundBuffer(it->second.size);
+                GLCall(glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, it->second.bufferID));
+                GLCall(glGetBufferSubData(GL_ATOMIC_COUNTER_BUFFER, it->second.offset, it->second.size * sizeof(GLuint), boundBuffer.data()));
+
+                LOG(trace) << it->second.name << " offset: " << it->second.offset << " size: " << it->second.size;
+                for (const auto& elem : boundBuffer) { std::cout << elem << ' '; }
+
+                std::cout << std::endl;
+
+                // Unbind the buffer after checking
+                glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
+
+                it++;
+            }
+#if 0
+            for (auto& u_counterIt : pass.u_aCounters ) {
+				GLCall(glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, u_counterIt.second.bufferID));
+                u_counterIt.second.result.resize(u_counterIt.second.size);
+                GLCall(glGetBufferSubData(GL_ATOMIC_COUNTER_BUFFER, 0, sizeof(GLuint) * u_counterIt.second.size, u_counterIt.second.result.data()));
+                LOG(info) << termcolor::bright_yellow <<
+                    "Atomic counter " << u_counterIt.first << " = " << u_counterIt.second.result[0] << termcolor::reset;
 			}
 
+                        //GLuint counterValue1, counterValue2;
+            auto counterIt = pass.glbObject.BO.find("counter1");
+            if (counterIt == pass.glbObject.BO.end()) {
+                LOG(error) << "counter1 not found";
+                exit(1);
+            };
+            GLCall(glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, counterIt->second.id));
+            GLCall(glGetBufferSubData(GL_ATOMIC_COUNTER_BUFFER, 0, 2 * sizeof(GLuint), counterIt->second.value));
+
+            auto counterIt2 = pass.glbObject.BO.find("counter2");
+            if (counterIt2 == pass.glbObject.BO.end()) {
+                LOG(error) << "counter2 not found";
+                exit(1);
+            };
+            GLCall(glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, counterIt2->second.id));
+            GLCall(glGetBufferSubData(GL_ATOMIC_COUNTER_BUFFER, 0, sizeof(GLuint), counterIt2->second.value));
+            std::cout << "Max britgtness: " << static_cast<float>(counterIt->second.value[0]) / 65535.0f << std::endl;
+            std::cout << "Min britgtness: " << static_cast<float>(counterIt->second.value[1]) / 65535.0f << std::endl;
+            std::cout << "Count         : " << static_cast<unsigned int>(*counterIt2->second.value) << std::endl;
+
+#endif
+            auto aBuffIt = pass.glbObject.SSBO.find("AtBuf");
+            if (aBuffIt == pass.glbObject.SSBO.end()) {
+                LOG(error) << "AtBuf not found";
+                exit(1);
+            };
+            GLuint bufferId = aBuffIt->second.id;
+            GLuint bufferSize = aBuffIt->second.size;
+            GLint* bufferValue = aBuffIt->second.value;
+
+            GLCall(glBindBuffer(GL_SHADER_STORAGE_BUFFER, bufferId));
+            GLCall(glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(GLuint) * bufferSize, bufferValue));
+            std::cout << "Atomic buffer [0]: " << bufferValue[0] << std::endl;
+            std::cout << "Atomic buffer [1]: " << bufferValue[1] << std::endl;
+            std::cout << "Atomic buffer [2]: " << static_cast<float>( bufferValue[2] ) / 65535.0f << std::endl;
+
+            GLCall(glDeleteBuffers(1, &ssbo));
+            //GLCall(glDeleteBuffers(1, &counterObuff));
+            //GLCall(glDeleteBuffers(1, &counterBuffer2));
+ //
         }
 
         glFinish();
@@ -1839,6 +2151,24 @@ void Sequence::run()
         {
             auto& output = outputIt.second;
             output.saveTexture();
+        }
+    }
+
+    // Destroying all passess atomicCounterBufferID
+    for (auto& pass : m_passes) {
+        auto counterIt = pass.u_aCounters.begin();
+        while (counterIt != pass.u_aCounters.end()) {
+            auto range = pass.u_aCounters.equal_range(counterIt->first);
+
+            size_t range_size = std::distance(range.first, range.second);
+            if (range_size > 1) {
+                counterIt = range.second;
+                if (counterIt != pass.u_aCounters.begin()) {
+                    --counterIt;
+                }
+            }
+            GLCall(glDeleteBuffers(1, &counterIt->second.bufferID));
+            ++counterIt;
         }
     }
 
