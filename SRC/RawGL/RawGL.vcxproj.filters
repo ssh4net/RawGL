@@ -47,9 +47,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="src\testshader.glsl" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="src\Sequence.h">
       <Filter>Header Files</Filter>
     </ClInclude>

@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
-    <ShowAllFiles>true</ShowAllFiles>
+    <ShowAllFiles>false</ShowAllFiles>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LocalDebuggerCommandArguments>-V 5 -P ..\..\tests\shaders\empty.vert ..\..\tests\shaders\EmptyST.frag --pass_size 333 157 --out STmap ..\..\tests\outputs\test.tif --out_format rgb16 --out_bits 8 --out_channels 3 --out_attr tiff:compression ZIP</LocalDebuggerCommandArguments>
