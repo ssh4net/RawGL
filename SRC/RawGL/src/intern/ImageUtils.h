@@ -48,6 +48,7 @@ struct Img {
 enum class ImageFileFormat {
 	UNKNOWN,
 	BMP,
+	PBM,
 	PNG,
 	JPG,
 	TGA,
@@ -55,6 +56,8 @@ enum class ImageFileFormat {
 	HDR,
 	TIF,
 	JP2,
+	JXL,
+	HEIC,
 	WEBP
 };
 

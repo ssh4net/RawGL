@@ -37,6 +37,9 @@ static image_utils::ImageFileFormat get_file_format(const std::string& ext)
     if (ext == "bmp") {
         return image_utils::ImageFileFormat::BMP;
     }
+    if (ext == "pbm" || ext == "pgm" || ext == "ppm" || ext == "pfm") {
+		return image_utils::ImageFileFormat::PBM;
+	}
     else if (ext == "png") {
         return image_utils::ImageFileFormat::PNG;
     }
@@ -57,6 +60,12 @@ static image_utils::ImageFileFormat get_file_format(const std::string& ext)
     }
     else if (ext == "jp2" || ext == "j2k") {
 		return image_utils::ImageFileFormat::JP2;
+	}
+    else if (ext == "jxl") {
+		return image_utils::ImageFileFormat::JXL;
+	}
+    else if (ext == "heic" || ext == "heif") {
+		return image_utils::ImageFileFormat::HEIC;
 	}
 	else if (ext == "webp") {
 		return image_utils::ImageFileFormat::WEBP;
@@ -79,6 +88,21 @@ OIIO::TypeDesc image_utils::get_output_format(const std::string& output_filename
         if (arg != 8) {
             r_defaulted = true;
         }
+
+    case image_utils::ImageFileFormat::PBM:
+        if (arg == 8) {
+			output_format = OIIO::TypeDesc::UINT8;
+		}
+        else if (arg == 16) {
+			output_format = OIIO::TypeDesc::UINT16;
+		}
+        else if (arg == 32) {
+            output_format = OIIO::TypeDesc::FLOAT;
+        }
+        else {
+			output_format = OIIO::TypeDesc::UINT16;
+			r_defaulted = true;
+		}
 
         break;
     case image_utils::ImageFileFormat::PNG:
@@ -161,6 +185,33 @@ OIIO::TypeDesc image_utils::get_output_format(const std::string& output_filename
             output_format = OIIO::TypeDesc::UINT16;
             r_defaulted = true;
         }
+
+    case image_utils::ImageFileFormat::JXL:
+        if (arg == 8) {
+			output_format = OIIO::TypeDesc::UINT8;
+		}
+        else if (arg == 16) {
+			output_format = OIIO::TypeDesc::UINT16;
+		}
+        else if (arg == 32) {
+			output_format = OIIO::TypeDesc::FLOAT;
+		}
+        else {
+			output_format = OIIO::TypeDesc::UINT16;
+			r_defaulted = true;
+		}
+
+    case image_utils::ImageFileFormat::HEIC:
+        if (arg == 8) {
+            output_format = OIIO::TypeDesc::UINT8;
+        }
+        else if (arg == 16) {
+			output_format = OIIO::TypeDesc::UINT16;
+        }
+        else {
+			output_format = OIIO::TypeDesc::UINT16;
+			r_defaulted = true;
+		}
 		
         break;
     case image_utils::ImageFileFormat::WEBP:
