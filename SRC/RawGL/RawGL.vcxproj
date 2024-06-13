@@ -48,12 +48,14 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)\..\bin\Debug\</OutDir>
-    <ExternalIncludePath>e:\GH\vcpkg-glad\include;e:\DVR\include\boost-1_85;e:\DVR\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
+    <ExternalIncludePath>e:\DVR\include\boost-1_86;e:\DVR\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
+    <LibraryPath>e:\DVR\debug\lib;e:\DVR\lib;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)\..\bin\RawGL\</OutDir>
-    <ExternalIncludePath>e:\GH\vcpkg-glad\include;e:\DVR\include\boost-1_85;e:\DVR\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
+    <ExternalIncludePath>e:\DVR\include\boost-1_86;e:\DVR\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
+    <LibraryPath>e:\DVR\lib;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <VcpkgInstalledDir>
@@ -76,8 +78,73 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>e:\GH\vcpkg-glad\lib;e:\DVR\lib;e:\DVR\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>OpenImageIO.lib;OpenImageIO_Util.lib;glad.lib;glfw3dll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>OpenImageIO_d.lib;OpenImageIO_Util_d.lib;glfw3ddll.lib;glad.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy /y e:\DVR\bin\glfw3d.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\libpng16d.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\zlibd1.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\yaml-cppd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\zstdd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\jasperd.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\OpenColorIO_d_2_4.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\OpenEXRUtil-3_3_d.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\OpenEXR-3_3_d.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\OpenEXRCore-3_3_d.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\IlmThread-3_3_d.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\Iex-3_3_d.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\raw_rd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\rawd.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\freetyped.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\heifd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\libde265d.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\libx265d.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\lib\bz2d.dll "$(TargetDir)bz2-1.dll"*
+
+xcopy /y e:\DVR\bin\jxld.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\jxl_threadsd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\jxl_cmsd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\hwyd.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\kvazaard.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\brotliencd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\brotlidecd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\brotliencd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\brotlicommond.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\freetyped.dll "$(TargetDir)"
+xcopy /y e:\DVR\lib\Ptexd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\liblzmad.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\turbojpegd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\jpeg62d.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\tiffd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\deflated.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\Imath-3_2_d.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\openjp2d.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\libexpatd.dll "$(TargetDir)"
+xcopy /y e:\DVR\debug\bin\gif.dll "$(TargetDir)"
+
+xcopy /y e:\GH\Little-CMS\bin\lcms2d.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\OpenImageIO_d.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\OpenImageIO_Util_d.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\lib\boost_log_setup-vc143-mt-gd-x64-1_86.dll "$(TargetDir)"
+xcopy /y e:\DVR\lib\boost_log-vc143-mt-gd-x64-1_86.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\libsharpyuvd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\libwebpd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\libwebpdecoderd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\libwebpdemuxd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\libwebpmuxd.dll "$(TargetDir)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -96,8 +163,69 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <AdditionalLibraryDirectories>e:\GH\vcpkg-glad\lib;e:\DVR\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>OpenImageIO.lib;OpenImageIO_Util.lib;glad.lib;glfw3dll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>OpenImageIO.lib;OpenImageIO_Util.lib;glfw3dll.lib;glad.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy /y e:\DVR\bin\glfw3.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\libpng16.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\zlib1.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\yaml-cpp.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\zstd.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\jasper.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\OpenColorIO_2_4.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\OpenEXRUtil-3_3.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\OpenEXR-3_3.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\OpenEXRCore-3_3.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\IlmThread-3_3.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\Iex-3_3.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\raw_r.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\raw.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\heif.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\libde265.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\libx265.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\kvazaar.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\brotlidec.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\brotlienc.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\brotlicommon.dll "$(TargetDir)"
+
+xcopy /fy e:\DVR\lib\bz2.dll "$(TargetDir)bz2-1.dll"*
+
+xcopy /y e:\DVR\bin\jxl.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\jxl_threads.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\jxl_cms.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\hwy.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\freetype.dll "$(TargetDir)"
+xcopy /y e:\DVR\lib\Ptex.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\liblzma.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\turbojpeg.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\jpeg62.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\tiff.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\deflate.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\Imath-3_2.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\openjp2.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\libexpat.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\gif.dll "$(TargetDir)"
+
+xcopy /y e:\GH\Little-CMS\bin\lcms2.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\OpenImageIO.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\OpenImageIO_Util.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\lib\boost_log_setup-vc143-mt-x64-1_86.dll "$(TargetDir)"
+xcopy /y e:\DVR\lib\boost_log-vc143-mt-x64-1_86.dll "$(TargetDir)"
+
+xcopy /y e:\DVR\bin\libsharpyuv.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\libwebp.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\libwebpdecoder.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\libwebpdemux.dll "$(TargetDir)"
+xcopy /y e:\DVR\bin\libwebpmux.dll "$(TargetDir)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\intern\GLProgram.cpp" />

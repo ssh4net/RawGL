@@ -4,7 +4,7 @@
     <ShowAllFiles>false</ShowAllFiles>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LocalDebuggerCommandArguments>-V 5 -P ..\..\tests\shaders\empty.vert ..\..\tests\shaders\EmptyST.frag --pass_size 333 157 --out STmap ..\..\tests\outputs\test.tif --out_format rgb16 --out_bits 8 --out_channels 3 --out_attr tiff:compression ZIP</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-V 5 -P ..\..\tests\shaders\empty.vert ..\..\tests\shaders\EmptyST.frag --pass_size 333 157 --out STmap ..\..\tests\outputs\test.jpg --out_format rgb16 --out_bits 8 --out_channels 3 --out_attr compression jpeg:10</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <LocalDebuggerWorkingDirectory>$(SolutionDir)\..\bin\RawGL</LocalDebuggerWorkingDirectory>
   </PropertyGroup>

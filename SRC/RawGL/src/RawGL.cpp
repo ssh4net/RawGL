@@ -1,4 +1,4 @@
-﻿/* 
+/* 
  * This file is part of the RawGL distribution (https://github.com/ssh4net/RawGL).
  * Copyright (c) 2022 Erium Vladlen.
  * 
@@ -23,7 +23,7 @@
 
 const char* APP_NAME = "RawGL";
 const char* APP_AUTHOR = "Erium Vladlen";
-const int APP_VERSION[] = { 1, 5, 2 };
+const int APP_VERSION[] = { 1, 5, 4 };
 
 //#include "shader.hpp"
 
