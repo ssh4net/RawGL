@@ -78,12 +78,14 @@ Sequence::Sequence(int argc, const char* argv[]) :
 
             ("verbosity,V", po::value<int>()->default_value(3),
                 "Log level (selection & above will be shown):\n"
-				" 0 - fatal error only\n"
+                " 0 - fatal error only\n"
                 " 1 - errors only\n"
                 " 2 - warnings only\n"
                 " 3 - info\n"
-				" 4 - debug\n"
-				" 5 - trace\n")
+                " 4 - debug\n"
+                " 5 - trace\n")
+            ("gpu", po::value<int>()->default_value(0),
+				"GPU device to use (0, 1, ...).\n")
             ("pass_vertfrag,P", po::value<std::vector<std::string>>()->multitoken(),
                 "New pass using vertex & fragment shaders (in GLSL or SPIR-V format):\n"
                 " --pass_vertfrag s.vertfrag\n"
@@ -199,10 +201,22 @@ Sequence::Sequence(int argc, const char* argv[]) :
             infoExit = true;
         }
 
+        if (vm.count("gpu"))
+		{
+			OpenGLHandle::gpu = vm["gpu"].as<int>();
+		}
+
+        // set the logger verbosity
+        Log_SetVerbosity(std::clamp(vm["verbosity"].as<int>(), 0, 5));
+        static OpenGLHandle glhandle;
+
         if (vm.count("version"))
         {
 			std::cout << APP_NAME << " version " << APP_VERSION[0] << "." << APP_VERSION[1] << "." << APP_VERSION[2] << " Copyright (c) " << APP_AUTHOR << std::endl;
             std::cout << "Build from: " << __DATE__ << ", " << __TIME__ << "." << std::endl;
+
+			std::cout << "Available GPU count: " << OpenGLHandle::gpus << std::endl;
+
 			std::cout << std::endl << "Available GPU features:" << std::endl;
             int value;
             glGetIntegerv(GL_MAX_TEXTURE_SIZE, &value);
@@ -221,9 +235,6 @@ Sequence::Sequence(int argc, const char* argv[]) :
 
         if (infoExit)
             exit(1);
-
-        // set the logger verbosity
-		Log_SetVerbosity(std::clamp(vm["verbosity"].as<int>(), 0, 5));
 
         //
         // parse the multi-occurence, multi-token options here
