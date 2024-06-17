@@ -54,7 +54,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)\..\bin\RawGL\</OutDir>
-    <ExternalIncludePath>e:\NVAPI\R550-Developer;e:\DVR\include\boost-1_86;e:\DVR\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
+    <ExternalIncludePath>E:\NVAPI\R550-Developer;e:\DVR\include\boost-1_86;e:\DVR\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
     <LibraryPath>e:\NVAPI\R550-Developer\amd64;e:\DVR\lib;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
