@@ -23,7 +23,7 @@
 
 const char* APP_NAME = "RawGL";
 const char* APP_AUTHOR = "Erium Vladlen";
-const int APP_VERSION[] = { 1, 5, 5 };
+const int APP_VERSION[] = { 1, 5, 4 };
 
 //#include "shader.hpp"
 
@@ -31,10 +31,10 @@ int main(int argc, const char* argv[])
 {
 	Timer timer;
 
+	OpenGLHandle glhandle;
+
 	// init the logger
 	Log_Init();
-
-	//OpenGLHandle glhandle;
 
     // start the sequence
     Sequence sequence(argc, argv);

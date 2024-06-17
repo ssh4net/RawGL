@@ -4,12 +4,12 @@
     <ShowAllFiles>false</ShowAllFiles>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LocalDebuggerCommandArguments>-V 5 --gpu 2 -P ..\..\tests\shaders\empty.vert ..\..\tests\shaders\EmptyST.frag --pass_size 1024 1024 --out STmap ..\..\tests\outputs\test.jpg --out_format rgb16 --out_bits 16 --out_channels 3 --out_attr compression jpeg:10</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-V 5 -P ..\..\tests\shaders\empty.vert ..\..\tests\shaders\EmptyST.frag --pass_size 333 157 --out STmap ..\..\tests\outputs\test.jpg --out_format rgb16 --out_bits 8 --out_channels 3 --out_attr compression jpeg:10</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <LocalDebuggerWorkingDirectory>$(SolutionDir)\..\bin\RawGL</LocalDebuggerWorkingDirectory>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LocalDebuggerCommandArguments>-gpu 2 -P data\empty.vert data\pass1.frag --pass_size 1024 1024 --in InSample data\EmptyPresetLUT.png min ll mag l wrps mr --out OutSample out\pass1.tif --out_format rgb32f --out_channels 3 --out_bits 32 -P data\empty.vert data\pass2.frag --in InSample2 OutSample 0 min ll mag l wrps mr --out OutSample2 out\pass2.tif --out_format rgb32f --out_channels 3 --out_bits 32 -P data\empty.vert data\pass3.frag --in InSample3 OutSample2 1 min ll mag l wrps mr --out OutSample3 out\pass3.tif --out_format rgb32f --out_channels 3 --out_bits 32</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-P data\empty.vert data\pass1.frag --pass_size 1024 1024 --in InSample data\EmptyPresetLUT.png min ll mag l wrps mr --out OutSample out\pass1.tif --out_format rgb32f --out_channels 3 --out_bits 32 -P data\empty.vert data\pass2.frag --in InSample2 OutSample 0 min ll mag l wrps mr --out OutSample2 out\pass2.tif --out_format rgb32f --out_channels 3 --out_bits 32 -P data\empty.vert data\pass3.frag --in InSample3 OutSample2 1 min ll mag l wrps mr --out OutSample3 out\pass3.tif --out_format rgb32f --out_channels 3 --out_bits 32</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <LocalDebuggerWorkingDirectory>$(SolutionDir)\..\bin\RawGL</LocalDebuggerWorkingDirectory>
   </PropertyGroup>

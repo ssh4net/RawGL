@@ -17,20 +17,11 @@
 
 #pragma once
 
- // Prevent min and max macro definitions
-#define NOMINMAX
+#include <glad/glad.h>
 
-// Include necessary headers
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
-#include <glad/glad.h> // Use GLAD loader for OpenGL functions
-
-// Include Windows headers for HDC and HGLRC
-#include <windows.h>
-#include <wingdi.h>
-
-// Include NVAPI
-#include <nvapi.h>
+#ifdef APIENTRY
+#undef APIENTRY
+#endif
 
 #define GLASSERT(x) if (!(x)) __debugbreak();
 #define GLCall(x) GL_ClearError(); x; GLASSERT(GL_LogCall(#x, __FILE__, __LINE__))
@@ -42,15 +33,4 @@ struct OpenGLHandle
 {
     OpenGLHandle();
     ~OpenGLHandle();
-
-    static unsigned long gpus;
-    static unsigned int gpu;
-
-private:
-    GLFWwindow* window;
-    HDC hDC;
-    HGLRC hRC;
-
-    void InitializeNVAPI();
-    NvPhysicalGpuHandle SelectGPU();
 };
