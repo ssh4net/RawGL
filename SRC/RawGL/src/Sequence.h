@@ -43,6 +43,9 @@ template<> int32_t str_to_numeric(const std::string& str_val);
 template<> float_t str_to_numeric(const std::string& str_val);
 template<> double_t str_to_numeric(const std::string& str_val);
 
+
+struct Pass; // Forward declaration
+
 // 
 // Uniform input (numeric or texture data)
 // 
@@ -165,7 +168,6 @@ struct MeshInput
     VertexBuffer VBO;
 
     // Forward declaration of texture attribute structures
-    struct MeshParm;
     struct MeshParmValue;
 
     // Mesh attribute
@@ -457,6 +459,30 @@ struct Pass
     // MeshInput
     std::map<std::string, MeshInput> meshes;
 
+    struct CullMode
+    {
+		GLint windOrder = GL_CW;
+		GLint cullFace = GL_BACK;
+		bool cullFaceEnable = true;
+    } cullMode;
+
+    // Cull mode attribute
+    struct CullModeVal
+    {
+        std::string key;
+        GLint gl_value;
+         std::string desc;
+    };
+
+    struct CullModeAttr
+    {
+        std::string name;
+        std::function<void(CullMode&, const GLuint&)> func;
+        std::vector<CullModeVal> possible_values;
+        std::string desc;
+    };
+
+
     // Size description
     std::string sizeText[2];
 
@@ -478,6 +504,15 @@ struct Pass
 
     GLuint  fboId;
 
+    friend const void _pass_input_set_cull_face(CullMode& mm, const GLuint& val);
+    friend const void _pass_input_set_wind_order(CullMode& mm, const GLuint& val);
+    friend const void _pass_input_set_cull_enable(CullMode& mm, const GLuint& val);
+
+    static std::string get_possible_culling_fmt();
+    static const std::vector<Pass::CullModeAttr> CULL_PARM_ARR;
+
+    const void eval_cull_parm(hres& hr, const std::string& name, const std::string& attr_val_name);
+
     Pass(const std::shared_ptr<GLProgram>& p, bool isCompute) :
         program(p),
         isCompute(isCompute),
@@ -485,9 +520,15 @@ struct Pass
         sizeText{ "512", "512" },
         workGroupSizeText{ "16", "16" },
         fboId(0),
-        clearColor{ 0.0f, 0.0f, 0.0f, 0.0f }
+        clearColor{ 0.0f, 0.0f, 0.0f, 0.0f },
+        cullMode{ GL_CW, GL_BACK, true }
     {}
 };
+
+const void _pass_input_set_cull_face(Pass::CullMode& mm, const GLuint& val);
+const void _pass_input_set_wind_order(Pass::CullMode& mm, const GLuint& val);
+const void _pass_input_set_cull_enable(Pass::CullMode& mm, const GLuint& val);
+
 
 class Sequence
 {

@@ -3,7 +3,7 @@
  * Copyright (c) 2022 Erium Vladlen.
  * 
  * This program is free software: you can redistribute it and/or modify  
- * it under the terms of the GNU General Public License as published by  
+ * it under the terms of the GNU General Public License as published by   //-V1042
  * the Free Software Foundation, version 3.
  *
  * This program is distributed in the hope that it will be useful, but 
@@ -14,6 +14,9 @@
  * You should have received a copy of the GNU General Public License 
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+
+ // This is an open source non-commercial project. Dear PVS-Studio, please check it.
+ // PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
 
 #include "Sequence.h"
 
@@ -31,7 +34,6 @@
 #include <termcolor/termcolor.hpp>
 
 #include "rapidobj/rapidobj.hpp"
-#include "miniply.h"
 #include "mesh_io.h"
 
 namespace po = boost::program_options;
@@ -115,13 +117,23 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 "Background color (RGBA):\n"
                 " --bg_color R G B A\n"
                 )
+			("cull", po::value<std::vector<std::string>>()->multitoken(),
+                (
+				    "Culling mode:\n"
+                    + Pass::get_possible_culling_fmt() +
+					"Supported culling modes:\n"
+					" GL_CW, GL_CCW, GL_FRONT, GL_BACK, true, false"
+					" (default: GL_CW, GL_BACK, true)"
+					" --cull wind cw face bk enable true"
+					).c_str()
+				)
             ("pass_mesh,M", po::value<std::vector<std::string>>()->multitoken(),
 				(
                     "3D mesh (*.PLY) to use for this pass:\n"
                     "no pass_mesh directive = render using quad or\n"
                     "--pass_mesh quad - render using quad\n"
                     "loading mesh from file:\n"
-                    "--pass_mesh mesh::0 tris true rndr poly path¥to¥mesh.exe\n"
+                    "--pass_mesh mesh::0 tris true rndr poly pathÂ¥toÂ¥mesh.exe\n"
                     + MeshInput::get_possible_mesh_parm_fmt() +
                     "Supported mesh attributes:\n"
                     " Vertex coodinates: vec3 pos\n"
@@ -381,7 +393,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
                     exit(1);
                 }
                 int size = o.value.size();
-                if (size < 1 && size > 4)
+                if (size < 1 || size > 4)
                 {
 					LOG(error) << "bg_color: must have at least 1 parameter.";
 					exit(1);
@@ -392,7 +404,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
                 val_arr.reserve(size);
                 std::copy(o.value.begin(), o.value.end(), std::back_inserter(val_arr));
 
-                GLfloat tmp_floats[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+                GLfloat tmp_floats[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
                 for (uint8_t i = 0; i < size; ++i) {
                     const std::string& str_val = val_arr[i];
@@ -468,7 +480,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
                     std::copy(o.value.begin() + 1, o.value.end(), std::back_inserter(val_arr));
 
                     
-                    std::string mesh_path = val_arr.back();
+                    std::string mesh_path = val_arr[0];
                     std::string file_ext = get_file_ext(mesh_path);
                     if (file_ext != "ply" && file_ext != "obj") {
                         LOG(error) << "Only PLY and OBJ meshes supported.";
@@ -477,7 +489,7 @@ Sequence::Sequence(int argc, const char* argv[]) :
                     currentMeshInput->mesh.isQuad = false;
                     currentMeshInput->mesh.FileName = mesh_path;
 
-                    for (size_t i = 0; i < val_arr.size() - 1; ++i) {
+                    for (size_t i = 1; i < val_arr.size() - 1; ++i) {
                         val_key = val_arr[i];
                         std::string val_data;
 
@@ -504,6 +516,46 @@ Sequence::Sequence(int argc, const char* argv[]) :
                     exit(1);
                 }
             };
+
+            if (o.string_key == "cull")
+            {
+                if (!currentPass)
+                {
+                    LOG(error) << "cull: no preceeding pass declaration";
+                    exit(1);
+                }
+
+                if (o.value.size() < 1)
+                {
+                    LOG(error) << "cull: must have at least 1 parameter.";
+                    exit(1);
+                }
+
+                auto val_key = o.value[0];
+
+                hres hr = hres::OK;
+                std::vector<std::string> val_arr;
+                val_arr.reserve(o.value.size() - 1);
+                std::copy(o.value.begin() + 1, o.value.end(), std::back_inserter(val_arr));
+
+                for (size_t i = 1; i < val_arr.size() - 1; ++i) {
+                    val_key = val_arr[i];
+                    std::string val_data;
+
+                    val_data = val_arr[i + 1];
+
+                    // Search for texture attributes
+                    hres hr_tex_attr = hres::OK;
+                    currentPass->eval_cull_parm(hr_tex_attr, val_key, val_data);
+
+                    if (hr_tex_attr != hres::OK) {
+                        LOG(error) << "cull: unknown mesh parameter.";
+                        exit(1);
+                    }
+                    i++;
+                }
+            };
+
             //
             // input & its parameters
             //
@@ -1617,6 +1669,8 @@ m_passes[passIndex].glbObject.FBO.push_back(Pass::FBOobject{ pass.fboId });
             exit(-1);
         }
         LOG(debug) << "Mesh loading completed in " << timer.nowText();
+
+		delete[] filenameBuffer;
     }
         // end of PLY read
     /*
@@ -1649,9 +1703,18 @@ m_passes[passIndex].glbObject.FBO.push_back(Pass::FBOobject{ pass.fboId });
     // Define winding order and face culling
     // Use non standard OpenGL winding order
     // to match 3D models order.
-    GLCall(glFrontFace(GL_CW));
-    GLCall(glCullFace(GL_BACK));
-    GLCall(glEnable(GL_CULL_FACE));
+    GLint wind_order = m_passes[0].cullMode.windOrder;
+	GLint cull_face = m_passes[0].cullMode.cullFace;
+
+    GLCall(glFrontFace(wind_order));
+    GLCall(glCullFace(cull_face));
+
+    if (m_passes[0].cullMode.cullFaceEnable) {
+        GLCall(glEnable(GL_CULL_FACE));
+    }
+    else {
+		GLCall(glDisable(GL_CULL_FACE));
+    }
     
     // Enable polygon smooth
     //GLCall(glEnable(GL_POLYGON_SMOOTH));
@@ -1906,10 +1969,11 @@ void Sequence::run()
             
             // get shader counter binding offset and size and check it it overlap or identical
 
+			std::map<GLint, m_passCounters>::iterator p_countIt;
             switch (check) { // no binding
             case 0:
             case 1:
-                auto p_countIt = p_aCounters.insert({ counterIt.second->binding, m_passCounters() });
+                p_countIt = p_aCounters.insert({ counterIt.second->binding, m_passCounters() });
                 p_countIt->second.buffer = counterIt.second;
                 p_countIt->second.value.resize(counterIt.second->size);
                 p_countIt->second.result.resize(counterIt.second->size);

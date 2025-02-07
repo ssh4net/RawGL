@@ -93,13 +93,15 @@ struct GLProgramBuffers
 	{};
 
 	GLProgramBuffers(std::string name, GLenum type, GLint binding, GLint size) : 
-		name(name), type(type), binding(binding), size(size), isSet(false), userInput(false)
+		name(name), type(type), binding(binding), size(size), isSet(false), userInput(false),
+		index(0), offset(0), location(0)
 	{
 		type_name = static_cast<std::string>(glsl_type_name(type));
 	}
 
 	GLProgramBuffers(std::string name, GLenum type, GLint binding, GLint offset, GLint size) :
-		name(name), type(type), binding(binding), offset(offset), size(size), isSet(false), userInput(false)
+		name(name), type(type), binding(binding), offset(offset), size(size), isSet(false), userInput(false),
+		index(0), location(0)
 	{
 		type_name = static_cast<std::string>(glsl_type_name(type));
 	}

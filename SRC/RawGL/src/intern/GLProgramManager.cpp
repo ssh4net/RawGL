@@ -3,7 +3,7 @@
  * Copyright (c) 2022 Erium Vladlen.
  * 
  * This program is free software: you can redistribute it and/or modify  
- * it under the terms of the GNU General Public License as published by  
+ * it under the terms of the GNU General Public License as published by   //-V1042
  * the Free Software Foundation, version 3.
  *
  * This program is distributed in the hope that it will be useful, but 
@@ -14,6 +14,9 @@
  * You should have received a copy of the GNU General Public License 
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+
+ // This is an open source non-commercial project. Dear PVS-Studio, please check it.
+ // PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
 
 #include "GLProgramManager.h"
 #include "Log.h"

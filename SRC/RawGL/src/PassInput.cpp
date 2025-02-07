@@ -3,7 +3,7 @@
  * Copyright (c) 2022 Erium Vladlen.
  * 
  * This program is free software: you can redistribute it and/or modify  
- * it under the terms of the GNU General Public License as published by  
+ * it under the terms of the GNU General Public License as published by   //-V1042
  * the Free Software Foundation, version 3.
  *
  * This program is distributed in the hope that it will be useful, but 
@@ -14,6 +14,9 @@
  * You should have received a copy of the GNU General Public License 
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+
+ // This is an open source non-commercial project. Dear PVS-Studio, please check it.
+ // PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
 
 #include "Sequence.h"
 #include "Timer.h"
@@ -197,6 +200,36 @@ const std::vector<MeshInput::MeshParm> MeshInput::MESH_PARM_ARR = {
     },
 };
 
+const std::vector<Pass::CullModeAttr> Pass::CULL_PARM_ARR = {
+    {
+        "wind",
+        &_pass_input_set_wind_order,
+        {
+            {"cw", GL_CW, "GL_CW"},
+            {"ccw", GL_CCW, "GL_CCW"},
+        },
+		"Culling wind order",
+    },
+    {
+        "face",
+        &_pass_input_set_cull_face,
+        {
+            {"fr", GL_FRONT, "GL_FRONT"},
+            {"bk", GL_BACK, "GL_BACK"},
+        },
+        "Culling face",
+	},
+	{
+		"enable",
+		&_pass_input_set_cull_enable,
+		{
+			{"true", 1, "true"},
+			{"false", 0, "false"},
+		},
+		"Culling enable",
+	},
+};
+
 const void _pass_input_set_triangles(MeshInput& pi, const GLuint& val)
 {
     pi.mesh.Triangles = val;
@@ -222,6 +255,48 @@ const void MeshInput::eval_mesh_parm(hres& hr, const std::string& name, const st
     }
 
     hr = hres::ERR;
+}
+
+const void Pass::eval_cull_parm(hres& hr, const std::string& name, const std::string& attr_val_name)
+{
+	if (hres::OK == hr) {
+		for (const auto& cull_attr : Pass::CULL_PARM_ARR) {
+			if (name == cull_attr.name) {
+				for (const auto& possible_val : cull_attr.possible_values) {
+					if (attr_val_name == possible_val.key) {
+						cull_attr.func(this->cullMode, possible_val.gl_value);
+						return;
+					}
+				}
+			}
+		}
+	}
+	hr = hres::ERR;
+}
+
+std::string Pass::get_possible_culling_fmt() 
+{
+    std::string ret;
+
+    for (const auto& tex_attr : MeshInput::MESH_PARM_ARR) {
+        ret += tex_attr.name + " - " + tex_attr.desc + ": [";
+
+        for (size_t i = 0; i < tex_attr.possible_values.size(); ++i) {
+            auto& possible_val = tex_attr.possible_values[i];
+            ret += possible_val.key + " (";
+            if (i == 0) {
+                ret += "default, ";
+            }
+            ret += possible_val.desc + ")";
+
+            if (i < tex_attr.possible_values.size() - 1) {
+                ret += ", ";
+            }
+        }
+        ret += "]\n";
+    }
+
+    return ret;
 }
 
 std::string MeshInput::get_possible_mesh_parm_fmt()
@@ -285,6 +360,21 @@ const void _pass_input_set_tex_s(PassInput& pi, const GLint& val)
 const void _pass_input_set_tex_t(PassInput& pi, const GLint& val)
 {
     pi.tex_t = val;
+}
+
+const void _pass_input_set_cull_face(Pass::CullMode& mm, const GLuint& val)
+{
+	mm.cullFace = val;
+}
+
+const void _pass_input_set_wind_order(Pass::CullMode& mm, const GLuint& val)
+{
+	mm.windOrder = val;
+}
+
+const void _pass_input_set_cull_enable(Pass::CullMode& mm, const GLuint& val)
+{
+	mm.cullFaceEnable = val;
 }
 
 const void PassInput::eval_tex_attr(hres& hr, const std::string& name, const std::string& attr_val_name)

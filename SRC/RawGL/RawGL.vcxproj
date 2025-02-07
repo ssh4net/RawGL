@@ -48,12 +48,12 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)\..\bin\Debug\</OutDir>
-    <ExternalIncludePath>e:\GH\vcpkg-glad\include;e:\DVR\include\boost-1_85;e:\DVR\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
+    <ExternalIncludePath>e:\DVR\include;e:\DVR\include\boost-1_87;$(VC_IncludePath);$(WindowsSDK_IncludePath)</ExternalIncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)\..\bin\RawGL\</OutDir>
-    <ExternalIncludePath>e:\GH\vcpkg-glad\include;e:\DVR\include\boost-1_85;e:\DVR\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
+    <ExternalIncludePath>e:\DVR\include;e:\DVR\include\boost-1_87;$(VC_IncludePath);$(WindowsSDK_IncludePath)</ExternalIncludePath>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <VcpkgInstalledDir>
@@ -71,12 +71,14 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>e:\GH\vcpkg-glad\lib;e:\DVR\lib;e:\DVR\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>OpenImageIO.lib;OpenImageIO_Util.lib;glad.lib;glfw3dll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>miniplyd.lib;OpenImageIO_d.lib;OpenImageIO_Util_d.lib;glad.lib;glfw3ddll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions>/VERBOSE:LIB %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -89,6 +91,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -96,7 +99,8 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <AdditionalLibraryDirectories>e:\GH\vcpkg-glad\lib;e:\DVR\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>OpenImageIO.lib;OpenImageIO_Util.lib;glad.lib;glfw3dll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>miniply.lib;OpenImageIO.lib;OpenImageIO_Util.lib;glad.lib;glfw3dll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions>/VERBOSE:LIB %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -104,6 +108,7 @@
     <ClCompile Include="src\intern\GLProgramManager.cpp" />
     <ClCompile Include="src\intern\ImageUtils.cpp" />
     <ClCompile Include="src\intern\Log.cpp" />
+    <ClCompile Include="src\intern\MESH_IO.CPP" />
     <ClCompile Include="src\intern\OpenGLUtils.cpp" />
     <ClCompile Include="src\intern\Texture.cpp" />
     <ClCompile Include="src\PassInput.cpp" />
@@ -118,6 +123,7 @@
     <ClInclude Include="src\intern\GLProgramManager.h" />
     <ClInclude Include="src\intern\ImageUtils.h" />
     <ClInclude Include="src\intern\Log.h" />
+    <ClInclude Include="src\intern\MESH_IO.H" />
     <ClInclude Include="src\intern\OpenGLUtils.h" />
     <ClInclude Include="src\intern\Texture.h" />
     <ClInclude Include="src\intern\Timer.h" />
