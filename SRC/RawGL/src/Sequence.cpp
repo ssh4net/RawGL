@@ -1189,7 +1189,6 @@ Sequence::Sequence(int argc, const char* argv[]) :
         }
     };    
     initCommon();
-    dump();
 }
 
 Sequence::~Sequence()
@@ -1858,6 +1857,13 @@ void Sequence::run()
             u_counterIt->second.value.resize(passCounter->second->size);
             u_counterIt->second.result.resize(passCounter->second->size);
 
+            auto p_countIt = p_aCounters.insert({ passCounter->second->binding, m_passCounters() });
+           
+            p_countIt->second.buffer = passCounter->second;
+            
+            p_countIt->second.value.resize(passCounter->second->size);
+            p_countIt->second.result.resize(passCounter->second->size);
+            
             if (inputCounterIt.second.value.size() > u_counterIt->second.value.size())
             {
 				LOG(warning) << "Atomic counter " << inputCounterIt.first << " has more values than the shader";
@@ -1865,18 +1871,57 @@ void Sequence::run()
 			}
             
             std::memcpy(u_counterIt->second.value.data(), inputCounterIt.second.value.data(), passCounter->second->size * sizeof(GLuint));
+            std::memcpy(p_countIt->second.value.data(), inputCounterIt.second.value.data(), passCounter->second->size * sizeof(GLuint));
 
             //u_counterIt->second.passIn = pass.fboId;
             u_counterIt->second.passIn = pass.fboId;
+            p_countIt->second.passIn.insert({ pass.fboId, true });
+
             passCounter->second->userInput = true;
+            
         }
 
-        for (auto& counterIt : pass_acounters)
+        //for (auto& counterIt : pass_acounters)
+        GLint bindingID = -1;
+        bool cntrGroup = false;
+
+        for ( std::pair<const std::string, std::shared_ptr<GLProgramBuffers>> counterIt : pass_acounters)
 		{
             if (counterIt.second->userInput)
                 continue;
 
-            auto u_counterIt = pass.u_aCounters.insert({ counterIt.second->binding, passCounters() });
+            if (bindingID == counterIt.second->binding) {
+                cntrGroup = true;
+            } else {
+                bindingID = counterIt.second->binding;
+                cntrGroup = false;
+			}
+
+            std::multimap<GLint, passCounters>::iterator u_counterIt = pass.u_aCounters.insert({ counterIt.second->binding, passCounters() });
+            
+            // check if the binding already used
+            //auto bindedCouters = p_aCounters.equal_range(counterIt.second->binding);
+            //if (bindedCouters.first != bindedCouters.second) {
+            int check = checkCounters( counterIt ); // 0 - not found, 1 - same binding, 2 - same binding and offset, 3 - identical
+            
+            // get shader counter binding offset and size and check it it overlap or identical
+
+            switch (check) { // no binding
+            case 0:
+            case 1:
+                auto p_countIt = p_aCounters.insert({ counterIt.second->binding, m_passCounters() });
+                p_countIt->second.buffer = counterIt.second;
+                p_countIt->second.value.resize(counterIt.second->size);
+                p_countIt->second.result.resize(counterIt.second->size);
+                p_countIt->second.passIn.insert({ pass.fboId, false });
+                cntrGroup = true;
+                break;
+            case 3: // binding, offset and size the same - skip
+                break;
+            case 2: // binding and offset the same but size different
+                LOG(error) << "Atomic counter " << counterIt.first << " in pass " << pass.fboId << " have different size than in other passes";
+                //exit(-1);
+            }
 
             u_counterIt->second.buffer = counterIt.second;
 
@@ -1884,6 +1929,7 @@ void Sequence::run()
             u_counterIt->second.result.resize(counterIt.second->size);
 
             u_counterIt->second.passIn = pass.fboId;
+            
 
             LOG(trace) << "Atomic counter " << counterIt.first << " binding is " << counterIt.second->binding << std::endl;
 		}
@@ -1896,11 +1942,13 @@ void Sequence::run()
         auto it = pass.u_aCounters.begin();
 
         while (it != pass.u_aCounters.end()) {
-            // Check if pass is the first pass
+            // Check if pass is not a first pass
+            // Check if counter is not set
+            // CHeck if counter do not have already used binding point
             
-            if (pass.fboId > 1) {
-                break;
-            }
+            //if (pass.fboId > 1) {
+            //    break;
+            //}
 
             GLuint buff_size = 0;
             //GLuint atomicCounterBufferID;
@@ -1911,6 +1959,7 @@ void Sequence::run()
             LOG(trace) << "Binding: " << it->first << " have " << range_size << " counter[s]." << std::endl;
 
             // Bind the buffer to the binding point
+            
             GLCall(glGenBuffers(range_size, &it->second.bufferID));
             GLCall(glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, it->second.bufferID));
             
@@ -1935,10 +1984,14 @@ void Sequence::run()
 
             GLCall(glBindBufferRange(GL_ATOMIC_COUNTER_BUFFER, it->first, it->second.bufferID, 0, buff_size));
 
+            //auto pass_counter = p_acounters.insert({ it->first, {it->second.bufferID , it->second.buffer }});
+
             glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
 
             it = range.second;
         }
+
+        GLCall(glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT));
 
 #if 0 //_DEBUG
         std::cout << termcolor::bright_yellow;
@@ -2058,7 +2111,8 @@ void Sequence::run()
             }
 
             //  Atomic counters get values after draw
-            GLCall(glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT));
+            //GLCall(glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT));
+            //GLCall(glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT));
 
             std::cout << termcolor::bright_cyan;
             LOG(trace) << "Atomic counters results:" << std::endl;
@@ -2176,53 +2230,3 @@ void Sequence::run()
 
 #define STRING_USED_DEFAULTS "(used default)"
 #define STRING_CHANGED_TO_SUPPORTED "(changed to highest supported value for file format)"
-
-void Sequence::dump()
-{
-#if 0
-    LOG(info) <<
-        // --- Format string ---
-        "Options:\n"
-        // Input files.
-        //"input_file = \"%s\"\n"
-        // glsl file.
-        //"glsl_file = \"%s\"\n"
-        // lut file.
-        //"lut_file = \"%s\"\n"
-        // Output file.
-        //"output_file = \"%s\"\n\n"
-        // Processing options.
-        "channels = %i %s\n\n"
-        "outchannels = %i %s\n\n"
-        // RAW Processing options.
-        "color space = %s\n"
-        "demozaic = %s\n\n"
-
-        "positive = %s %s\n\n"
-        // Write options.
-        "Write options:\n"
-        "output_bit_depth = %ibit %s%s\n"
-        "output_compression = %s\n"
-        "\n",
-        // --- Format variadic arguments ---
-
-        // TODO: Display pass info.
-
-        // Processing options.
-        channels,
-        vm["channels"].defaulted() ? str_used_defaults : "",
-        outchannels,
-        vm["outchannels"].defaulted() ? str_used_defaults : "",
-        // RAW Processing options.
-        vm["colors"].defaulted() ? str_used_defaults : "sRGB",
-        vm["demosaic"].defaulted() ? str_used_defaults : "AHD",
-        positive ? "true" : "false",
-        vm["positive"].defaulted() ? str_used_defaults : "",
-        // Write options.
-        arg_output_format,
-        vm["output_bit_depth"].defaulted() ? str_used_defaults : "",
-        output_format_defaulted ? str_changed_to_supported : "",
-        output_compression.empty() ? " - " : output_compression.c_str()
-        );
-#endif
-    }

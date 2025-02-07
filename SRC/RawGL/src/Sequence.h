@@ -354,7 +354,7 @@ struct Pass
         GenericObject( GLenum type, GLuint id, GLuint binding, const GLint size, T* src_value = nullptr )
             : type(type), id(id), binding(binding), size(size), value(src_value)
         {
-            typetext = "test_string";
+            typetext = "";
             value = new T[size];
             if (src_value) {
                 std::memcpy(value, src_value, size * sizeof(T));
@@ -438,7 +438,7 @@ struct Pass
         std::vector<GLuint> value;
 
         inputCounter() {
-            size = 0;
+            size = 1;
             value = { 0 };
         }
     };
@@ -498,9 +498,6 @@ public:
 
     void run();
 
-    // log the parsed chain to the console
-    void dump();
-
 private:
     Sequence() {}
 
@@ -508,7 +505,50 @@ private:
     std::map<std::string, std::shared_ptr<Texture>> m_textures;
     //std::map<std::string, std::shared_ptr<GLSLProgram>> m_shaders;
     
-    std::multimap<std::string, std::shared_ptr<PassInputCounters>> g_acounters;
+    struct m_passCounters
+    {
+        //passCounters();
+
+        GLuint bufferID;
+
+        std::vector<GLuint> value;
+        std::vector<GLuint> result;
+
+        std::shared_ptr<GLProgramBuffers> buffer;
+
+        std::map<GLint, bool> passIn; // Index of pass input / userInput
+
+        m_passCounters() :
+            bufferID(0),
+            value(0),
+            result(0),
+            buffer(nullptr),
+            passIn()
+        {
+        }
+    };
+
+    std::multimap<GLint, m_passCounters> p_aCounters; // Binding, Buffer
+
+    int checkCounters(std::pair<const std::string, std::shared_ptr<GLProgramBuffers>> counterIt) {
+        auto range = p_aCounters.equal_range(counterIt.second->binding);
+        size_t size = std::distance(range.first, range.second);
+        int result = 0; // 0 - not found, 1 - same binding, 2 - same binding and offset, 3 - identical
+        if (size > 0) { 
+            for (auto it = range.first; it != range.second; ++it) {
+                if (it->second.buffer->offset == counterIt.second->offset) {
+                    if (it->second.buffer->size == counterIt.second->size) { 
+                        result = 3;
+                    }
+                    result = result < 3 ? 2 : result;
+				}
+				result = result < 2 ? 1 : result;
+			}
+		}
+        return result;
+    }
+
+    //std::multimap<GLuint, std::pair<GLuint, std::shared_ptr<passCounters>>> p_acounters; // Binding, BufferID, Buffer
     //std::map<std::string, PassInputCounters> m_atBuffers;
 
     std::vector<Pass> m_passes;

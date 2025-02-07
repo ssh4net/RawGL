@@ -4,7 +4,7 @@
 --pass_size 512 ^
 --in img_size 512 ^
 --in lut_size 8 ^
---out EmptyLUT EmptyLUT.png ^
+--out EmptyLUT EmptyLUT.tif ^
 --out_format rgb16 ^
 --out_channels 3 ^
 --out_bits 16 ^

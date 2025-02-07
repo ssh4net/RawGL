@@ -8,14 +8,15 @@ layout(location = 0) out vec3 EmptyLUT;
 
 void main()
 {
-    float pixel_size = 1.0f / img_size;
-    float pixel_offset = pixel_size / 2.0f;
+    vec2 pixel_size = 1.0f / vec2(img_size);
+    vec2 pixel_offset = pixel_size / 2.0;
+
+    ivec2 square = ivec2(img_size / lut_size);
+    
+    vec2 uv = (1 + img_size) * (UV - pixel_offset);
     
     // R and G values with pixel size compensation to have 0.0 and 1.0 values in pixel center
-    EmptyLUT.r = mod((UV.x - pixel_offset) * lut_size, 1) * (img_size + lut_size) / img_size;
-    EmptyLUT.g = mod((UV.y - 1.0f - pixel_offset) * lut_size, 1) * (img_size + lut_size) / img_size;
-    
-    float gv = floor(lut_size + lut_size * (UV.y - 1.0f)) / (lut_size - 1);
-    float gh = floor(lut_size + lut_size * (UV.x - 1.0f)) / (lut_size - 1);
-    EmptyLUT.b = (lut_size * gv + gh) / (lut_size + 1);
+    EmptyLUT.rg = mod(uv, square) / (square - 1);
+    vec2 g = mod(uv / square, square) / (lut_size - 1);
+    EmptyLUT.b = ((lut_size - 1) * g.y + g.x) / (lut_size);
 }
