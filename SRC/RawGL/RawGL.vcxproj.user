@@ -4,12 +4,12 @@
     <ShowAllFiles>false</ShowAllFiles>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LocalDebuggerCommandArguments>-V 5 -P data\color.vert data\color.frag --pass_size 3072 2048 -M mesh w:\sponge.ply --bg_color 0.18 0.18 0.18 --in doubleVec 10.6546798754 135.5165465465 --in inTexture "s:\3D\MATCAPS\coldsteel.png" --atomic cntr counterMax 100 --atomic buff::MyAtomicBuffer int myResult[16] 0 0 0 0 1 1 1 1 2 2 2 2 3 3 3 3 uint myTest[1] 65535 --out outColor render.jpg --out_format rgba32f --out_channels 4 --out_bits 32 --out_attr oiio:ColorSpace linear --out_attr oiio:RawColor 1 --out_attr oiio:nchannels 4 --out_attr compression jpeg:100 -P data\color2.vert data\color2.frag --pass_size 3072 2048 -M mesh w:\scull.ply --bg_color 0.60 0.15 0.35 --in inTexture "s:\3D\MATCAPS\coldsteel.png" --out outColor render2.jpg --out_format rgba32f --out_channels 4 --out_bits 32 --out_attr oiio:ColorSpace linear --out_attr oiio:RawColor 1 --out_attr oiio:nchannels 4 --out_attr compression jpeg:100</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-V 5 -P ..\..\tests\shaders\empty.vert ..\..\tests\shaders\EmptyST.frag --pass_size 333 157 --out STmap ..\..\tests\outputs\test.tif --out_format rgb16 --out_bits 8 --out_channels 3 --out_attr tiff:compression ZIP</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <LocalDebuggerWorkingDirectory>$(SolutionDir)\..\bin\RawGL</LocalDebuggerWorkingDirectory>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LocalDebuggerCommandArguments>-V 5 -P data\color.vert data\color.frag --bg_color 1.0 1.0 1.0 1.0 --pass_size 3072 2048 --in inTexture min l wrps ce s:\PHOTOS\Jp\IMG_1206.JPG -M mesh tris false rend tr w:\Scull.ply --out outColor data\render.jpg --out_format rgb16 --out_channels 4 --out_bits 16</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-P data\empty.vert data\pass1.frag --pass_size 1024 1024 --in InSample data\EmptyPresetLUT.png min ll mag l wrps mr --out OutSample out\pass1.tif --out_format rgb32f --out_channels 3 --out_bits 32 -P data\empty.vert data\pass2.frag --in InSample2 OutSample 0 min ll mag l wrps mr --out OutSample2 out\pass2.tif --out_format rgb32f --out_channels 3 --out_bits 32 -P data\empty.vert data\pass3.frag --in InSample3 OutSample2 1 min ll mag l wrps mr --out OutSample3 out\pass3.tif --out_format rgb32f --out_channels 3 --out_bits 32</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <LocalDebuggerWorkingDirectory>$(SolutionDir)\..\bin\RawGL</LocalDebuggerWorkingDirectory>
   </PropertyGroup>

@@ -48,14 +48,12 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)\..\bin\Debug\</OutDir>
-    <ExternalIncludePath>e:\DVR\include\boost-1_87;e:\DVR\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
-    <LibraryPath>e:\DVR\lib;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
+    <ExternalIncludePath>e:\GH\vcpkg-glad\include;e:\DVR\include\boost-1_85;e:\DVR\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)\..\bin\RawGL\</OutDir>
-    <ExternalIncludePath>e:\DVR\include\boost-1_87;e:\DVR\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
-    <LibraryPath>e:\DVR\lib;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
+    <ExternalIncludePath>e:\GH\vcpkg-glad\include;e:\DVR\include\boost-1_85;e:\DVR\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</ExternalIncludePath>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <VcpkgInstalledDir>
@@ -69,24 +67,17 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <UseStandardPreprocessor>true</UseStandardPreprocessor>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
-      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
-      <AdditionalOptions>-DBOOST_USE_WINAPI_VERSION=BOOST_WINAPI_VERSION_WIN7 /utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <IncrementalLinkDatabaseFile>$(IntDir)$(TargetName).ilk</IncrementalLinkDatabaseFile>
+      <AdditionalLibraryDirectories>e:\GH\vcpkg-glad\lib;e:\DVR\lib;e:\DVR\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>OpenImageIO.lib;OpenImageIO_Util.lib;glad.lib;glfw3dll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
-    <PostBuildEvent>
-      <Command>
-      </Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -97,8 +88,6 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>-DBOOST_USE_WINAPI_VERSION=BOOST_WINAPI_VERSION_WIN7 /utf-8 %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
     </ClCompile>
     <Link>
@@ -106,15 +95,15 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>e:\GH\vcpkg-glad\lib;e:\DVR\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>OpenImageIO.lib;OpenImageIO_Util.lib;glad.lib;glfw3dll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="E:\GH\MiniPLY\miniply.cpp" />
     <ClCompile Include="src\intern\GLProgram.cpp" />
     <ClCompile Include="src\intern\GLProgramManager.cpp" />
     <ClCompile Include="src\intern\ImageUtils.cpp" />
     <ClCompile Include="src\intern\Log.cpp" />
-    <ClCompile Include="src\intern\mesh_io.cpp" />
     <ClCompile Include="src\intern\OpenGLUtils.cpp" />
     <ClCompile Include="src\intern\Texture.cpp" />
     <ClCompile Include="src\PassInput.cpp" />
@@ -123,17 +112,12 @@
     <ClCompile Include="src\Sequence.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="src\testshader.glsl" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="E:\GH\MiniPLY\miniply.h" />
     <ClInclude Include="src\intern\AssetManager.h" />
     <ClInclude Include="src\intern\Common.h" />
     <ClInclude Include="src\intern\GLProgram.h" />
     <ClInclude Include="src\intern\GLProgramManager.h" />
     <ClInclude Include="src\intern\ImageUtils.h" />
     <ClInclude Include="src\intern\Log.h" />
-    <ClInclude Include="src\intern\mesh_io.h" />
     <ClInclude Include="src\intern\OpenGLUtils.h" />
     <ClInclude Include="src\intern\Texture.h" />
     <ClInclude Include="src\intern\Timer.h" />
