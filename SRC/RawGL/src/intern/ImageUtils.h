@@ -27,9 +27,9 @@
 namespace image_utils {
 
 struct Img {
-	int width;
-	int height;
-	float* pixels;
+    int width;
+    int height;
+    float* pixels;
 };
 
 /// <summary>
@@ -45,18 +45,7 @@ struct Img {
 /// HDR - *.hdr;
 /// TIF - *.tif, *.tiff, *.tx, *.env, *.sm, *.vsm;
 /// </summary>
-enum class ImageFileFormat {
-	UNKNOWN,
-	BMP,
-	PNG,
-	JPG,
-	TGA,
-	EXR,
-	HDR,
-	TIF,
-	JP2,
-	WEBP
-};
+enum class ImageFileFormat { UNKNOWN, BMP, PNG, JPG, TGA, EXR, HDR, TIF, JP2, WEBP };
 
 /// <summary>
 /// Output file format (OIIO::TypeDesc:: ... ) relative to passed argument
@@ -65,7 +54,8 @@ enum class ImageFileFormat {
 /// <param name="arg"></param>
 /// <param name="r_defaulted"></param>
 /// <returns></returns>
-extern OIIO::TypeDesc get_output_format(const std::string& output_filename, const int arg, bool& r_defaulted);
+extern OIIO::TypeDesc
+get_output_format(const std::string& output_filename, const int arg, bool& r_defaulted);
 
 /// <summary>
 /// Callback function used to display image read / write progress.
@@ -73,7 +63,8 @@ extern OIIO::TypeDesc get_output_format(const std::string& output_filename, cons
 /// <param name="opaque_data"></param>
 /// <param name="portion_done"></param>
 /// <returns>`true` if finished</returns>
-extern bool progress_callback(void* opaque_data, float portion_done);
+extern bool
+progress_callback(void* opaque_data, float portion_done);
 
 /// <summary>
 /// Load image file data from given filepath.
@@ -83,8 +74,11 @@ extern bool progress_callback(void* opaque_data, float portion_done);
 /// <param name="height"></param>
 /// <param name="pixels"></param>
 /// <returns></returns>
-extern bool load_image(const std::string& filepath, const std::map<std::string, std::string>& attributes, int& width, int& height, void*& pixels, int& channels, int& alphaChannel, OIIO::TypeDesc &format);
-}
+extern bool
+load_image(const std::string& filepath, const std::map<std::string, std::string>& attributes, int& width, int& height,
+           void*& pixels, int& channels, int& alphaChannel, OIIO::TypeDesc& format);
+}  // namespace image_utils
 
 // TODO: Move function to File_IO
-extern std::string get_file_ext(const std::string& filepath);
+extern std::string
+get_file_ext(const std::string& filepath);

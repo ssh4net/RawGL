@@ -1,6 +1,6 @@
 /* 
  * This file is part of the RawGL distribution (https://github.com/ssh4net/RawGL).
- * Copyright (c) 2022 Erium Vladlen.
+ * Copyright (c) 2022-2026 Erium Vladlen.
  * 
  * This program is free software: you can redistribute it and/or modify  
  * it under the terms of the GNU General Public License as published by   //-V1042
@@ -15,8 +15,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
- // This is an open source non-commercial project. Dear PVS-Studio, please check it.
- // PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
 
 #include "GLProgramManager.h"
 #include "Log.h"
@@ -27,166 +25,151 @@ GLProgramManager g_glslProgramManager;
 // Program loading
 //
 
-std::shared_ptr<GLProgram> GLProgramManager::loadVertFrag(const std::string& path)
+std::shared_ptr<GLProgram>
+GLProgramManager::loadVertFrag(const std::string& path)
 {
-	LOG(info) << "Loading program from a single text file (vertex, fragment): " << path;
+    LOG(info) << "Loading program from a single text file (vertex, fragment): " << path;
 
-	auto it = m_list.find(path);
+    auto it = m_list.find(path);
 
-	if (it == m_list.end())
-	{
-		// Attempt to load
-		std::string text;
+    if (it == m_list.end()) {
+        // Attempt to load
+        std::string text;
 
-		if (!loadTextFile(path, text))
-			return nullptr;
+        if (!loadTextFile(path, text))
+            return nullptr;
 
-		const std::string version;// ("#version 460 core\n");
+        const std::string version;  // ("#version 460 core\n");
 
-		// TODO: Parse existing #version, if any, and insert macros after it
+        // TODO: Parse existing #version, if any, and insert macros after it
 
-		std::vector<std::shared_ptr<GLShader>> shaders
-		{
-			std::make_shared<GLShader>(GL_VERTEX_SHADER, version + "#define RAWGL_VERTEX_SHADER\n" + text),
-			std::make_shared<GLShader>(GL_FRAGMENT_SHADER, version + "#define RAWGL_FRAGMENT_SHADER\n" + text)
-			//std::make_shared<GLShader>(GL_VERTEX_SHADER, "#version 460 core\n#define RAWGL_VERTEX_SHADER\n" + text),
-			//std::make_shared<GLShader>(GL_FRAGMENT_SHADER, "#version 460 core\n#define RAWGL_FRAGMENT_SHADER\n" + text)
-		};
+        std::vector<std::shared_ptr<GLShader>> shaders {
+            std::make_shared<GLShader>(GL_VERTEX_SHADER, version + "#define RAWGL_VERTEX_SHADER\n" + text),
+            std::make_shared<GLShader>(GL_FRAGMENT_SHADER, version + "#define RAWGL_FRAGMENT_SHADER\n" + text)
+            //std::make_shared<GLShader>(GL_VERTEX_SHADER, "#version 460 core\n#define RAWGL_VERTEX_SHADER\n" + text),
+            //std::make_shared<GLShader>(GL_FRAGMENT_SHADER, "#version 460 core\n#define RAWGL_FRAGMENT_SHADER\n" + text)
+        };
 
-		//shaders.reserve(2);
-		//shaders.emplace_back(GL_VERTEX_SHADER, "#define RAWGL_VERTEX_SHADER\n" + text);
-		//shaders.emplace_back(GL_FRAGMENT_SHADER, "#define RAWGL_FRAGMENT_SHADER\n" + text);
+        //shaders.reserve(2);
+        //shaders.emplace_back(GL_VERTEX_SHADER, "#define RAWGL_VERTEX_SHADER\n" + text);
+        //shaders.emplace_back(GL_FRAGMENT_SHADER, "#define RAWGL_FRAGMENT_SHADER\n" + text);
 
-		it = m_list.insert({ path, std::make_shared<GLProgram>(shaders) }).first;
-	}
+        it = m_list.insert({ path, std::make_shared<GLProgram>(shaders) }).first;
+    }
 
-	return it->second;
+    return it->second;
 }
 
-std::shared_ptr<GLProgram> GLProgramManager::loadVertFrag(const std::string paths[])
+std::shared_ptr<GLProgram>
+GLProgramManager::loadVertFrag(const std::string paths[])
 {
-	LOG(info) << "Loading program from files (vertex, fragment): " << std::endl << "\t" << paths[0] << std::endl << "\t" << paths[1];
+    LOG(info) << "Loading program from files (vertex, fragment): " << std::endl
+              << "\t" << paths[0] << std::endl
+              << "\t" << paths[1];
 
-	auto name = paths[0] + ":" + paths[1];
-	auto it = m_list.find(name);
+    auto name = paths[0] + ":" + paths[1];
+    auto it   = m_list.find(name);
 
-	if (it == m_list.end())
-	{
-		// Attempt to load
-		const std::pair<std::string, GLenum> types[]
-		{
-			{ ".vert", GL_VERTEX_SHADER },
-			{ ".frag", GL_FRAGMENT_SHADER },
-			{ ".vert_spv", GL_VERTEX_SHADER },
-			{ ".frag_spv", GL_FRAGMENT_SHADER }
-		};
-		
-		std::vector<std::shared_ptr<GLShader>> shaders;
+    if (it == m_list.end()) {
+        // Attempt to load
+        const std::pair<std::string, GLenum> types[] { { ".vert", GL_VERTEX_SHADER },
+                                                       { ".frag", GL_FRAGMENT_SHADER },
+                                                       { ".vert_spv", GL_VERTEX_SHADER },
+                                                       { ".frag_spv", GL_FRAGMENT_SHADER } };
 
-		for (int i = 0; i < 2; i++)
-		{
-			const std::string ext(std::filesystem::path(paths[i]).extension().string());
+        std::vector<std::shared_ptr<GLShader>> shaders;
 
-			if (ext == types[i].first)
-			{
-				std::string text;
+        for (int i = 0; i < 2; i++) {
+            const std::string ext(std::filesystem::path(paths[i]).extension().string());
 
-				if (!loadTextFile(paths[i], text))
-					return nullptr;
+            if (ext == types[i].first) {
+                std::string text;
 
-				shaders.push_back(std::make_shared<GLShader>(types[i].second, text));
-			}
-			else if (ext == types[i + 2].first)
-			{
-				std::vector<char> data;
+                if (!loadTextFile(paths[i], text))
+                    return nullptr;
 
-				if (!loadBinaryFile(paths[i], data))
-					return nullptr;
+                shaders.push_back(std::make_shared<GLShader>(types[i].second, text));
+            } else if (ext == types[i + 2].first) {
+                std::vector<char> data;
 
-				shaders.push_back(std::make_shared<GLShader>(types[i + 2].second, data));
-			}
-			else
-			{
-				LOG(error) << "Unknown shader file extension " << ext;
-				return nullptr;
-			}
-		}
+                if (!loadBinaryFile(paths[i], data))
+                    return nullptr;
 
-		it = m_list.insert({ name, std::make_shared<GLProgram>(shaders) }).first;
-	}
+                shaders.push_back(std::make_shared<GLShader>(types[i + 2].second, data));
+            } else {
+                LOG(error) << "Unknown shader file extension " << ext;
+                return nullptr;
+            }
+        }
 
-	return it->second;
+        it = m_list.insert({ name, std::make_shared<GLProgram>(shaders) }).first;
+    }
+
+    return it->second;
 }
 
-std::shared_ptr<GLProgram> GLProgramManager::loadVertFragStrings(const std::string& name, const std::string sources[])
+std::shared_ptr<GLProgram>
+GLProgramManager::loadVertFragStrings(const std::string& name, const std::string sources[])
 {
-	LOG(info) << "Loading program from strings (vertex, fragment): " << name;
+    LOG(info) << "Loading program from strings (vertex, fragment): " << name;
 
-	std::vector<std::shared_ptr<GLShader>> shaders
-	{
-		std::make_shared<GLShader>(GL_VERTEX_SHADER, sources[0]),
-		std::make_shared<GLShader>(GL_FRAGMENT_SHADER, sources[1])
-	};
+    std::vector<std::shared_ptr<GLShader>> shaders { std::make_shared<GLShader>(GL_VERTEX_SHADER, sources[0]),
+                                                     std::make_shared<GLShader>(GL_FRAGMENT_SHADER, sources[1]) };
 
-	auto it = m_list.insert({ name, std::make_shared<GLProgram>(shaders) }).first;
+    auto it = m_list.insert({ name, std::make_shared<GLProgram>(shaders) }).first;
 
-	return it->second;
+    return it->second;
 }
 
-std::shared_ptr<GLProgram> GLProgramManager::loadComp(const std::string& path)
+std::shared_ptr<GLProgram>
+GLProgramManager::loadComp(const std::string& path)
 {
-	LOG(info) << "Loading program from a text file (compute): " << path;
-	
-	auto it = m_list.find(path);
+    LOG(info) << "Loading program from a text file (compute): " << path;
 
-	if (it == m_list.end())
-	{
-		// Attempt to load it
-		std::vector<std::shared_ptr<GLShader>> shaders;
-		const std::string ext(std::filesystem::path(path).extension().string());
+    auto it = m_list.find(path);
 
-		if (ext == ".comp")
-		{
-			std::string text;
+    if (it == m_list.end()) {
+        // Attempt to load it
+        std::vector<std::shared_ptr<GLShader>> shaders;
+        const std::string ext(std::filesystem::path(path).extension().string());
 
-			if (!loadTextFile(path, text))
-				return nullptr;
+        if (ext == ".comp") {
+            std::string text;
 
-			shaders.push_back(std::make_shared<GLShader>(GL_COMPUTE_SHADER, text));
-		}
-		else if (ext == ".comp_spv")
-		{
-			std::vector<char> data;
+            if (!loadTextFile(path, text))
+                return nullptr;
 
-			if (!loadBinaryFile(path, data))
-				return nullptr;
+            shaders.push_back(std::make_shared<GLShader>(GL_COMPUTE_SHADER, text));
+        } else if (ext == ".comp_spv") {
+            std::vector<char> data;
 
-			shaders.push_back(std::make_shared<GLShader>(GL_COMPUTE_SHADER, data));
-		}
-		else
-		{
-			LOG(error) << "Unknown shader file extension " << ext;
-			return nullptr;
-		}
+            if (!loadBinaryFile(path, data))
+                return nullptr;
 
-		it = m_list.insert({ path, std::make_shared<GLProgram>(shaders) }).first;
-	}
+            shaders.push_back(std::make_shared<GLShader>(GL_COMPUTE_SHADER, data));
+        } else {
+            LOG(error) << "Unknown shader file extension " << ext;
+            return nullptr;
+        }
 
-	return it->second;
+        it = m_list.insert({ path, std::make_shared<GLProgram>(shaders) }).first;
+    }
+
+    return it->second;
 }
 
-std::shared_ptr<GLProgram> GLProgramManager::loadCompString(const std::string& name, const std::string& source)
+std::shared_ptr<GLProgram>
+GLProgramManager::loadCompString(const std::string& name, const std::string& source)
 {
-	LOG(info) << "Loading program from string (compute): " << name;
+    LOG(info) << "Loading program from string (compute): " << name;
 
-	std::vector<std::shared_ptr<GLShader>> shaders
-	{
-		std::make_shared<GLShader>(GL_COMPUTE_SHADER, source),
-	};
+    std::vector<std::shared_ptr<GLShader>> shaders {
+        std::make_shared<GLShader>(GL_COMPUTE_SHADER, source),
+    };
 
-	auto it = m_list.insert({ name, std::make_shared<GLProgram>(shaders) }).first;
+    auto it = m_list.insert({ name, std::make_shared<GLProgram>(shaders) }).first;
 
-	return it->second;
+    return it->second;
 }
 
 //
@@ -247,38 +230,38 @@ std::unique_ptr<GLShader> GLProgramManager::loadShader(const std::string& path, 
 	LOG(error) << "Unknown shader file extension " << ext;
 }
 */
-bool GLProgramManager::loadTextFile(const std::string& path, std::string& out)
+bool
+GLProgramManager::loadTextFile(const std::string& path, std::string& out)
 {
-	std::ifstream fs(path);
+    std::ifstream fs(path);
 
-	if (!fs.is_open())
-	{
-		LOG(error) << "Can't find " << path;
-		return false;
-	}
+    if (!fs.is_open()) {
+        LOG(error) << "Can't find " << path;
+        return false;
+    }
 
-	std::ostringstream ss;
-	ss << fs.rdbuf();
-	out = ss.str();
+    std::ostringstream ss;
+    ss << fs.rdbuf();
+    out = ss.str();
 
-	fs.close();
+    fs.close();
 
-	return true;
+    return true;
 }
 
-bool GLProgramManager::loadBinaryFile(const std::string& path, std::vector<char>& out)
+bool
+GLProgramManager::loadBinaryFile(const std::string& path, std::vector<char>& out)
 {
-	std::ifstream fs(path, std::ios::binary);
+    std::ifstream fs(path, std::ios::binary);
 
-	if (!fs.is_open())
-	{
-		LOG(error) << "Can't find " << path;
-		return false;
-	}
+    if (!fs.is_open()) {
+        LOG(error) << "Can't find " << path;
+        return false;
+    }
 
-	out.assign(std::istreambuf_iterator<char>(fs), {});
+    out.assign(std::istreambuf_iterator<char>(fs), {});
 
-	fs.close();
+    fs.close();
 
-	return true;
+    return true;
 }

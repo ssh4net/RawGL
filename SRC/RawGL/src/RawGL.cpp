@@ -1,9 +1,6 @@
-// This is an independent project of an individual developer. Dear PVS-Studio, please check it.
-// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
-
 /* 
  * This file is part of the RawGL distribution (https://github.com/ssh4net/RawGL).
- * Copyright (c) 2022 Erium Vladlen.
+ * Copyright (c) 2022-2026 Erium Vladlen.
  * 
  * This program is free software: you can redistribute it and/or modify  
  * it under the terms of the GNU General Public License as published by   //-V1042
@@ -18,8 +15,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
- // This is an open source non-commercial project. Dear PVS-Studio, please check it.
- // PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
 
 #include "Common.h"
 #include "Sequence.h"
@@ -28,34 +23,35 @@
 #include "GLProgramManager.h"
 #include <iostream>
 
-const char* APP_NAME = "RawGL";
-const char* APP_AUTHOR = "Erium Vladlen";
+const char* APP_NAME    = "RawGL";
+const char* APP_AUTHOR  = "Erium Vladlen";
 const int APP_VERSION[] = { 1, 6, 1 };
 
 //#include "shader.hpp"
 
-int main(int argc, const char* argv[])
+int
+main(int argc, const char* argv[])
 {
 // for renderdoc debugging
-#if 0 //_DEBUG
+#if 0  //_DEBUG
 	std::cout << "Debug mode" << std::endl;
 	system("pause");
 #endif
-	
-	Timer timer;
 
-	OpenGLHandle glhandle;
+    Timer timer;
 
-	// init the logger
-	Log_Init();
+    OpenGLHandle glhandle;
+
+    // init the logger
+    Log_Init();
 
     // start the sequence
     Sequence sequence(argc, argv);
     sequence.run();
-	std::cout << std::endl;
-	LOG(info) << "Total processing time : " << timer.nowText() << std::endl;
+    std::cout << std::endl;
+    LOG(info) << "Total processing time : " << timer.nowText() << std::endl;
 
-#if 0 // _DEBUG
+#if 0  // _DEBUG
 	system("pause");
 #endif
     return 0;

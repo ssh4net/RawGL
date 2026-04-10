@@ -1,6 +1,6 @@
 /* 
  * This file is part of the RawGL distribution (https://github.com/ssh4net/RawGL).
- * Copyright (c) 2022 Erium Vladlen.
+ * Copyright (c) 2022-2026 Erium Vladlen.
  * 
  * This program is free software: you can redistribute it and/or modify  
  * it under the terms of the GNU General Public License as published by   //-V1042
@@ -15,22 +15,21 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
- // This is an open source non-commercial project. Dear PVS-Studio, please check it.
- // PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
 
 #include "Sequence.h"
 #include "Timer.h"
 
-PassOutput::PassOutput() :
-	internalFormatText("rgba32f"),
-	channels(3),
-	alphaChannel(-1),
-	bits(16),
-	formatDefaulted(false)
+PassOutput::PassOutput()
+    : internalFormatText("rgba32f")
+    , channels(3)
+    , alphaChannel(-1)
+    , bits(16)
+    , formatDefaulted(false)
 {
 }
 
-void PassOutput::saveTexture()
+void
+PassOutput::saveTexture()
 {
     if (path.empty())
         return;
@@ -60,17 +59,15 @@ void PassOutput::saveTexture()
     // Start writing
     OIIO::ImageSpec spec(texture->getWidth(), texture->getHeight(), texture->getChannels(), format);
 
-	// set the user-provided attributes
-	for (auto const& a : attributes)
-	{
-		spec.attribute(a.first, a.second);
-	}
+    // set the user-provided attributes
+    for (auto const& a : attributes) {
+        spec.attribute(a.first, a.second);
+    }
 
     //spec["alpha_channel"] = alphaChannel;
     spec.alpha_channel = alphaChannel;
 
-    if (!output->open(path, spec))
-    {
+    if (!output->open(path, spec)) {
         LOG(error) << "Can't open file for writing: " << OIIO::geterror();
         return;
     }
@@ -79,42 +76,41 @@ void PassOutput::saveTexture()
     const GLenum internalFormat = texture->getInternalFormat();
     OIIO::TypeDesc pf;
     GLenum type;
-        
-    switch (internalFormat)
-    {
+
+    switch (internalFormat) {
     case GL_R8:
     case GL_RG8:
     case GL_RGB8:
     case GL_RGBA8:
-        pf = OIIO::TypeDesc::UINT8;
+        pf   = OIIO::TypeDesc::UINT8;
         type = GL_UNSIGNED_BYTE;
         break;
     case GL_R16:
     case GL_RG16:
     case GL_RGB16:
     case GL_RGBA16:
-        pf = OIIO::TypeDesc::UINT16;
+        pf   = OIIO::TypeDesc::UINT16;
         type = GL_UNSIGNED_SHORT;
         break;
     case GL_R32UI:
     case GL_RG32UI:
     case GL_RGB32UI:
     case GL_RGBA32UI:
-        pf = OIIO::TypeDesc::UINT32;
+        pf   = OIIO::TypeDesc::UINT32;
         type = GL_UNSIGNED_INT;
         break;
     case GL_R16F:
     case GL_RG16F:
     case GL_RGB16F:
     case GL_RGBA16F:
-        pf = OIIO::TypeDesc::HALF;
+        pf   = OIIO::TypeDesc::HALF;
         type = GL_HALF_FLOAT;
         break;
     case GL_R32F:
     case GL_RG32F:
     case GL_RGB32F:
     case GL_RGBA32F:
-        pf = OIIO::TypeDesc::FLOAT;
+        pf   = OIIO::TypeDesc::FLOAT;
         type = GL_FLOAT;
         break;
     default:
@@ -125,7 +121,7 @@ void PassOutput::saveTexture()
 
     // Read the framebuffer data
     void* data = texture->getData(type);
-	
+
 #if 0   
     // write data to binary file for debugging
     FILE* fp = std::fopen("d:\oiio_write_debug.raw", "wb");
@@ -133,10 +129,10 @@ void PassOutput::saveTexture()
     std::fclose(fp);
 #endif
 
-    if (!output->write_image(pf, data, OIIO::AutoStride, OIIO::AutoStride, OIIO::AutoStride, (*image_utils::progress_callback)))
+    if (!output->write_image(pf, data, OIIO::AutoStride, OIIO::AutoStride, OIIO::AutoStride,
+                             (*image_utils::progress_callback)))
         LOG(error) << "Can't write file: " << OIIO::geterror();
-    else
-    {
+    else {
         if (!output->close())
             LOG(error) << "Can't close file after writing: " << OIIO::geterror();
         else

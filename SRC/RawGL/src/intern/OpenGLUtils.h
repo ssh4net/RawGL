@@ -17,23 +17,58 @@
 
 #pragma once
 
-#include <glad/glad.h>
+#if defined(RAWGL_USE_GLEW)
+#    include <GL/glew.h>
+using GLADloadproc = void* (*)(const char*);
+inline int
+gladLoadGLLoader(GLADloadproc)
+{
+    return glewInit() == GLEW_OK;
+}
+#else
+#    include <glad/glad.h>
+#endif
+#include <cstdlib>
 #include <unordered_map>
 
 #ifdef APIENTRY
-#undef APIENTRY
+#    undef APIENTRY
 #endif
 
-#define GLASSERT(x) if (!(x)) __debugbreak();
-#define GLCall(x) GL_ClearError(); x; GLASSERT(GL_LogCall(#x, __FILE__, __LINE__))
+#if defined(_MSC_VER)
+#    define RAWGL_DEBUGBREAK() __debugbreak()
+#elif defined(__clang__) || defined(__GNUC__)
+#    define RAWGL_DEBUGBREAK() __builtin_trap()
+#else
+#    define RAWGL_DEBUGBREAK() std::abort()
+#endif
 
-void GL_ClearError();
-bool GL_LogCall(const char* func, const char* file, int line);
+#define GLASSERT(x)             \
+    do {                        \
+        if (!(x)) {             \
+            RAWGL_DEBUGBREAK(); \
+        }                       \
+    } while (false)
+#define GLCall(x)                                     \
+    do {                                              \
+        GL_ClearError();                              \
+        x;                                            \
+        GLASSERT(GL_LogCall(#x, __FILE__, __LINE__)); \
+    } while (false)
 
-struct OpenGLHandle
-{
+struct GLFWwindow;
+
+void
+GL_ClearError();
+bool
+GL_LogCall(const char* func, const char* file, int line);
+
+struct OpenGLHandle {
     OpenGLHandle();
     ~OpenGLHandle();
+
+private:
+    GLFWwindow* m_window = nullptr;
 };
 
 //struct glsl_type_set {
@@ -42,8 +77,10 @@ struct OpenGLHandle
 //};
 
 //extern const glsl_type_set type_set[];
-extern const std::unordered_map<GLenum, const char* > glsl_type_map;
+extern const std::unordered_map<GLenum, const char*> glsl_type_map;
 //extern int type_set_size;
-extern const char* glsl_type_name(GLenum type);
+extern const char*
+glsl_type_name(GLenum type);
 
-void get_GPUfeatures();
+void
+get_GPUfeatures();

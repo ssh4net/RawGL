@@ -1,14 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ImportGroup Label="PropertySheets" />
-  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Label="UserMacros">
+    <RAWGLDepsRoot>E:\DVS</RAWGLDepsRoot>
+    <RAWGLLegacyDepsRoot>E:\DVR</RAWGLLegacyDepsRoot>
+    <RAWGLDngSdkRoot>W:\VisualStudio\dng_sdk_1_7_1</RAWGLDngSdkRoot>
+  </PropertyGroup>
   <PropertyGroup />
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)\src\intern</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(RAWGLDepsRoot)\include;$(ProjectDir)\src\intern;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
-      <PreprocessorDefinitions>GLEW_STATIC;_MSVC;_CRT_SECURE_NO_WARNINGS;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>GLEW_STATIC;RAWGL_USE_GLEW;RAWGL_DISABLE_MINIPLY;SPDLOG_FMT_EXTERNAL;OIIO_STATIC_DEFINE;_ALLOW_RUNTIME_LIBRARY_MISMATCH;_MSVC;_CRT_SECURE_NO_WARNINGS;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories></AdditionalLibraryDirectories>

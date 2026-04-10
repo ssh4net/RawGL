@@ -1,6 +1,6 @@
 /* 
  * This file is part of the RawGL distribution (https://github.com/ssh4net/RawGL).
- * Copyright (c) 2022 Erium Vladlen.
+ * Copyright (c) 2022-2026 Erium Vladlen.
  * 
  * This program is free software: you can redistribute it and/or modify  
  * it under the terms of the GNU General Public License as published by  
@@ -15,40 +15,109 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
- // This is an open source non-commercial project. Dear PVS-Studio, please check it.
- // PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
 
 #include "Common.h"
 #include "Log.h"
 
-#include <boost/log/expressions.hpp>
-#include <boost/log/utility/setup/console.hpp>
+#include <algorithm>
+#include <memory>
+#include <string>
 
-// TODO: Make into a class with enhancements maybe?
-void Log_Init()
+#define SPDLOG_HEADER_ONLY
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/spdlog.h>
+
+namespace {
+spdlog::level::level_enum
+rawgl_level_from_verbosity(const int verbosity)
 {
-	boost::log::add_console_log
-	(
-		std::cout,
-		boost::log::keywords::format = "[%Severity%] %Message%"
-		//boost::log::keywords::format = "[%TimeStamp%] [%Severity%] %File%(%Line%): %Message%"
-	);
+    switch (std::clamp(verbosity, 0, 5)) {
+    case 0: return spdlog::level::critical;
+    case 1: return spdlog::level::err;
+    case 2: return spdlog::level::warn;
+    case 3: return spdlog::level::info;
+    case 4: return spdlog::level::debug;
+    default: return spdlog::level::trace;
+    }
 }
 
-void Log_SetVerbosity(int l)
+spdlog::level::level_enum
+rawgl_level_from_stream(const rawgl::log::Level level)
 {
-	boost::log::core::get()->set_filter(
-		boost::log::trivial::severity >= (boost::log::trivial::fatal - l)
-		// log level is 0-5, 0 is most verbose
-		// 0 = trace, 1 = debug, 2 = info, 3 = warning, 4 = error, 5 = fatal
-		// fatal - 0 = only fatal errors, 
-		// fatal - 1 = error,
-		// fatal - 2 = warning, 
-		// fatal - 3 = info (default), 
-		// fatal - 4 = debug, 
-		// fatal - 5 = trace (most outputs)
-	);
+    switch (level) {
+    case rawgl::log::Level::trace: return spdlog::level::trace;
+    case rawgl::log::Level::debug: return spdlog::level::debug;
+    case rawgl::log::Level::info: return spdlog::level::info;
+    case rawgl::log::Level::warning: return spdlog::level::warn;
+    case rawgl::log::Level::error: return spdlog::level::err;
+    case rawgl::log::Level::fatal: return spdlog::level::critical;
+    }
 
-	//LOG(debug) << "DEBUGMSG";
-	//LOG(info) << "INFOMSG";
+    return spdlog::level::info;
+}
+
+std::shared_ptr<spdlog::logger>&
+rawgl_logger()
+{
+    static std::shared_ptr<spdlog::logger> logger;
+    return logger;
+}
+
+std::string
+rawgl_finalize_message(std::string message)
+{
+    while (!message.empty() && (message.back() == '\n' || message.back() == '\r')) {
+        message.pop_back();
+    }
+
+    return message;
+}
+}  // namespace
+
+namespace rawgl::log {
+Stream::Stream(const Level level)
+    : m_level(level)
+{
+}
+
+Stream::~Stream()
+{
+    std::shared_ptr<spdlog::logger>& logger = rawgl_logger();
+    if (!logger) {
+        return;
+    }
+
+    const spdlog::level::level_enum level = rawgl_level_from_stream(m_level);
+    if (!logger->should_log(level)) {
+        return;
+    }
+
+    const std::string message = rawgl_finalize_message(m_stream.str());
+    if (message.empty()) {
+        return;
+    }
+
+    logger->log(level, message);
+}
+}  // namespace rawgl::log
+
+// TODO: Make into a class with enhancements maybe?
+void
+Log_Init()
+{
+    std::shared_ptr<spdlog::logger>& logger = rawgl_logger();
+    if (!logger) {
+        logger = spdlog::stdout_color_mt("rawgl");
+        logger->set_pattern("[%L] %v");
+        logger->set_level(spdlog::level::info);
+        logger->flush_on(spdlog::level::err);
+        spdlog::set_default_logger(logger);
+    }
+}
+
+void
+Log_SetVerbosity(int l)
+{
+    Log_Init();
+    rawgl_logger()->set_level(rawgl_level_from_verbosity(l));
 }

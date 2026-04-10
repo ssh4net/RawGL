@@ -1,12 +1,12 @@
-
-// This is an open source non-commercial project. Dear PVS-Studio, please check it.
-// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: http://www.viva64.com
-
-#include "miniply.h"
 #include "mesh_io.h"
 #include <stdio.h>
 
-TriMesh::~TriMesh() {
+#if !defined(RAWGL_DISABLE_MINIPLY)
+#    include "miniply.h"
+#endif
+
+TriMesh::~TriMesh()
+{
     delete[] pos;
     delete[] normal;
     delete[] uv;
@@ -14,8 +14,11 @@ TriMesh::~TriMesh() {
     delete[] indices;
 };
 
-bool TriMesh::all_indices_valid() const {
-    bool checkTerminator = topology != Topology::Soup && hasTerminator && (terminator < 0 || terminator >= int(numVerts));
+bool
+TriMesh::all_indices_valid() const
+{
+    bool checkTerminator = topology != Topology::Soup && hasTerminator
+                           && (terminator < 0 || terminator >= int(numVerts));
     for (uint32_t i = 0; i < numIndices; i++) {
         if (checkTerminator && indices[i] == terminator) {
             continue;
@@ -28,8 +31,15 @@ bool TriMesh::all_indices_valid() const {
 };
 
 
-TriMesh* parse_file_with_miniply(const char* filename, bool assumeTriangles)
+TriMesh*
+parse_file_with_miniply(const char* filename, bool assumeTriangles)
 {
+#if defined(RAWGL_DISABLE_MINIPLY)
+    (void)filename;
+    (void)assumeTriangles;
+    fprintf(stderr, "PLY mesh support is disabled in this build.\n");
+    return nullptr;
+#else
     miniply::PLYReader reader(filename);
     if (!reader.valid()) {
         return nullptr;
@@ -54,7 +64,7 @@ TriMesh* parse_file_with_miniply(const char* filename, bool assumeTriangles)
                 break;
             }
             trimesh->numVerts = reader.num_rows();
-            trimesh->pos = new float[trimesh->numVerts * 3];
+            trimesh->pos      = new float[trimesh->numVerts * 3];
             reader.extract_properties(propIdxs, 3, miniply::PLYPropertyType::Float, trimesh->pos);
             if (reader.find_normal(propIdxs)) {
                 trimesh->normal = new float[trimesh->numVerts * 3];
@@ -69,17 +79,15 @@ TriMesh* parse_file_with_miniply(const char* filename, bool assumeTriangles)
                 reader.extract_properties(propIdxs, 4, miniply::PLYPropertyType::UChar, trimesh->color);
             }
             gotVerts = true;
-        }
-        else if (!gotFaces && reader.element_is(miniply::kPLYFaceElement)) {
+        } else if (!gotFaces && reader.element_is(miniply::kPLYFaceElement)) {
             if (!reader.load_element()) {
                 break;
             }
             if (assumeTriangles) {
                 trimesh->numIndices = reader.num_rows() * 3;
-                trimesh->indices = new uint32_t[trimesh->numIndices];
+                trimesh->indices    = new uint32_t[trimesh->numIndices];
                 reader.extract_properties(faceIdxs, 3, miniply::PLYPropertyType::Int, trimesh->indices);
-            }
-            else {
+            } else {
                 uint32_t propIdx;
                 if (!reader.find_indices(&propIdx)) {
                     break;
@@ -91,18 +99,17 @@ TriMesh* parse_file_with_miniply(const char* filename, bool assumeTriangles)
                 }
                 if (polys) {
                     trimesh->numIndices = reader.num_triangles(propIdx) * 3;
-                    trimesh->indices = new uint32_t[trimesh->numIndices];
-                    reader.extract_triangles(propIdx, trimesh->pos, trimesh->numVerts, miniply::PLYPropertyType::Int, trimesh->indices);
-                }
-                else {
+                    trimesh->indices    = new uint32_t[trimesh->numIndices];
+                    reader.extract_triangles(propIdx, trimesh->pos, trimesh->numVerts, miniply::PLYPropertyType::Int,
+                                             trimesh->indices);
+                } else {
                     trimesh->numIndices = reader.num_rows() * 3;
-                    trimesh->indices = new uint32_t[trimesh->numIndices];
+                    trimesh->indices    = new uint32_t[trimesh->numIndices];
                     reader.extract_list_property(propIdx, miniply::PLYPropertyType::Int, trimesh->indices);
                 }
             }
             gotFaces = true;
-        }
-        else if (!gotFaces && reader.element_is("tristrips")) {
+        } else if (!gotFaces && reader.element_is("tristrips")) {
             if (!reader.load_element()) {
                 fprintf(stderr, "Error: failed to load tri strips.\n");
                 break;
@@ -113,11 +120,11 @@ TriMesh* parse_file_with_miniply(const char* filename, bool assumeTriangles)
                 break;
             }
 
-            trimesh->numIndices = reader.sum_of_list_counts(propIdx);
-            trimesh->indices = new uint32_t[trimesh->numIndices];
-            trimesh->topology = Topology::Strip;
+            trimesh->numIndices    = reader.sum_of_list_counts(propIdx);
+            trimesh->indices       = new uint32_t[trimesh->numIndices];
+            trimesh->topology      = Topology::Strip;
             trimesh->hasTerminator = true;
-            trimesh->terminator = -1;
+            trimesh->terminator    = -1;
             reader.extract_list_property(propIdx, miniply::PLYPropertyType::Int, trimesh->indices);
 
             gotFaces = true;
@@ -131,10 +138,12 @@ TriMesh* parse_file_with_miniply(const char* filename, bool assumeTriangles)
     }
 
     return trimesh;
+#endif
 }
 
 
-bool has_extension(const char* filename, const char* ext)
+bool
+has_extension(const char* filename, const char* ext)
 {
     int j = int(strlen(ext));
     int i = int(strlen(filename)) - j;

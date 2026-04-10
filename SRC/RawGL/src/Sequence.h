@@ -24,73 +24,68 @@
 
 #include <functional>
 
-typedef enum class hres {
-    OK = 0,
+enum class hres {
+    OK  = 0,
     ERR = 1,
-} hres;
+};
 
-template <typename T>
-T str_to_numeric(hres& hr, const std::string& str_val);
+template<typename T>
+T
+str_to_numeric(hres& hr, const std::string& str_val);
 
-template<> int32_t str_to_numeric(hres& hr, const std::string& str_val);
-template<> float_t str_to_numeric(hres& hr, const std::string& str_val);
-template<> double_t str_to_numeric(hres& hr, const std::string& str_val);
+template<>
+int32_t
+str_to_numeric(hres& hr, const std::string& str_val);
+template<>
+uint32_t
+str_to_numeric(hres& hr, const std::string& str_val);
+template<>
+float_t
+str_to_numeric(hres& hr, const std::string& str_val);
+template<>
+double_t
+str_to_numeric(hres& hr, const std::string& str_val);
 
-template <typename T>
-T str_to_numeric(const std::string& str_val);
+template<typename T>
+T
+str_to_numeric(const std::string& str_val);
 
-template<> int32_t str_to_numeric(const std::string& str_val);
-template<> float_t str_to_numeric(const std::string& str_val);
-template<> double_t str_to_numeric(const std::string& str_val);
+template<>
+int32_t
+str_to_numeric(const std::string& str_val);
+template<>
+uint32_t
+str_to_numeric(const std::string& str_val);
+template<>
+float_t
+str_to_numeric(const std::string& str_val);
+template<>
+double_t
+str_to_numeric(const std::string& str_val);
 
 
-struct Pass; // Forward declaration
+struct Pass;
 
-// 
-// Uniform input (numeric or texture data)
-// 
-struct PassInput
-{
+struct PassInput {
     PassInput();
 
-    //  Maximal number of integer values
-    // (`GL_BOOL_VEC4` / `GL_INT_VEC4` at the moment)
-    static constexpr uint8_t NUM_INTS = 4;
-
-    //  Maximal number of float values
-    // (`GL_FLOAT_MAT4` at the moment)
-    static constexpr uint8_t NUM_FLOATS = 16;
-
-    // Maximal number of double values
-    // (`GL_DOUBLE_MAT4` at the moment)
+    static constexpr uint8_t NUM_INTS    = 4;
+    static constexpr uint8_t NUM_FLOATS  = 16;
     static constexpr uint8_t NUM_DOUBLES = 16;
 
-    // Forward declaration of texture attribute structures
     struct TexAttrValue;
     struct TexAttr;
 
-    // Texture attribute
-    struct TexAttr
-    {
-        // Attribute name(min, mag, s, t, ...)
+    struct TexAttr {
         std::string name;
-        // Setter function (see `_pass_input_set_tex_min` as an example)
         std::function<void(PassInput&, const GLint&)> func;
-        // Array of possible attribute values
         std::vector<TexAttrValue> possible_values;
-        // String description (for documentation and help messages purposes)
         std::string desc;
     };
 
-    //  See:
-    // `TexAttr->possible_values`
-    struct TexAttrValue
-    {
-        // String value key
+    struct TexAttrValue {
         std::string key;
-        // GLSL integer flag value it holds
         GLint gl_value;
-        // String description (for documentation and help messages purposes)
         std::string desc;
     };
 
@@ -99,20 +94,12 @@ struct PassInput
     friend const void _pass_input_set_tex_s(PassInput& pi, const GLint& val);
     friend const void _pass_input_set_tex_t(PassInput& pi, const GLint& val);
 
-    /// @brief Evaluates texture attribute from string attribute name and key value
-    /// @param hr - Result handle
-    /// @param name - Attribute name
-    /// @param attr_val_name - Attribute value key name
     const void eval_tex_attr(hres& hr, const std::string& name, const std::string& attr_val_name);
 
     static std::string get_possible_tex_attr_fmt();
 
     static const std::vector<TexAttr> TEX_ATTR_ARR;
 
-    /* Parse numeric values from array of strings.
-    */
-
-    /* TODO: Maybe make it private? */
     std::map<std::string, std::string> attributes;
     GLProgramUniform* uniform;
     std::shared_ptr<Texture> texture;
@@ -127,145 +114,96 @@ struct PassInput
     std::string path;
 };
 
-const void _pass_input_set_tex_min(PassInput& pi, const GLint& val);
-const void _pass_input_set_tex_mag(PassInput& pi, const GLint& val);
-const void _pass_input_set_tex_s(PassInput& pi, const GLint& val);
-const void _pass_input_set_tex_t(PassInput& pi, const GLint& val);
+const void
+_pass_input_set_tex_min(PassInput& pi, const GLint& val);
+const void
+_pass_input_set_tex_mag(PassInput& pi, const GLint& val);
+const void
+_pass_input_set_tex_s(PassInput& pi, const GLint& val);
+const void
+_pass_input_set_tex_t(PassInput& pi, const GLint& val);
 
-struct MeshInput
-{
-    // Mesh data
+struct MeshInput {
     struct Mesh;
     struct VertexBuffer;
 
-    struct Mesh
-    {
+    struct Mesh {
         bool isQuad;
         bool Triangles;
         GLuint render;
         std::string FileName;
 
-        float* pVerts = nullptr;
-        float* pTexts = nullptr;
-        float* pNorms = nullptr;
+        float* pVerts         = nullptr;
+        float* pTexts         = nullptr;
+        float* pNorms         = nullptr;
         unsigned char* pColrs = nullptr;
-        uint32_t* pIndxs = nullptr;
+        uint32_t* pIndxs      = nullptr;
 
         GLsizei vrtSize, texSize, nrmSize, clrSize, idxSize, numIndxs;
     };
     Mesh mesh;
 
-    // Vertex attributes buffer
-    struct VertexBuffer
-    {
-        GLuint vaoId = 0; // Vertex array object ID
-        GLuint vboId = 0; // Vertex buffer object ID
-        GLuint tboId = 0; // Texture coordinates buffer object ID
-        GLuint nboId = 0; // Normals buffer object ID
-        GLuint cboId = 0; // Colors buffer object ID
-        GLuint iboId = 0; // Indices buffer object ID
+    struct VertexBuffer {
+        GLuint vaoId = 0;
+        GLuint vboId = 0;
+        GLuint tboId = 0;
+        GLuint nboId = 0;
+        GLuint cboId = 0;
+        GLuint iboId = 0;
     };
     VertexBuffer VBO;
 
-    // Forward declaration of texture attribute structures
     struct MeshParmValue;
 
-    // Mesh attribute
-    struct MeshParm
-    {
-        // Attribute name(tris, rend, ...)
+    struct MeshParm {
         std::string name;
-        // Setter function (see `_pass_input_set_triangles` as an example)
         std::function<void(MeshInput&, const GLuint&)> func;
-        // Array of possible attribute values
         std::vector<MeshParmValue> possible_values;
-        // String description (for documentation and help messages purposes)
         std::string desc;
     };
-    //MeshParm meshParm;
-    //  See:
-    // `MeshParm->possible_values`
-    struct MeshParmValue
-    {
-        // String value key
+
+    struct MeshParmValue {
         std::string key;
-        // GLSL integer flag value it holds
         GLuint gl_value;
-        // String description (for documentation and help messages purposes)
         std::string desc;
     };
-    //MeshParmValue meshParmValue;
 
     friend const void _pass_input_set_triangles(MeshInput& pi, const GLuint& val);
     friend const void _pass_input_set_render(MeshInput& pi, const GLuint& val);
 
-    /// @brief Evaluates texture attribute from string attribute name and key value
-    /// @param hr - Result handle
-    /// @param name - Attribute name
-    /// @param attr_val_name - Attribute value key name
     const void eval_mesh_parm(hres& hr, const std::string& name, const std::string& attr_val_name);
 
     static std::string get_possible_mesh_parm_fmt();
 
     static const std::vector<MeshParm> MESH_PARM_ARR;
 
-    MeshInput() :
-        mesh{
-            true, true, GL_TRIANGLES,                       // isQuad, Triangles
-            "",                                             // FileName
-            nullptr, nullptr, nullptr, nullptr, nullptr,    // pointers to attributes
-            0,0,0,0,0,0                                     // atribute sizes
-        },
-        VBO()
-        //,
-        //meshParm(),
-        //meshParmValue()
+    MeshInput()
+        : mesh { true, true, GL_TRIANGLES, "", nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, 0, 0, 0, 0 }
+        , VBO()
     {
-	}
+    }
 };
 
-const void _pass_input_set_triangles(MeshInput& pi, const GLuint& val);
-const void _pass_input_set_render(MeshInput& pi, const GLuint& val);
+const void
+_pass_input_set_triangles(MeshInput& pi, const GLuint& val);
+const void
+_pass_input_set_render(MeshInput& pi, const GLuint& val);
 
-struct PassInputCounters
-{
+struct PassInputCounters {
     PassInputCounters();
-	
-    //struct CounterParm;
-    //struct CounterParmValue;
-	
-    // Counters parameters
-    //struct CounterParm
-    //{
-    //    // Attribute name(min, mag, s, t, ...)
-    //    std::string name;
-    //    // Setter function (see `_pass_input_set_tex_min` as an example)
-    //    // std::function<void(PassInputCounters&, const GLint&)> func;
-    //    // String description (for documentation and help messages purposes)
-    //    std::string desc;
-    //};
-
-    //const void eval_counter_parm(hres& hr, const std::string& parm_name);
-	
-    //static const std::vector<CounterParm> COUNTER_PARM_ARR;
 
     std::string name;
     GLuint bufferID;
     GLint binding;
-	GLint offset;
-	GLint size;
-	std::vector<GLuint> value;
+    GLint offset;
+    GLint size;
+    std::vector<GLuint> value;
     std::vector<GLuint> result;
 
-    int passIn; // Index of pass input
-
-    //std::string path;
+    int passIn;
 };
 
-struct passCounters
-{
-    //passCounters();
-    
+struct passCounters {
     GLuint bufferID;
 
     std::vector<GLuint> value;
@@ -273,64 +211,30 @@ struct passCounters
 
     std::shared_ptr<GLProgramBuffers> buffer;
 
-    int passIn; // Index of pass input
+    int passIn;
 
-    passCounters() :
-        bufferID(0),
-        value(0),
-        result(0),
-        buffer(nullptr),
-        passIn(-1)
+    passCounters()
+        : bufferID(0)
+        , value(0)
+        , result(0)
+        , buffer(nullptr)
+        , passIn(-1)
     {
-	}
+    }
 };
 
-//
-// File output
-//
-struct PassOutput
-{
-    //
-    // Data gathered from output source (CLI or API calls)
-    //
-
-    // Framebuffer output texture format description
+struct PassOutput {
     std::string internalFormatText;
-
-    // Path to output file
     std::string path;
-
-    // User-provided OIIO & plugin attributes
     std::map<std::string, std::string> attributes;
-
-    // Number of channels
     int channels;
-
-    // Index of alpha channel
     int alphaChannel;
-
-    // Bits per channel
     int bits;
 
-    //std::pair<std::string, int> compression;
-
-    //
-    // Post-parse data
-    //
-
-    // Pointer to an output in pass' program object (fragment shader)
     GLProgramOutput* output;
-
-    // Pointer to a uniform in pass' program object (compute shader)
     GLProgramUniform* uniform;
-
-	// Pointer to a atomic counter in pass' program object (compute shader)
-    //GLProgramBuffers* atomicCounter;
-	
-    // Texture attached to this output channel in the FBO
     std::shared_ptr<Texture> texture;
 
-    // OIIO stuff
     OIIO::TypeDesc format;
     bool formatDefaulted;
 
@@ -339,29 +243,26 @@ struct PassOutput
     void saveTexture();
 };
 
-struct Pass
-{
-    //
-    // GenericObject template
-    // 
-    template <typename T>
-    struct GenericObject
-    {
+struct Pass {
+    template<typename T> struct GenericObject {
         std::string typetext = "";
         GLenum type;
         GLuint id, binding;
         const GLint size;
         T* value;
 
-        GenericObject( GLenum type, GLuint id, GLuint binding, const GLint size, T* src_value = nullptr )
-            : type(type), id(id), binding(binding), size(size), value(src_value)
+        GenericObject(GLenum type, GLuint id, GLuint binding, const GLint size, T* src_value = nullptr)
+            : type(type)
+            , id(id)
+            , binding(binding)
+            , size(size)
+            , value(src_value)
         {
             typetext = "";
-            value = new T[size];
+            value    = new T[size];
             if (src_value) {
                 std::memcpy(value, src_value, size * sizeof(T));
-            }
-            else {
+            } else {
                 std::memset(value, 0, size * sizeof(T));
             }
         }
@@ -373,136 +274,83 @@ struct Pass
             return default_values;
         }
 
-        ~GenericObject()
-        {
- //          if (value != attachment)
- //               delete[] value;
-        }
+        ~GenericObject() {}
     };
-    //
-    // Data gathered from source (CLI or API calls)
-    //
 
     std::shared_ptr<GLProgram> program;
-    
-    //
-    // Buffers 
-    // 
-    /*
-        * Buffer Objects
-        * Query Objects
-        * Renderbuffer Objects
-        * Sampler Objects
-        * Texture Objects
-    Container objects: 
-        * Framebuffer Objects
-        * Program Pipeline Objects
-        * Transform Feedback Objects
-        * Vertex Array Objects
-    */
 
     struct FBOobject;
     struct VAObject;
 
-    using BObject = GenericObject<GLuint>;
+    using BObject   = GenericObject<GLuint>;
     using SSBObject = GenericObject<GLint>;
-    //using UBObject = GenericObject<GLuint>;
 
-    struct GLBO
-    {
-        std::vector<FBOobject>  FBO;    // FBO
-        std::vector<VAObject>   VBO;    // VBO
-        std::map<std::string,BObject>    BO;  // BO
-        std::map<std::string,SSBObject> SSBO; // SSBO
-        //std::vector<UBObject>   UBO;    // UBO
+    struct GLBO {
+        std::vector<FBOobject> FBO;
+        std::vector<VAObject> VBO;
+        std::map<std::string, BObject> BO;
+        std::map<std::string, SSBObject> SSBO;
     };
     GLBO glbObject;
 
-    struct FBOobject
-    {
-		GLuint id;
-        std::map<std::string, GLuint> object;
-	};
-    struct VAObject
-    {
+    struct FBOobject {
         GLuint id;
         std::map<std::string, GLuint> object;
     };
 
-    // Compute shaders
+    struct VAObject {
+        GLuint id;
+        std::map<std::string, GLuint> object;
+    };
+
     bool isCompute;
 
-    // One for each user-specified data entry
     std::map<std::string, PassInput> inputs;
 
     struct inputCounter {
         GLuint size;
         std::vector<GLuint> value;
 
-        inputCounter() {
-            size = 1;
+        inputCounter()
+        {
+            size  = 1;
             value = { 0 };
         }
     };
 
     std::map<std::string, inputCounter> inputCounters;
-
-	// One for each user-specified atomic counter
     std::multimap<GLint, passCounters> u_aCounters;
-
     std::map<std::string, PassInputCounters> u_aBuffers;
-    
-
-    // One for each last stage shader output (i.e. fragment)
     std::map<std::string, PassOutput> outputs;
-
-    // MeshInput
     std::map<std::string, MeshInput> meshes;
 
-    struct CullMode
-    {
-		GLint windOrder = GL_CW;
-		GLint cullFace = GL_BACK;
-		bool cullFaceEnable = true;
+    struct CullMode {
+        GLint windOrder     = GL_CW;
+        GLint cullFace      = GL_BACK;
+        bool cullFaceEnable = true;
     } cullMode;
 
-    // Cull mode attribute
-    struct CullModeVal
-    {
+    struct CullModeVal {
         std::string key;
         GLint gl_value;
-         std::string desc;
+        std::string desc;
     };
 
-    struct CullModeAttr
-    {
+    struct CullModeAttr {
         std::string name;
         std::function<void(CullMode&, const GLuint&)> func;
         std::vector<CullModeVal> possible_values;
         std::string desc;
     };
 
-
-    // Size description
     std::string sizeText[2];
-
-    // Threads description
     std::string workGroupSizeText[2];
-
-    // background color
     float clearColor[4];
 
-    //
-    // Post-parse data
-    //
+    int size[2]          = { 512, 512 };
+    int workGroupSize[2] = { 16, 16 };
 
-    // Output viewport size
-	int size[2] = { 512, 512 };
-
-    // Number of threads
-	int workGroupSize[2] = { 16, 16 };
-
-    GLuint  fboId;
+    GLuint fboId;
 
     friend const void _pass_input_set_cull_face(CullMode& mm, const GLuint& val);
     friend const void _pass_input_set_wind_order(CullMode& mm, const GLuint& val);
@@ -513,27 +361,29 @@ struct Pass
 
     const void eval_cull_parm(hres& hr, const std::string& name, const std::string& attr_val_name);
 
-    Pass(const std::shared_ptr<GLProgram>& p, bool isCompute) :
-        program(p),
-        isCompute(isCompute),
-        glbObject(),
-        sizeText{ "512", "512" },
-        workGroupSizeText{ "16", "16" },
-        fboId(0),
-        clearColor{ 0.0f, 0.0f, 0.0f, 0.0f },
-        cullMode{ GL_CW, GL_BACK, true }
-    {}
+    Pass(const std::shared_ptr<GLProgram>& p, bool isCompute)
+        : program(p)
+        , isCompute(isCompute)
+        , glbObject()
+        , sizeText { "512", "512" }
+        , workGroupSizeText { "16", "16" }
+        , fboId(0)
+        , clearColor { 0.0f, 0.0f, 0.0f, 0.0f }
+        , cullMode { GL_CW, GL_BACK, true }
+    {
+    }
 };
 
-const void _pass_input_set_cull_face(Pass::CullMode& mm, const GLuint& val);
-const void _pass_input_set_wind_order(Pass::CullMode& mm, const GLuint& val);
-const void _pass_input_set_cull_enable(Pass::CullMode& mm, const GLuint& val);
+const void
+_pass_input_set_cull_face(Pass::CullMode& mm, const GLuint& val);
+const void
+_pass_input_set_wind_order(Pass::CullMode& mm, const GLuint& val);
+const void
+_pass_input_set_cull_enable(Pass::CullMode& mm, const GLuint& val);
 
 
-class Sequence
-{
+class Sequence {
 public:
-    // initialize from command line
     Sequence(int argc, const char* argv[]);
     ~Sequence();
 
@@ -542,14 +392,9 @@ public:
 private:
     Sequence() {}
 
-    // all resources used in the sequence
     std::map<std::string, std::shared_ptr<Texture>> m_textures;
-    //std::map<std::string, std::shared_ptr<GLSLProgram>> m_shaders;
-    
-    struct m_passCounters
-    {
-        //passCounters();
 
+    struct m_passCounters {
         GLuint bufferID;
 
         std::vector<GLuint> value;
@@ -557,40 +402,38 @@ private:
 
         std::shared_ptr<GLProgramBuffers> buffer;
 
-        std::map<GLint, bool> passIn; // Index of pass input / userInput
+        std::map<GLint, bool> passIn;
 
-        m_passCounters() :
-            bufferID(0),
-            value(0),
-            result(0),
-            buffer(nullptr),
-            passIn()
+        m_passCounters()
+            : bufferID(0)
+            , value(0)
+            , result(0)
+            , buffer(nullptr)
+            , passIn()
         {
         }
     };
 
-    std::multimap<GLint, m_passCounters> p_aCounters; // Binding, Buffer
+    std::multimap<GLint, m_passCounters> p_aCounters;
 
-    int checkCounters(std::pair<const std::string, std::shared_ptr<GLProgramBuffers>> counterIt) {
-        auto range = p_aCounters.equal_range(counterIt.second->binding);
+    int checkCounters(std::pair<const std::string, std::shared_ptr<GLProgramBuffers>> counterIt)
+    {
+        auto range  = p_aCounters.equal_range(counterIt.second->binding);
         size_t size = std::distance(range.first, range.second);
-        int result = 0; // 0 - not found, 1 - same binding, 2 - same binding and offset, 3 - identical
-        if (size > 0) { 
+        int result  = 0;
+        if (size > 0) {
             for (auto it = range.first; it != range.second; ++it) {
                 if (it->second.buffer->offset == counterIt.second->offset) {
-                    if (it->second.buffer->size == counterIt.second->size) { 
+                    if (it->second.buffer->size == counterIt.second->size) {
                         result = 3;
                     }
                     result = result < 3 ? 2 : result;
-				}
-				result = result < 2 ? 1 : result;
-			}
-		}
+                }
+                result = result < 2 ? 1 : result;
+            }
+        }
         return result;
     }
-
-    //std::multimap<GLuint, std::pair<GLuint, std::shared_ptr<passCounters>>> p_acounters; // Binding, BufferID, Buffer
-    //std::map<std::string, PassInputCounters> m_atBuffers;
 
     std::vector<Pass> m_passes;
 
