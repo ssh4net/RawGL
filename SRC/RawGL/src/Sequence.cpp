@@ -156,6 +156,16 @@ build_help_text()
     return stream.str();
 }
 
+static void
+print_version_text()
+{
+    std::cout << termcolor::bright_yellow << termcolor::bold;
+    std::cout << APP_NAME << " version " << APP_VERSION[0] << "." << APP_VERSION[1] << "." << APP_VERSION[2]
+              << " Copyright (c) " << APP_AUTHOR << std::endl;
+    std::cout << "Build from: " << __DATE__ << ", " << __TIME__ << "." << std::endl;
+    std::cout << termcolor::reset;
+}
+
 static ParsedArguments
 parse_arguments(int argc, const char* argv[])
 {
@@ -461,6 +471,32 @@ upload_mesh_buffers(MeshInput& meshInput)
 }
 }  // namespace
 
+bool
+Sequence_HandleImmediateCommandLine(int argc, const char* argv[], int& exitCode)
+{
+    try {
+        const ParsedArguments parsedArguments = parse_arguments(argc, argv);
+
+        if (parsedArguments.showHelp || argc < 2) {
+            std::cout << build_help_text() << std::endl;
+            exitCode = 0;
+            return true;
+        }
+
+        if (parsedArguments.showVersion) {
+            print_version_text();
+            exitCode = 0;
+            return true;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        exitCode = 1;
+        return true;
+    }
+
+    return false;
+}
+
 namespace std {
 std::ostream&
 operator<<(std::ostream& os, const std::vector<std::string>& vec)
@@ -487,10 +523,7 @@ Sequence::Sequence(int argc, const char* argv[])
         }
 
         if (parsedArguments.showVersion) {
-            std::cout << termcolor::bright_yellow << termcolor::bold;
-            std::cout << APP_NAME << " version " << APP_VERSION[0] << "." << APP_VERSION[1] << "." << APP_VERSION[2]
-                      << " Copyright (c) " << APP_AUTHOR << std::endl;
-            std::cout << "Build from: " << __DATE__ << ", " << __TIME__ << "." << std::endl;
+            print_version_text();
             // Get available GPU features
             get_GPUfeatures();
 

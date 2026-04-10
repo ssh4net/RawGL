@@ -40,10 +40,15 @@ main(int argc, const char* argv[])
 
     Timer timer;
 
-    OpenGLHandle glhandle;
-
     // init the logger
     Log_Init();
+
+    int exitCode = 0;
+    if (Sequence_HandleImmediateCommandLine(argc, argv, exitCode)) {
+        return exitCode;
+    }
+
+    OpenGLHandle glhandle;
 
     // start the sequence
     Sequence sequence(argc, argv);

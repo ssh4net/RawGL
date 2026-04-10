@@ -20,6 +20,7 @@
 #include "OpenGLUtils.h"
 #include "Log.h"
 
+#include <cstdlib>
 #include <stdexcept>
 #include <termcolor/termcolor.hpp>
 
@@ -27,6 +28,48 @@
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+
+namespace {
+void
+rawgl_glfw_error_callback(int error, const char* description)
+{
+    LOG(error) << "[GLFW] (" << error << "): " << (description != nullptr ? description : "unknown");
+}
+
+std::string
+rawgl_glfw_error_text(const char* prefix)
+{
+    const char* description = nullptr;
+    const int error         = glfwGetError(&description);
+
+    if (error == GLFW_NO_ERROR) {
+        return prefix;
+    }
+
+    std::string message(prefix);
+    message += " (GLFW ";
+    message += std::to_string(error);
+    message += ": ";
+    message += description != nullptr ? description : "unknown";
+    message += ")";
+    return message;
+}
+
+void
+rawgl_set_context_hints(int major, int minor)
+{
+    glfwDefaultWindowHints();
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, major);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, minor);
+    glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_NATIVE_CONTEXT_API);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
+
+#ifdef __APPLE__
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#endif
+}
+}  // namespace
 
 void
 GL_ClearError()
@@ -48,38 +91,73 @@ GL_LogCall(const char* func, const char* file, int line)
 
 OpenGLHandle::OpenGLHandle()
 {
+    glfwSetErrorCallback(rawgl_glfw_error_callback);
+
+#if defined(__linux__)
+    const char* x11Display     = std::getenv("DISPLAY");
+    const char* waylandDisplay = std::getenv("WAYLAND_DISPLAY");
+    LOG(info) << "DISPLAY=" << (x11Display != nullptr ? x11Display : "")
+              << ", WAYLAND_DISPLAY=" << (waylandDisplay != nullptr ? waylandDisplay : "");
+    if (x11Display != nullptr && x11Display[0] != '\0') {
+        glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+        LOG(info) << "Using GLFW platform X11 (" << x11Display << ")";
+    } else if (waylandDisplay != nullptr && waylandDisplay[0] != '\0') {
+        glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
+        LOG(info) << "Using GLFW platform Wayland (" << waylandDisplay << ")";
+    }
+#endif
+
     if (!glfwInit()) {
-        throw std::runtime_error("Failed to initialize GLFW");
+        throw std::runtime_error(rawgl_glfw_error_text("Failed to initialize GLFW"));
     }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
-
-#ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    int contextMajor = 4;
+    int contextMinor = 6;
+#if defined(__linux__)
+    contextMinor = 5;
 #endif
+
+    LOG(info) << "Requesting OpenGL context " << contextMajor << "." << contextMinor;
+
+    rawgl_set_context_hints(contextMajor, contextMinor);
 
     m_window = glfwCreateWindow(512, 512, "Hidden Window", nullptr, nullptr);
 
     if (m_window == nullptr) {
         glfwTerminate();
-        throw std::runtime_error("Failed to create GLFW window");
+        throw std::runtime_error(rawgl_glfw_error_text("Failed to create GLFW window"));
     }
 
     glfwMakeContextCurrent(m_window);
 
+    const GLubyte* glVersionText = glGetString(GL_VERSION);
+    LOG(info) << "Created OpenGL context: "
+              << (glVersionText != nullptr ? reinterpret_cast<const char*>(glVersionText) : "unknown");
+
 #if defined(RAWGL_USE_GLEW)
     glewExperimental = GL_TRUE;
-#endif
-
+    const GLenum glewError = glewInit();
+    if (glewError != GLEW_OK) {
+        const GLubyte* glewErrorText = glewGetErrorString(glewError);
+        std::string message("Failed to initialize GLEW");
+        if (glewErrorText != nullptr) {
+            message += ": ";
+            message += reinterpret_cast<const char*>(glewErrorText);
+        }
+        glfwDestroyWindow(m_window);
+        m_window = nullptr;
+        glfwTerminate();
+        throw std::runtime_error(message);
+    }
+    GL_ClearError();
+#else
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         glfwDestroyWindow(m_window);
         m_window = nullptr;
         glfwTerminate();
         throw std::runtime_error("Failed to initialize GLAD");
     }
+#endif
 }
 
 OpenGLHandle::~OpenGLHandle()

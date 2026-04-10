@@ -381,6 +381,9 @@ _pass_input_set_wind_order(Pass::CullMode& mm, const GLuint& val);
 const void
 _pass_input_set_cull_enable(Pass::CullMode& mm, const GLuint& val);
 
+bool
+Sequence_HandleImmediateCommandLine(int argc, const char* argv[], int& exitCode);
+
 
 class Sequence {
 public:
