@@ -25,6 +25,23 @@
 
 #include <termcolor/termcolor.hpp>
 
+namespace {
+[[noreturn]] void
+throw_program_error(const std::string& message)
+{
+    throw std::runtime_error(message);
+}
+
+void
+trim_glsl_array_suffix(char* name, GLsizei length)
+{
+    char* split = std::find(name, name + length, '[');
+    if (split != name + length) {
+        *split = '\0';
+    }
+}
+}  // namespace
+
 //
 // Uniform
 //
@@ -98,8 +115,10 @@ GLProgramUniform::set(GLuint value)
     switch (type) {
     case GL_UNSIGNED_INT_SAMPLER_2D:
     case GL_UNSIGNED_INT_IMAGE_2D:
+        glUniform1i(location, static_cast<GLint>(value));
+        break;
     case GL_UNSIGNED_INT:
-        glUniform1i(location, value);
+        glUniform1ui(location, value);
         break;
         //default:
         //    assert(0);
@@ -454,8 +473,7 @@ GLProgram::compileUniformList()
         GLCall(glGetActiveUniform(m_id, i, sizeof(name), &length, &size, &type, name));
 
         if (length > sizeof(name)) {
-            LOG(error) << "program: uniform name length exceeds " << sizeof(name);
-            exit(1);
+            throw_program_error("program: uniform name length exceeds 256");
         }
 
         GLint location = glGetUniformLocation(m_id, name);
@@ -490,34 +508,33 @@ GLProgram::compileBuffersList()
         ncount,  // ncount - number of uniforms from glGetProgramInterfaceiv(GL_UNIFORM, GL_ACTIVE_RESOURCES)
         bncount;  // bncount - number of buffer variables from glGetProgramInterfaceiv(GL_BUFFER_VARIABLE, GL_ACTIVE_RESOURCES)
 
+    m_acounters.clear();
+    m_abuffers.clear();
+
     // returns the number of active attribute atomic counter buffers used by program.
     GLCall(glGetProgramiv(m_id, GL_ACTIVE_ATOMIC_COUNTER_BUFFERS, &acount));
     GLCall(glGetProgramInterfaceiv(m_id, GL_SHADER_STORAGE_BLOCK, GL_ACTIVE_RESOURCES, &bcount));
     GLCall(glGetProgramInterfaceiv(m_id, GL_BUFFER_VARIABLE, GL_ACTIVE_RESOURCES, &bncount));
 
-    if (!acount || !bcount) {
-        m_acounters.clear();
-        return;
-    }
-
-    // counters_map - multimap to store atomic counter info.
-    // Index is atomic counter binding point.
-    struct cntrNames  // struct to store atomic counter names and offset in counters_map
-    {
+    struct cntrNames {
         std::string name;
+        GLint buffer_index;
         GLuint offset, size;
-        cntrNames(std::string name, GLuint offset, GLuint size)
+        cntrNames(std::string name, GLint buffer_index, GLuint offset, GLuint size)
             : name(name)
+            , buffer_index(buffer_index)
             , offset(offset)
             , size(size)
         {
         }
     };
-    std::multimap<int, cntrNames> counters_map;
+    std::vector<cntrNames> counters_list;
 
-    // counters_bindings - map to store atomic counter binding point.
-    // buffer_binding - map to store buffer binding point.
-    std::multimap<GLint, GLsizei> counters_bindings;
+    struct cntrBinding {
+        GLint binding = -1;
+        GLsizei size  = 0;
+    };
+    std::vector<cntrBinding> counters_bindings;
 
     // buffers_map - multimap to store buffer info.
     struct bufNames  // struct to store buffer names and offset in buffers_map
@@ -548,101 +565,79 @@ GLProgram::compileBuffersList()
 
     std::multimap<GLint, bufBinding> buffers_bindings;
 
-    // atomic counters names scan pass
-    GLCall(glGetProgramInterfaceiv(m_id, GL_UNIFORM, GL_ACTIVE_RESOURCES, &ncount));
-    for (int i = 0; i < ncount; i++) {
-        char name[256];
-        GLsizei length;
-        GLsizei size;
-        GLenum type;
+    if (acount > 0) {
+        GLCall(glGetProgramInterfaceiv(m_id, GL_UNIFORM, GL_ACTIVE_RESOURCES, &ncount));
+        counters_list.reserve(ncount);
 
-        const GLenum props[] = { GL_TYPE,
-                                 GL_LOCATION,
-                                 GL_ARRAY_SIZE,
-                                 GL_OFFSET,
-                                 GL_ATOMIC_COUNTER_BUFFER_INDEX,
-                                 GL_REFERENCED_BY_VERTEX_SHADER,
-                                 GL_REFERENCED_BY_FRAGMENT_SHADER,
-                                 GL_REFERENCED_BY_COMPUTE_SHADER };
-        GLint propData[8];
+        for (int i = 0; i < ncount; i++) {
+            char name[256];
+            GLsizei length;
 
-        GLCall(glGetProgramResourceName(m_id, GL_UNIFORM, i, sizeof(name), &length, name));
-        GLCall(glGetProgramResourceiv(m_id, GL_UNIFORM, i, 8, props, 8, NULL, propData));
+            const GLenum props[] = { GL_TYPE,
+                                     GL_LOCATION,
+                                     GL_ARRAY_SIZE,
+                                     GL_OFFSET,
+                                     GL_ATOMIC_COUNTER_BUFFER_INDEX,
+                                     GL_REFERENCED_BY_VERTEX_SHADER,
+                                     GL_REFERENCED_BY_FRAGMENT_SHADER,
+                                     GL_REFERENCED_BY_COMPUTE_SHADER };
+            GLint propData[8];
 
-        GLCall(glGetActiveUniform(m_id, i, sizeof(name), &length, &size, &type, name));
-        if (length > sizeof(name)) {
-            LOG(error) << "program: uniform name length exceeds " << sizeof(name);
-            exit(1);
+            GLCall(glGetProgramResourceName(m_id, GL_UNIFORM, i, sizeof(name), &length, name));
+            GLCall(glGetProgramResourceiv(m_id, GL_UNIFORM, i, 8, props, 8, NULL, propData));
+
+            if (length > sizeof(name)) {
+                throw_program_error("program: uniform name length exceeds 256");
+            }
+
+            if (propData[0] != GL_UNSIGNED_INT_ATOMIC_COUNTER) {
+                continue;
+            }
+
+            trim_glsl_array_suffix(name, length);
+
+            counters_list.push_back(cntrNames(name, propData[4], propData[3], propData[2]));
         }
-        if (type == GL_UNSIGNED_INT_ATOMIC_COUNTER) {
-            counters_map.insert({
-                propData[4],                               // atomic counter buffer index
-                cntrNames(name, propData[3], propData[2])  // name, offset, size
-            });
+
+        counters_bindings.resize(acount);
+
+        for (GLint i = 0; i < acount; i++) {
+            GLint binding, size;
+
+            GLCall(glGetActiveAtomicCounterBufferiv(m_id, i, GL_ATOMIC_COUNTER_BUFFER_BINDING, &binding));
+            GLCall(glGetActiveAtomicCounterBufferiv(m_id, i, GL_ATOMIC_COUNTER_BUFFER_DATA_SIZE, &size));
+
+            counters_bindings[i].binding = binding;
+            counters_bindings[i].size    = size;
+        }
+
+        for (const cntrNames& counter : counters_list) {
+            if (counter.buffer_index < 0 || counter.buffer_index >= static_cast<GLint>(counters_bindings.size())) {
+                throw_program_error("Atomic counter " + counter.name + " references invalid buffer index "
+                                    + std::to_string(counter.buffer_index));
+            }
+
+            const cntrBinding& bindingInfo = counters_bindings[counter.buffer_index];
+            const GLint counterBytes       = static_cast<GLint>(counter.size * sizeof(GLuint));
+
+            if (bindingInfo.binding < 0 || bindingInfo.size < counter.offset + counterBytes) {
+                throw_program_error("Atomic counter " + counter.name + " size does not fit reflected buffer size.");
+            }
+
+            LOG(trace) << "Counter: " << counter.name << " binding: " << bindingInfo.binding
+                       << " offset: " << counter.offset << " size: " << counter.size << std::endl;
+
+            m_acounters.insert({ counter.name,
+                                 std::make_shared<GLProgramBuffers>(GLProgramBuffers::AtomicCounterBuffer(
+                                     counter.name, counter.buffer_index, bindingInfo.binding, counter.offset,
+                                     counter.size)) });
         }
     }
-    int counter_idx    = 0;
-    size_t uniform_cnt = counters_map.size();
 
-    for (GLint i = 0; i < acount; i++) {
-        GLint binding, size;
-
-        GLCall(glGetActiveAtomicCounterBufferiv(m_id, i, GL_ATOMIC_COUNTER_BUFFER_BINDING, &binding));
-        GLCall(glGetActiveAtomicCounterBufferiv(m_id, i, GL_ATOMIC_COUNTER_BUFFER_DATA_SIZE, &size));
-
-        counters_bindings.insert({ binding, size });
-    }
-
-    int map_index = 0;
-    int index     = 0;
-
-    // atomic counters bindings scan pass
-    for (const auto& it : counters_bindings) {
-        GLuint size = it.second / sizeof(GLuint);
-        GLuint buffer_size;
-        if (size > 1) {
-            for (int i = 0; i < size; i++) {
-                auto range = counters_map.equal_range(map_index);
-                for (auto jt = range.first; jt != range.second; ++jt) {
-                    buffer_size = size;
-                    LOG(trace) << "Counter: " << jt->second.name << " binding: " << it.first
-                               << " offset: " << jt->second.offset << " size: " << jt->second.size << std::endl;
-
-                    m_acounters.insert(
-                        { jt->second.name,
-                          std::make_shared<GLProgramBuffers>(GLProgramBuffers::AtomicCounterBuffer(
-                              jt->second.name, map_index, it.first, jt->second.offset, jt->second.size)) });
-                    index++;
-                    buffer_size -= jt->second.size + jt->second.offset / sizeof(GLuint);
-                    if (buffer_size == 0) {
-                        break;
-                    }
-                }
-                if (buffer_size == 0) {
-                    break;
-                }
-                LOG(error) << "Atomic counter and uniform size mizmatch.";
-                exit(1);
-            }
-        } else {
-            auto range = counters_map.equal_range(map_index);
-            for (auto jt = range.first; jt != range.second; ++jt) {
-                buffer_size = size;
-                LOG(trace) << "Counter: " << jt->second.name << " binding: " << it.first
-                           << " offset: " << jt->second.offset << " size: " << jt->second.size << std::endl;
-
-                m_acounters.insert({ jt->second.name,
-                                     std::make_shared<GLProgramBuffers>(GLProgramBuffers::AtomicCounterBuffer(
-                                         jt->second.name, map_index, it.first, jt->second.offset, jt->second.size)) });
-                index++;
-                buffer_size -= jt->second.size + jt->second.offset / sizeof(GLuint);
-            }
-            if (buffer_size != 0) {
-                LOG(error) << "Atomic counter and uniform size mizmatch.";
-                exit(1);
-            }
-        }
-        map_index++;
+    if (!bcount || !bncount) {
+        LOG(debug) << "Program: " << m_id << " Atomic buffers: " << m_abuffers.size() << std::endl;
+        LOG(debug) << "Program: " << m_id << " Atomic counters: " << m_acounters.size() << std::endl;
+        return;
     }
 
     // GL_SHADER_STORAGE_BUFFER - bindings scan pass
@@ -656,8 +651,7 @@ GLProgram::compileBuffersList()
 
         GLCall(glGetProgramResourceName(m_id, GL_SHADER_STORAGE_BLOCK, i, sizeof(name), &length, name));
         if (length > sizeof(name)) {
-            LOG(error) << "program: buffer name length exceeds " << sizeof(name);
-            exit(1);
+            throw_program_error("program: buffer name length exceeds 64");
         }
 
         GLCall(glGetProgramResourceiv(m_id, GL_SHADER_STORAGE_BLOCK, i, 4, props, 4, nullptr, propData));
@@ -669,8 +663,8 @@ GLProgram::compileBuffersList()
 
     // GL_SHADER_STORAGE_BUFFER - Names scan pass
     int prv_index = -1;  // previous index
-    map_index     = -1;  // map index
-    index         = -1;  // index in map
+    int map_index = -1;  // map index
+    int index     = -1;  // index in map
 
     for (int i = 0; i < bncount; i++) {
         char name[64];
@@ -691,8 +685,7 @@ GLProgram::compileBuffersList()
 
         GLCall(glGetProgramResourceName(m_id, GL_BUFFER_VARIABLE, i, sizeof(name), &length, name));
         if (length > sizeof(name)) {
-            LOG(error) << "program: uniform name length exceeds " << sizeof(name);
-            exit(1);
+            throw_program_error("program: uniform name length exceeds 64");
         }
 
         GLCall(glGetProgramResourceiv(m_id, GL_BUFFER_VARIABLE, i, 12, props, 12, nullptr, propData));
@@ -706,10 +699,7 @@ GLProgram::compileBuffersList()
             prv_index = map_index;
             index++;
         }
-        char* split = std::find(name, name + length, '[');
-        if (split != name + length) {
-            *split = '\0';
-        }
+        trim_glsl_array_suffix(name, length);
 
         buffers_map.insert({
             index,                                                 // atomic counter buffer index
@@ -772,10 +762,10 @@ GLProgram::compileOutputList()
         glGetProgramResourceName(m_id, GL_PROGRAM_OUTPUT, i, sizeof(name), &length, name);
 
         if (length > sizeof(name)) {
-            LOG(error) << "program: output name length exceeds " << sizeof(name);
-            exit(1);
+            throw_program_error("program: output name length exceeds 64");
         }
 
+        trim_glsl_array_suffix(name, length);
         m_outputs.insert({ name, GLProgramOutput(propData[0], propData[1]) });
         LOG(trace) << "Output: " << name << " location = " << propData[1] << " type = " << glsl_type_name(propData[0])
                    << std::endl;

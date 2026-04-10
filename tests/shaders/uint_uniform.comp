@@ -1,0 +1,12 @@
+#version 450 core
+
+uniform uint u_value;
+layout(rgba32f) writeonly uniform image2D o_out0;
+
+layout(local_size_x = 1, local_size_y = 1) in;
+
+void main()
+{
+    const float parsed_as_uint = (u_value > 2147483647u) ? 1.0 : 0.0;
+    imageStore(o_out0, ivec2(0, 0), vec4(parsed_as_uint, 0.0, 0.0, 1.0));
+}

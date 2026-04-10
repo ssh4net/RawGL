@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+rawgl_bin="${RAWGL_BIN:-$repo_root/build_linux_release/RawGL}"
+oiiotool_bin="${RAWGL_OIIOTOOL:-/mnt/e/UBc/Release/bin/oiiotool}"
+out_file="$script_dir/outputs/uint_uniform.exr"
+
+rm -f "$out_file"
+
+"$rawgl_bin" \
+  --verbosity 5 \
+  --pass_comp "$script_dir/shaders/uint_uniform.comp" \
+  --pass_size 1 1 \
+  --pass_workgroupsize 1 1 \
+  --in u_value 4000000000 \
+  --out o_out0 "$out_file" \
+  --out_format rgba32f \
+  --out_channels 4 \
+  --out_alpha_channel 3 \
+  --out_bits 32
+
+test -f "$out_file"
+
+stats="$("$oiiotool_bin" "$out_file" --printstats)"
+printf '%s\n' "$stats"
+printf '%s\n' "$stats" | rg -q "Stats Avg: 1\\.000000 0\\.000000 0\\.000000 1\\.000000"

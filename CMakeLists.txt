@@ -242,6 +242,7 @@ else()
     find_package(glew CONFIG REQUIRED)
     find_package(glfw3 CONFIG REQUIRED)
     find_package(OpenImageIO CONFIG REQUIRED)
+    find_package(miniply CONFIG QUIET)
     foreach(rawgl_oiio_target OpenImageIO::OpenImageIO OpenImageIO::OpenImageIO_Util)
         if(TARGET ${rawgl_oiio_target})
             if(TARGET BZip2::BZip2)
@@ -276,8 +277,15 @@ if(NOT RAWGL_SPDLOG_INCLUDE_DIR)
     message(FATAL_ERROR "spdlog headers were not found. Set CMAKE_PREFIX_PATH or RAWGL_WINDOWS_DEPS_ROOT so spdlog/spdlog.h is available.")
 endif()
 
-if(NOT EXISTS "${RAWGL_MINIPLY_INCLUDE_DIR}/miniply.h")
-    message(FATAL_ERROR "miniply.h was not found. Set RAWGL_MINIPLY_INCLUDE_DIR to the directory that contains it.")
+if(TARGET miniply::miniply)
+    set(RAWGL_MINIPLY_TARGET miniply::miniply)
+    message(STATUS "RawGL miniply provider: package target miniply::miniply")
+elseif(EXISTS "${RAWGL_MINIPLY_INCLUDE_DIR}/miniply.h")
+    set(RAWGL_MINIPLY_SOURCES
+        SRC/RawGL/src/intern/miniply.cpp)
+    message(STATUS "RawGL miniply provider: vendored fallback from ${RAWGL_MINIPLY_INCLUDE_DIR}")
+else()
+    message(FATAL_ERROR "miniply was not found. Install a miniply package in CMAKE_PREFIX_PATH or set RAWGL_MINIPLY_INCLUDE_DIR to the directory that contains miniply.h.")
 endif()
 
 find_path(RAWGL_LIBRAW_INCLUDE_DIR
@@ -301,9 +309,10 @@ set(RAWGL_SOURCES
     SRC/RawGL/src/intern/ImageUtils.cpp
     SRC/RawGL/src/intern/Log.cpp
     SRC/RawGL/src/intern/MESH_IO.CPP
-    SRC/RawGL/src/intern/miniply.cpp
     SRC/RawGL/src/intern/OpenGLUtils.cpp
     SRC/RawGL/src/intern/Texture.cpp)
+
+list(APPEND RAWGL_SOURCES ${RAWGL_MINIPLY_SOURCES})
 
 if(WIN32)
     enable_language(RC)
@@ -317,9 +326,13 @@ add_executable(RawGL::rawgl ALIAS rawgl)
 target_include_directories(rawgl PRIVATE
     SRC/RawGL/src
     SRC/RawGL/src/intern
-    "${RAWGL_MINIPLY_INCLUDE_DIR}"
     "${RAWGL_LIBRAW_INCLUDE_DIR}"
     "${RAWGL_SPDLOG_INCLUDE_DIR}")
+
+if(NOT TARGET miniply::miniply)
+    target_include_directories(rawgl PRIVATE
+        "${RAWGL_MINIPLY_INCLUDE_DIR}")
+endif()
 
 target_compile_definitions(rawgl PRIVATE
     _CRT_SECURE_NO_WARNINGS
@@ -336,6 +349,7 @@ target_link_libraries(rawgl PRIVATE
     ${RAWGL_OPENGL_LOADER_TARGET}
     ${RAWGL_GLFW_TARGET}
     ${RAWGL_OIIO_TARGETS}
+    ${RAWGL_MINIPLY_TARGET}
     Threads::Threads
     ${RAWGL_EXTRA_WINDOWS_LIBS})
 
@@ -369,3 +383,49 @@ endif()
 
 set_target_properties(rawgl PROPERTIES
     OUTPUT_NAME RawGL)
+
+include(CTest)
+
+if(BUILD_TESTING)
+    function(rawgl_add_script_test test_name base_name)
+        if(WIN32)
+            add_test(NAME ${test_name}
+                COMMAND ${CMAKE_COMMAND} -E env
+                    "RAWGL_BIN_OVERRIDE=$<TARGET_FILE:rawgl>"
+                    cmd.exe /C "${CMAKE_SOURCE_DIR}/tests/${base_name}.bat")
+        else()
+            set(rawgl_test_env
+                "RAWGL_BIN=$<TARGET_FILE:rawgl>")
+            if(RAWGL_LINUX_PREFIX)
+                list(APPEND rawgl_test_env
+                    "RAWGL_OIIOTOOL=${RAWGL_LINUX_PREFIX}/bin/oiiotool")
+            endif()
+
+            add_test(NAME ${test_name}
+                COMMAND ${CMAKE_COMMAND} -E env
+                    ${rawgl_test_env}
+                    bash "${CMAKE_SOURCE_DIR}/tests/${base_name}.sh")
+        endif()
+
+        set_tests_properties(${test_name} PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    endfunction()
+
+    rawgl_add_script_test(rawgl_atomic_counter test_atomic_counter)
+    rawgl_add_script_test(rawgl_compute_image_chain test_compute_image_chain)
+    rawgl_add_script_test(rawgl_cull_parser test_cull_parser)
+    rawgl_add_script_test(rawgl_invalid_atomic_input test_invalid_atomic_input)
+    rawgl_add_script_test(rawgl_invalid_bg_color test_invalid_bg_color)
+    rawgl_add_script_test(rawgl_invalid_mesh_reference test_invalid_mesh_reference)
+    rawgl_add_script_test(rawgl_invalid_numeric_input test_invalid_numeric_input)
+    rawgl_add_script_test(rawgl_invalid_pass_reference test_invalid_pass_reference)
+    rawgl_add_script_test(rawgl_invalid_pass_size test_invalid_pass_size)
+    rawgl_add_script_test(rawgl_invalid_vertfrag_arity test_invalid_vertfrag_arity)
+    rawgl_add_script_test(rawgl_mesh_ao_sponge test_mesh_ao_sponge)
+    rawgl_add_script_test(rawgl_mesh_cli_order test_mesh_cli_order)
+    rawgl_add_script_test(rawgl_mesh_ply_smoke test_mesh_ply_smoke)
+    rawgl_add_script_test(rawgl_missing_input_uniform test_missing_input_uniform)
+    rawgl_add_script_test(rawgl_output_array_reflection test_output_array_reflection)
+    rawgl_add_script_test(rawgl_single_file_vertfrag test_single_file_vertfrag)
+    rawgl_add_script_test(rawgl_uint_uniform test_uint_uniform)
+endif()

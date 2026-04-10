@@ -486,6 +486,7 @@ PassInput::get_possible_tex_attr_fmt()
 PassInput::PassInput()
 {
     memset(ints, 0, sizeof(GLint) * NUM_INTS);
+    memset(uints, 0, sizeof(GLuint) * NUM_INTS);
     memset(floats, 0, sizeof(GLfloat) * NUM_FLOATS);
     memset(doubles, 0, sizeof(GLdouble) * NUM_DOUBLES);
     uniform = nullptr;

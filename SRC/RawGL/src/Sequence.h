@@ -108,6 +108,7 @@ struct PassInput {
     GLint tex_s;
     GLint tex_t;
     GLint ints[NUM_INTS];
+    GLuint uints[NUM_INTS];
     GLfloat floats[NUM_FLOATS];
     GLdouble doubles[NUM_DOUBLES];
 
@@ -395,50 +396,39 @@ public:
 private:
     Sequence() {}
 
-    std::map<std::string, std::shared_ptr<Texture>> m_textures;
+    struct ParseState {
+        Pass* currentPass           = nullptr;
+        PassInput* currentInput     = nullptr;
+        PassOutput* currentOutput   = nullptr;
+        MeshInput* currentMeshInput = nullptr;
+        size_t currentPassN         = 0;
 
-    struct m_passCounters {
-        GLuint bufferID;
-
-        std::vector<GLuint> value;
-        std::vector<GLuint> result;
-
-        std::shared_ptr<GLProgramBuffers> buffer;
-
-        std::map<GLint, bool> passIn;
-
-        m_passCounters()
-            : bufferID(0)
-            , value(0)
-            , result(0)
-            , buffer(nullptr)
-            , passIn()
-        {
-        }
+        std::string previousInternalFormatText = "rgb32f";
+        int previousChannels                   = 3;
+        int previousAlphaChannel               = -1;
+        int previousBits                       = 16;
     };
 
-    std::multimap<GLint, m_passCounters> p_aCounters;
-
-    int checkCounters(std::pair<const std::string, std::shared_ptr<GLProgramBuffers>> counterIt)
-    {
-        auto range  = p_aCounters.equal_range(counterIt.second->binding);
-        size_t size = std::distance(range.first, range.second);
-        int result  = 0;
-        if (size > 0) {
-            for (auto it = range.first; it != range.second; ++it) {
-                if (it->second.buffer->offset == counterIt.second->offset) {
-                    if (it->second.buffer->size == counterIt.second->size) {
-                        result = 3;
-                    }
-                    result = result < 3 ? 2 : result;
-                }
-                result = result < 2 ? 1 : result;
-            }
-        }
-        return result;
-    }
+    std::map<std::string, std::shared_ptr<Texture>> m_textures;
 
     std::vector<Pass> m_passes;
 
+    void processParsedOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
+    void processPassDeclaration(const std::string& key, const std::vector<std::string>& value, ParseState& state);
+    void processPassProperty(const std::string& key, const std::vector<std::string>& value, ParseState& state);
+    void processInputOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
+    void processAtomicOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
+    void processInputAttributeOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
+    void processOutputOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
+    void preloadInputTextures();
+    void initializePass(Pass& pass, int passIndex);
+    int bindPassInputs(Pass& pass);
+    void bindInternalUniforms(Pass& pass, const MeshInput& passMesh);
+    void preparePassAtomicCounters(Pass& pass);
+    void bindPassAtomicCounters(Pass& pass);
+    void executeComputePass(Pass& pass, int textureIndex);
+    void executeGraphicsPass(Pass& pass, const MeshInput& passMesh);
+    void savePassOutputs(Pass& pass);
+    void destroyAtomicCounterBuffers();
     void initCommon();
 };

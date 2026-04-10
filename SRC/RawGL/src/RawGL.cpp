@@ -48,13 +48,18 @@ main(int argc, const char* argv[])
         return exitCode;
     }
 
-    OpenGLHandle glhandle;
+    try {
+        OpenGLHandle glhandle;
 
-    // start the sequence
-    Sequence sequence(argc, argv);
-    sequence.run();
-    std::cout << std::endl;
-    LOG(info) << "Total processing time : " << timer.nowText() << std::endl;
+        // start the sequence
+        Sequence sequence(argc, argv);
+        sequence.run();
+        std::cout << std::endl;
+        LOG(info) << "Total processing time : " << timer.nowText() << std::endl;
+    } catch (const std::exception& exception) {
+        std::cerr << exception.what() << std::endl;
+        return 1;
+    }
 
 #if 0  // _DEBUG
 	system("pause");

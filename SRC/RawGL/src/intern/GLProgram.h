@@ -152,7 +152,7 @@ struct GLProgramOutput {
     GLuint location;
 
     GLProgramOutput(GLuint location)
-        : type(NULL)
+        : type(0)
         , type_name("")
         , location(location)
     {

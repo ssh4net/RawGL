@@ -21,6 +21,25 @@
 
 GLProgramManager g_glslProgramManager;
 
+namespace {
+std::string
+inject_shader_stage_define(const std::string& source, const char* defineName)
+{
+    const std::string macroLine = std::string("#define ") + defineName + "\n";
+
+    if (source.rfind("#version", 0) != 0) {
+        return macroLine + source;
+    }
+
+    const std::size_t lineEnd = source.find('\n');
+    if (lineEnd == std::string::npos) {
+        return source + "\n" + macroLine;
+    }
+
+    return source.substr(0, lineEnd + 1) + macroLine + source.substr(lineEnd + 1);
+}
+}  // namespace
+
 //
 // Program loading
 //
@@ -39,20 +58,11 @@ GLProgramManager::loadVertFrag(const std::string& path)
         if (!loadTextFile(path, text))
             return nullptr;
 
-        const std::string version;  // ("#version 460 core\n");
-
-        // TODO: Parse existing #version, if any, and insert macros after it
-
         std::vector<std::shared_ptr<GLShader>> shaders {
-            std::make_shared<GLShader>(GL_VERTEX_SHADER, version + "#define RAWGL_VERTEX_SHADER\n" + text),
-            std::make_shared<GLShader>(GL_FRAGMENT_SHADER, version + "#define RAWGL_FRAGMENT_SHADER\n" + text)
-            //std::make_shared<GLShader>(GL_VERTEX_SHADER, "#version 460 core\n#define RAWGL_VERTEX_SHADER\n" + text),
-            //std::make_shared<GLShader>(GL_FRAGMENT_SHADER, "#version 460 core\n#define RAWGL_FRAGMENT_SHADER\n" + text)
+            std::make_shared<GLShader>(GL_VERTEX_SHADER, inject_shader_stage_define(text, "RAWGL_VERTEX_SHADER")),
+            std::make_shared<GLShader>(GL_FRAGMENT_SHADER,
+                                       inject_shader_stage_define(text, "RAWGL_FRAGMENT_SHADER"))
         };
-
-        //shaders.reserve(2);
-        //shaders.emplace_back(GL_VERTEX_SHADER, "#define RAWGL_VERTEX_SHADER\n" + text);
-        //shaders.emplace_back(GL_FRAGMENT_SHADER, "#define RAWGL_FRAGMENT_SHADER\n" + text);
 
         it = m_list.insert({ path, std::make_shared<GLProgram>(shaders) }).first;
     }
