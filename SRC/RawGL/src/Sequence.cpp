@@ -540,7 +540,7 @@ operator<<(std::ostream& os, const std::vector<std::string>& vec)
 void
 Sequence::processPassDeclaration(const std::string& key, const std::vector<std::string>& value, ParseState& state)
 {
-    state.currentPassN = m_passes.size();
+    state.currentPassN = m_passConfigs.size();
     LOG(debug) << "Loading pass " << state.currentPassN;
 
     std::shared_ptr<GLProgram> program;
@@ -563,16 +563,18 @@ Sequence::processPassDeclaration(const std::string& key, const std::vector<std::
         throw_sequence_error("Failed to load program for the pass.");
     }
 
-    m_passes.push_back(Pass(program, key == "pass_comp"));
+    m_passConfigs.push_back(PassConfig());
 
-    state.currentPass      = &m_passes.back();
+    state.currentPass      = &m_passConfigs.back();
     state.currentInput     = nullptr;
     state.currentOutput    = nullptr;
     state.currentMeshInput = nullptr;
+    state.currentPass->program = program;
+    state.currentPass->isCompute = (key == "pass_comp");
 
     if (state.currentPassN > 0) {
-        state.currentPass->sizeText[0] = m_passes[state.currentPassN - 1].sizeText[0];
-        state.currentPass->sizeText[1] = m_passes[state.currentPassN - 1].sizeText[1];
+        state.currentPass->sizeText[0] = m_passConfigs[state.currentPassN - 1].sizeText[0];
+        state.currentPass->sizeText[1] = m_passConfigs[state.currentPassN - 1].sizeText[1];
     }
 }
 
@@ -715,8 +717,24 @@ Sequence::processPassProperty(const std::string& key, const std::vector<std::str
         }
 
         for (size_t i = 0; i < value.size(); i += 2) {
-            hres hr_tex_attr = hres::OK;
-            state.currentPass->eval_cull_parm(hr_tex_attr, value[i], value[i + 1]);
+            hres hr_tex_attr = hres::ERR;
+            for (const auto& cull_attr : Pass::CULL_PARM_ARR) {
+                if (value[i] != cull_attr.name) {
+                    continue;
+                }
+
+                for (const auto& possible_val : cull_attr.possible_values) {
+                    if (value[i + 1] == possible_val.key) {
+                        cull_attr.func(state.currentPass->cullMode, possible_val.gl_value);
+                        hr_tex_attr = hres::OK;
+                        break;
+                    }
+                }
+
+                if (hr_tex_attr == hres::OK) {
+                    break;
+                }
+            }
 
             if (hr_tex_attr != hres::OK) {
                 throw_sequence_error("cull: unknown cull parameter.");
@@ -769,11 +787,11 @@ Sequence::processInputOption(const std::string& key, const std::vector<std::stri
                     throw std::runtime_error("in (" + value[0] + "): empty referenced output name");
                 }
                 if (hres::OK != hr_convert || ref_pass_index < 0
-                    || ref_pass_index >= static_cast<int>(m_passes.size())) {
+                    || ref_pass_index >= static_cast<int>(m_passConfigs.size())) {
                     throw std::runtime_error("in (" + value[0] + "): invalid referenced pass index in " + val_key);
                 }
 
-                auto& ref_pass = m_passes[ref_pass_index];
+                auto& ref_pass = m_passConfigs[ref_pass_index];
                 auto ref_output_it = ref_pass.outputs.find(val_name);
                 if (ref_output_it == ref_pass.outputs.end()) {
                     ref_output_it = ref_pass.outputs.insert({ val_name, PassOutput() }).first;
@@ -1105,6 +1123,28 @@ Sequence::processParsedOption(const std::string& key, const std::vector<std::str
     processOutputOption(key, value, state);
 }
 
+void
+Sequence::buildPassesFromConfig()
+{
+    m_passes.clear();
+    m_passes.reserve(m_passConfigs.size());
+
+    for (const PassConfig& config : m_passConfigs) {
+        Pass pass(config.program, config.isCompute);
+        pass.inputs        = config.inputs;
+        pass.inputCounters = config.inputCounters;
+        pass.outputs       = config.outputs;
+        pass.meshes        = config.meshes;
+        pass.cullMode      = config.cullMode;
+        pass.sizeText[0]   = config.sizeText[0];
+        pass.sizeText[1]   = config.sizeText[1];
+        pass.workGroupSizeText[0] = config.workGroupSizeText[0];
+        pass.workGroupSizeText[1] = config.workGroupSizeText[1];
+        std::memcpy(pass.clearColor, config.clearColor, sizeof(pass.clearColor));
+        m_passes.push_back(std::move(pass));
+    }
+}
+
 Sequence::Sequence(int argc, const char* argv[])
     : Sequence()
 {
@@ -1133,6 +1173,8 @@ Sequence::Sequence(int argc, const char* argv[])
     for (const ParsedOption& option : parsedArguments.options) {
         processParsedOption(option.string_key, option.value, parseState);
     }
+
+    buildPassesFromConfig();
 
     int passIndex = 0;
     for (auto& pass : m_passes) {
@@ -1401,15 +1443,79 @@ Sequence::initCommon()
     for (int passIndex = 0; passIndex < static_cast<int>(m_passes.size()); ++passIndex) {
         initializePass(m_passes[passIndex], passIndex);
     }
+
+    validatePassSetup();
+    buildExecutionPlan();
+}
+
+void
+Sequence::validatePassSetup() const
+{
+    for (const Pass& pass : m_passes) {
+        const MeshInput& mesh = require_primary_mesh(pass);
+        (void)mesh;
+
+        for (const auto& inputIt : pass.inputs) {
+            const PassInput& input = inputIt.second;
+            if (input.uniform == nullptr) {
+                throw_sequence_error("input (" + inputIt.first + "): uniform is not initialized.");
+            }
+
+            if ((input.uniform->type == GL_SAMPLER_2D || input.uniform->type == GL_IMAGE_2D) && input.texture == nullptr) {
+                throw_sequence_error("input (" + inputIt.first + "): texture is not initialized.");
+            }
+        }
+
+        for (const auto& outputIt : pass.outputs) {
+            const PassOutput& output = outputIt.second;
+            if (output.texture == nullptr) {
+                throw_sequence_error("output (" + outputIt.first + "): texture is not initialized.");
+            }
+
+            if (pass.isCompute) {
+                if (output.uniform == nullptr) {
+                    throw_sequence_error("output (" + outputIt.first + "): output image uniform is not initialized.");
+                }
+            } else if (output.output == nullptr) {
+                throw_sequence_error("output (" + outputIt.first + "): fragment output is not initialized.");
+            }
+        }
+    }
+}
+
+void
+Sequence::buildExecutionPlan()
+{
+    m_executionPlan.clear();
+    m_executionPlan.reserve(m_passes.size());
+
+    for (Pass& pass : m_passes) {
+        PassExecutionPlan plan;
+        plan.pass       = &pass;
+        plan.primaryMesh = &require_primary_mesh(pass);
+        plan.inputs.reserve(pass.inputs.size());
+        plan.outputs.reserve(pass.outputs.size());
+
+        for (auto& inputIt : pass.inputs) {
+            plan.inputs.push_back(PlannedInputBinding { &inputIt.first, &inputIt.second });
+        }
+
+        for (auto& outputIt : pass.outputs) {
+            plan.outputs.push_back(PlannedOutputBinding { &outputIt.second });
+        }
+
+        m_executionPlan.push_back(std::move(plan));
+    }
 }
 
 int
-Sequence::bindPassInputs(Pass& pass)
+Sequence::bindPassInputs(const PassExecutionPlan& plan)
 {
+    Pass& pass = *plan.pass;
     int textureIndex = 0;
 
-    for (auto& inputIt : pass.inputs) {
-        auto& input = inputIt.second;
+    for (const PlannedInputBinding& binding : plan.inputs) {
+        PassInput& input = *binding.input;
 
         switch (input.uniform->type) {
         case GL_SAMPLER_2D: {
@@ -1428,7 +1534,7 @@ Sequence::bindPassInputs(Pass& pass)
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1000);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, 0);
                 GLCall(glGenerateTextureMipmap(textureId));
-                LOG(debug) << "Generated mip-maps for " << inputIt.first << " at " << inputIt.second.texture;
+                LOG(debug) << "Generated mip-maps for " << *binding.name << " at " << input.texture;
             }
 
             input.uniform->set(textureIndex++);
@@ -1470,8 +1576,9 @@ Sequence::bindPassInputs(Pass& pass)
 }
 
 void
-Sequence::bindInternalUniforms(Pass& pass, const MeshInput& passMesh)
+Sequence::bindInternalUniforms(const PassExecutionPlan& plan)
 {
+    Pass& pass = *plan.pass;
     GLint uniform_loc = glGetUniformLocation(pass.program->getId(), "iFBsize");
     GLCall(glUniform2uiv(uniform_loc, 1, reinterpret_cast<unsigned int*>(pass.size)));
 
@@ -1479,7 +1586,7 @@ Sequence::bindInternalUniforms(Pass& pass, const MeshInput& passMesh)
     GLCall(glUniform1f(uniform_loc, pass.size[0] / (float)pass.size[1]));
 
     uniform_loc = glGetUniformLocation(pass.program->getId(), "isQuad");
-    GLCall(glUniform1i(uniform_loc, passMesh.mesh.isQuad));
+    GLCall(glUniform1i(uniform_loc, plan.primaryMesh->mesh.isQuad));
 }
 
 void
@@ -1573,10 +1680,12 @@ Sequence::bindPassAtomicCounters(Pass& pass)
 }
 
 void
-Sequence::executeComputePass(Pass& pass, int textureIndex)
+Sequence::executeComputePass(const PassExecutionPlan& plan, int textureIndex)
 {
-    for (auto& outputIt : pass.outputs) {
-        auto& output = outputIt.second;
+    Pass& pass = *plan.pass;
+
+    for (const PlannedOutputBinding& binding : plan.outputs) {
+        PassOutput& output = *binding.output;
 
         GLCall(glBindImageTexture(textureIndex, output.texture->getId(), 0, GL_FALSE, 0, GL_WRITE_ONLY,
                                   output.texture->getInternalFormat()));
@@ -1592,13 +1701,14 @@ Sequence::executeComputePass(Pass& pass, int textureIndex)
 }
 
 void
-Sequence::executeGraphicsPass(Pass& pass, const MeshInput& passMesh)
+Sequence::executeGraphicsPass(const PassExecutionPlan& plan)
 {
+    Pass& pass = *plan.pass;
     GLCall(glBindFramebuffer(GL_FRAMEBUFFER, pass.fboId));
 
     std::vector<GLenum> buffers(8, GL_NONE);
-    for (auto& outputIt : pass.outputs) {
-        auto& output                     = outputIt.second;
+    for (const PlannedOutputBinding& binding : plan.outputs) {
+        PassOutput& output               = *binding.output;
         buffers[output.output->location] = GL_COLOR_ATTACHMENT0 + output.output->location;
     }
 
@@ -1623,9 +1733,9 @@ Sequence::executeGraphicsPass(Pass& pass, const MeshInput& passMesh)
     GLCall(glEnable(GL_DEPTH_TEST));
     GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
     GLCall(glDepthFunc(GL_LEQUAL));
-    GLCall(glBindVertexArray(passMesh.VBO.vaoId));
+    GLCall(glBindVertexArray(plan.primaryMesh->VBO.vaoId));
     GLCall(glPolygonMode(GL_FRONT_AND_BACK, GL_FILL));
-    GLCall(glDrawElements(passMesh.mesh.render, passMesh.mesh.numIndxs, GL_UNSIGNED_INT, 0));
+    GLCall(glDrawElements(plan.primaryMesh->mesh.render, plan.primaryMesh->mesh.numIndxs, GL_UNSIGNED_INT, 0));
 
     const GLenum err = glGetError();
     if (err != GL_NO_ERROR) {
@@ -1637,10 +1747,10 @@ Sequence::executeGraphicsPass(Pass& pass, const MeshInput& passMesh)
 }
 
 void
-Sequence::savePassOutputs(Pass& pass)
+Sequence::savePassOutputs(const PassExecutionPlan& plan)
 {
-    for (auto& outputIt : pass.outputs) {
-        outputIt.second.saveTexture();
+    for (const PlannedOutputBinding& binding : plan.outputs) {
+        binding.output->saveTexture();
     }
 }
 
@@ -1678,22 +1788,22 @@ Sequence::run()
     //glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
 
     try {
-        for (auto& pass : m_passes) {
-            const MeshInput& passMesh = require_primary_mesh(pass);
+        for (const PassExecutionPlan& plan : m_executionPlan) {
+            Pass& pass = *plan.pass;
             GLCall(glUseProgram(pass.program->getId()));
 
-            const int textureIndex = bindPassInputs(pass);
-            bindInternalUniforms(pass, passMesh);
+            const int textureIndex = bindPassInputs(plan);
+            bindInternalUniforms(plan);
             preparePassAtomicCounters(pass);
             bindPassAtomicCounters(pass);
 
             if (pass.isCompute) {
-                executeComputePass(pass, textureIndex);
+                executeComputePass(plan, textureIndex);
             } else {
-                executeGraphicsPass(pass, passMesh);
+                executeGraphicsPass(plan);
             }
 
-            savePassOutputs(pass);
+            savePassOutputs(plan);
         }
     } catch (...) {
         destroyAtomicCounterBuffers();

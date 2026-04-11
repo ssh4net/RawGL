@@ -396,8 +396,21 @@ public:
 private:
     Sequence() {}
 
+    struct PassConfig {
+        std::shared_ptr<GLProgram> program;
+        bool isCompute = false;
+        std::map<std::string, PassInput> inputs;
+        std::map<std::string, Pass::inputCounter> inputCounters;
+        std::map<std::string, PassOutput> outputs;
+        std::map<std::string, MeshInput> meshes;
+        Pass::CullMode cullMode { GL_CW, GL_BACK, true };
+        std::string sizeText[2] { "512", "512" };
+        std::string workGroupSizeText[2] { "16", "16" };
+        float clearColor[4] { 0.0f, 0.0f, 0.0f, 0.0f };
+    };
+
     struct ParseState {
-        Pass* currentPass           = nullptr;
+        PassConfig* currentPass     = nullptr;
         PassInput* currentInput     = nullptr;
         PassOutput* currentOutput   = nullptr;
         MeshInput* currentMeshInput = nullptr;
@@ -409,9 +422,27 @@ private:
         int previousBits                       = 16;
     };
 
+    struct PlannedInputBinding {
+        const std::string* name = nullptr;
+        PassInput* input        = nullptr;
+    };
+
+    struct PlannedOutputBinding {
+        PassOutput* output = nullptr;
+    };
+
+    struct PassExecutionPlan {
+        Pass* pass                      = nullptr;
+        const MeshInput* primaryMesh    = nullptr;
+        std::vector<PlannedInputBinding> inputs;
+        std::vector<PlannedOutputBinding> outputs;
+    };
+
     std::map<std::string, std::shared_ptr<Texture>> m_textures;
 
+    std::vector<PassConfig> m_passConfigs;
     std::vector<Pass> m_passes;
+    std::vector<PassExecutionPlan> m_executionPlan;
 
     void processParsedOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
     void processPassDeclaration(const std::string& key, const std::vector<std::string>& value, ParseState& state);
@@ -420,15 +451,18 @@ private:
     void processAtomicOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
     void processInputAttributeOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
     void processOutputOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
+    void buildPassesFromConfig();
     void preloadInputTextures();
     void initializePass(Pass& pass, int passIndex);
-    int bindPassInputs(Pass& pass);
-    void bindInternalUniforms(Pass& pass, const MeshInput& passMesh);
+    void validatePassSetup() const;
+    void buildExecutionPlan();
+    int bindPassInputs(const PassExecutionPlan& plan);
+    void bindInternalUniforms(const PassExecutionPlan& plan);
     void preparePassAtomicCounters(Pass& pass);
     void bindPassAtomicCounters(Pass& pass);
-    void executeComputePass(Pass& pass, int textureIndex);
-    void executeGraphicsPass(Pass& pass, const MeshInput& passMesh);
-    void savePassOutputs(Pass& pass);
+    void executeComputePass(const PassExecutionPlan& plan, int textureIndex);
+    void executeGraphicsPass(const PassExecutionPlan& plan);
+    void savePassOutputs(const PassExecutionPlan& plan);
     void destroyAtomicCounterBuffers();
     void initCommon();
 };
