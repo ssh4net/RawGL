@@ -36,18 +36,6 @@
 #include "mesh_io.h"
 
 namespace {
-struct ParsedOption {
-    std::string string_key;
-    std::vector<std::string> value;
-};
-
-struct ParsedArguments {
-    bool showHelp    = false;
-    bool showVersion = false;
-    int verbosity    = 3;
-    std::vector<ParsedOption> options;
-};
-
 enum class ParsedOptionMode {
     flag,
     single,
@@ -195,10 +183,12 @@ print_version_text()
     std::cout << termcolor::reset;
 }
 
-static ParsedArguments
-parse_arguments(int argc, const char* argv[])
+}  // namespace
+
+SequenceParsedArguments
+Sequence_ParseArguments(int argc, const char* argv[])
 {
-    ParsedArguments parsed;
+    SequenceParsedArguments parsed;
 
     for (int index = 1; index < argc; ++index) {
         const std::string token      = argv[index];
@@ -218,7 +208,7 @@ parse_arguments(int argc, const char* argv[])
             continue;
         }
 
-        ParsedOption option;
+        SequenceParsedOption option;
         option.string_key = spec->long_key;
 
         if (spec->mode == ParsedOptionMode::single) {
@@ -253,6 +243,8 @@ parse_arguments(int argc, const char* argv[])
 
     return parsed;
 }
+
+namespace {
 
 struct LoadedTextureData {
     bool valid            = false;
@@ -504,7 +496,7 @@ bool
 Sequence_HandleImmediateCommandLine(int argc, const char* argv[], int& exitCode)
 {
     try {
-        const ParsedArguments parsedArguments = parse_arguments(argc, argv);
+        const SequenceParsedArguments parsedArguments = Sequence_ParseArguments(argc, argv);
 
         if (parsedArguments.showHelp || argc < 2) {
             std::cout << build_help_text() << std::endl;
@@ -1148,7 +1140,7 @@ Sequence::buildPassesFromConfig()
 Sequence::Sequence(int argc, const char* argv[])
     : Sequence()
 {
-    const ParsedArguments parsedArguments = parse_arguments(argc, argv);
+    const SequenceParsedArguments parsedArguments = Sequence_ParseArguments(argc, argv);
 
     bool infoExit = false;
     if (parsedArguments.showHelp || argc < 2) {
@@ -1166,28 +1158,13 @@ Sequence::Sequence(int argc, const char* argv[])
         return;
     }
 
-    Log_SetVerbosity(std::clamp(parsedArguments.verbosity, 0, 5));
-    LOG(debug) << "Starting RawGL sequence" << std::endl;
+    initializeFromParsedArguments(parsedArguments);
+}
 
-    ParseState parseState;
-    for (const ParsedOption& option : parsedArguments.options) {
-        processParsedOption(option.string_key, option.value, parseState);
-    }
-
-    buildPassesFromConfig();
-
-    int passIndex = 0;
-    for (auto& pass : m_passes) {
-        const size_t initializedCounters = pass.u_aCounters.size();
-        const size_t reflectedCounters   = pass.program->BuffersSize();
-        if (initializedCounters < reflectedCounters) {
-            LOG(debug) << "Pass #" << passIndex << ": " << initializedCounters << " from " << reflectedCounters
-                       << " atomic counters are initialized";
-        }
-        ++passIndex;
-    }
-
-    initCommon();
+Sequence::Sequence(const SequenceParsedArguments& parsedArguments)
+    : Sequence()
+{
+    initializeFromParsedArguments(parsedArguments);
 }
 
 Sequence::~Sequence()
@@ -1220,6 +1197,33 @@ Sequence::~Sequence()
             }
         }
     }
+}
+
+void
+Sequence::initializeFromParsedArguments(const SequenceParsedArguments& parsedArguments)
+{
+    Log_SetVerbosity(std::clamp(parsedArguments.verbosity, 0, 5));
+    LOG(debug) << "Starting RawGL sequence" << std::endl;
+
+    ParseState parseState;
+    for (const SequenceParsedOption& option : parsedArguments.options) {
+        processParsedOption(option.string_key, option.value, parseState);
+    }
+
+    buildPassesFromConfig();
+
+    int passIndex = 0;
+    for (auto& pass : m_passes) {
+        const size_t initializedCounters = pass.u_aCounters.size();
+        const size_t reflectedCounters   = pass.program->BuffersSize();
+        if (initializedCounters < reflectedCounters) {
+            LOG(debug) << "Pass #" << passIndex << ": " << initializedCounters << " from " << reflectedCounters
+                       << " atomic counters are initialized";
+        }
+        ++passIndex;
+    }
+
+    initCommon();
 }
 
 void

@@ -15,17 +15,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-#include "Common.h"
-#include "Sequence.h"
-//#include "OpenGLUtils.h"
-#include "Timer.h"
-#include "GLProgramManager.h"
-#include <iostream>
-
-const char* APP_NAME    = "RawGL";
-const char* APP_AUTHOR  = "Erium Vladlen";
-const int APP_VERSION[] = { 1, 6, 1 };
+#include "RawGLCore.h"
 
 //#include "shader.hpp"
 
@@ -37,32 +27,8 @@ main(int argc, const char* argv[])
 	std::cout << "Debug mode" << std::endl;
 	system("pause");
 #endif
-
-    Timer timer;
-
-    // init the logger
-    Log_Init();
-
-    int exitCode = 0;
-    if (Sequence_HandleImmediateCommandLine(argc, argv, exitCode)) {
-        return exitCode;
-    }
-
-    try {
-        OpenGLHandle glhandle;
-
-        // start the sequence
-        Sequence sequence(argc, argv);
-        sequence.run();
-        std::cout << std::endl;
-        LOG(info) << "Total processing time : " << timer.nowText() << std::endl;
-    } catch (const std::exception& exception) {
-        std::cerr << exception.what() << std::endl;
-        return 1;
-    }
-
 #if 0  // _DEBUG
 	system("pause");
 #endif
-    return 0;
+    return rawgl::Run(rawgl::CommandLineRequest { argc, argv }).exitCode;
 }

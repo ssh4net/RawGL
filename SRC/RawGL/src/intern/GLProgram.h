@@ -201,6 +201,13 @@ public:
 
     // get compiled shader atomic counters
     std::map<std::string, std::shared_ptr<GLProgramBuffers>>& get_m_acounters() { return m_acounters; }
+    const std::map<std::string, GLProgramUniform>& getUniforms() const { return m_uniforms; }
+    const std::map<std::string, std::shared_ptr<GLProgramBuffers>>& getAtomicCounters() const { return m_acounters; }
+    const std::multimap<std::string, std::pair<std::string, GLProgramBuffers>>& getBufferVariables() const
+    {
+        return m_abuffers;
+    }
+    const std::map<std::string, GLProgramOutput>& getOutputs() const { return m_outputs; }
 
     GLuint getId() const { return m_id; }
     bool isValid() const { return m_isValid; }

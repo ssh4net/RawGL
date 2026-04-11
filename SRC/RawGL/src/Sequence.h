@@ -385,10 +385,26 @@ _pass_input_set_cull_enable(Pass::CullMode& mm, const GLuint& val);
 bool
 Sequence_HandleImmediateCommandLine(int argc, const char* argv[], int& exitCode);
 
+struct SequenceParsedOption {
+    std::string string_key;
+    std::vector<std::string> value;
+};
+
+struct SequenceParsedArguments {
+    bool showHelp    = false;
+    bool showVersion = false;
+    int verbosity    = 3;
+    std::vector<SequenceParsedOption> options;
+};
+
+SequenceParsedArguments
+Sequence_ParseArguments(int argc, const char* argv[]);
+
 
 class Sequence {
 public:
     Sequence(int argc, const char* argv[]);
+    explicit Sequence(const SequenceParsedArguments& parsedArguments);
     ~Sequence();
 
     void run();
@@ -465,4 +481,5 @@ private:
     void savePassOutputs(const PassExecutionPlan& plan);
     void destroyAtomicCounterBuffers();
     void initCommon();
+    void initializeFromParsedArguments(const SequenceParsedArguments& parsedArguments);
 };

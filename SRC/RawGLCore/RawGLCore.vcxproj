@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{7B4C0B34-0CF0-4F0B-BB43-2FBCDFE4C540}</ProjectGuid>
+    <RootNamespace>rawglcore</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>RawGLCore</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\RAWGL.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\RAWGL.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <OutDir>$(SolutionDir)\x64\$(Configuration)\RawGLCore\</OutDir>
+    <IntDir>$(ProjectDir)\x64\$(Configuration)\</IntDir>
+    <TargetName>RawGLCore</TargetName>
+    <ExternalIncludePath>$(RAWGLDepsRoot)\include;$(VC_IncludePath);$(WindowsSDK_IncludePath)</ExternalIncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(SolutionDir)\x64\$(Configuration)\RawGLCore\</OutDir>
+    <IntDir>$(ProjectDir)\x64\$(Configuration)\</IntDir>
+    <TargetName>RawGLCore</TargetName>
+    <ExternalIncludePath>$(RAWGLDepsRoot)\include;$(VC_IncludePath);$(WindowsSDK_IncludePath)</ExternalIncludePath>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <VcpkgInstalledDir>
+    </VcpkgInstalledDir>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <VcpkgInstalledDir>
+    </VcpkgInstalledDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\RawGL\src;..\RawGL\src\intern;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Lib />
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\RawGL\src;..\RawGL\src\intern;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Lib />
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\RawGL\src\intern\GLProgram.cpp" />
+    <ClCompile Include="..\RawGL\src\intern\GLProgramManager.cpp" />
+    <ClCompile Include="..\RawGL\src\intern\ImageUtils.cpp" />
+    <ClCompile Include="..\RawGL\src\intern\Log.cpp" />
+    <ClCompile Include="..\RawGL\src\intern\MESH_IO.CPP" />
+    <ClCompile Include="..\RawGL\src\intern\OpenGLUtils.cpp" />
+    <ClCompile Include="..\RawGL\src\intern\Texture.cpp" />
+    <ClCompile Include="..\RawGL\src\PassInput.cpp" />
+    <ClCompile Include="..\RawGL\src\PassOutput.cpp" />
+    <ClCompile Include="..\RawGL\src\RawGLCore.cpp" />
+    <ClCompile Include="..\RawGL\src\Sequence.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\RawGL\src\intern\AssetManager.h" />
+    <ClInclude Include="..\RawGL\src\intern\Common.h" />
+    <ClInclude Include="..\RawGL\src\intern\GLProgram.h" />
+    <ClInclude Include="..\RawGL\src\intern\GLProgramManager.h" />
+    <ClInclude Include="..\RawGL\src\intern\ImageUtils.h" />
+    <ClInclude Include="..\RawGL\src\intern\Log.h" />
+    <ClInclude Include="..\RawGL\src\intern\MESH_IO.H" />
+    <ClInclude Include="..\RawGL\src\intern\miniply.h" />
+    <ClInclude Include="..\RawGL\src\intern\OpenGLUtils.h" />
+    <ClInclude Include="..\RawGL\src\intern\Texture.h" />
+    <ClInclude Include="..\RawGL\src\intern\Timer.h" />
+    <ClInclude Include="..\RawGL\src\intern\termcolor\termcolor.hpp" />
+    <ClInclude Include="..\RawGL\src\RawGLCore.h" />
+    <ClInclude Include="..\RawGL\src\Sequence.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

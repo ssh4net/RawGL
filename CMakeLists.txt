@@ -299,10 +299,17 @@ if(NOT RAWGL_LIBRAW_INCLUDE_DIR)
     message(FATAL_ERROR "libraw headers were not found. Set CMAKE_PREFIX_PATH or RAWGL_WINDOWS_DEPS_ROOT so libraw/libraw.h is available.")
 endif()
 
-set(RAWGL_SOURCES
+if(NOT WIN32)
+    find_library(RAWGL_HARFBUZZ_LIBRARY
+        NAMES harfbuzz libharfbuzz
+        HINTS
+            "${RAWGL_LINUX_PREFIX}/lib")
+endif()
+
+set(RAWGL_CORE_SOURCES
     SRC/RawGL/src/PassInput.cpp
     SRC/RawGL/src/PassOutput.cpp
-    SRC/RawGL/src/RawGL.cpp
+    SRC/RawGL/src/RawGLCore.cpp
     SRC/RawGL/src/Sequence.cpp
     SRC/RawGL/src/intern/GLProgram.cpp
     SRC/RawGL/src/intern/GLProgramManager.cpp
@@ -312,40 +319,45 @@ set(RAWGL_SOURCES
     SRC/RawGL/src/intern/OpenGLUtils.cpp
     SRC/RawGL/src/intern/Texture.cpp)
 
-list(APPEND RAWGL_SOURCES ${RAWGL_MINIPLY_SOURCES})
+list(APPEND RAWGL_CORE_SOURCES ${RAWGL_MINIPLY_SOURCES})
+
+add_library(rawgl_core STATIC ${RAWGL_CORE_SOURCES})
+add_library(RawGL::core ALIAS rawgl_core)
+
+add_executable(rawgl SRC/RawGL/src/RawGL.cpp)
+add_executable(RawGL::rawgl ALIAS rawgl)
 
 if(WIN32)
     enable_language(RC)
-    list(APPEND RAWGL_SOURCES
+    target_sources(rawgl PRIVATE
         SRC/RawGL/RawGL.rc)
 endif()
 
-add_executable(rawgl ${RAWGL_SOURCES})
-add_executable(RawGL::rawgl ALIAS rawgl)
-
-target_include_directories(rawgl PRIVATE
+target_include_directories(rawgl_core PUBLIC
     SRC/RawGL/src
     SRC/RawGL/src/intern
     "${RAWGL_LIBRAW_INCLUDE_DIR}"
     "${RAWGL_SPDLOG_INCLUDE_DIR}")
 
 if(NOT TARGET miniply::miniply)
-    target_include_directories(rawgl PRIVATE
+    target_include_directories(rawgl_core PRIVATE
         "${RAWGL_MINIPLY_INCLUDE_DIR}")
 endif()
 
-target_compile_definitions(rawgl PRIVATE
+target_compile_definitions(rawgl_core PRIVATE
     _CRT_SECURE_NO_WARNINGS
     _SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS
     RAWGL_USE_GLEW
     SPDLOG_FMT_EXTERNAL)
 
 if(WIN32)
+    target_compile_definitions(rawgl_core PRIVATE _MSVC)
     target_compile_definitions(rawgl PRIVATE _CONSOLE _MSVC)
+    target_compile_options(rawgl_core PRIVATE /utf-8)
     target_compile_options(rawgl PRIVATE /utf-8)
 endif()
 
-target_link_libraries(rawgl PRIVATE
+target_link_libraries(rawgl_core PUBLIC
     ${RAWGL_OPENGL_LOADER_TARGET}
     ${RAWGL_GLFW_TARGET}
     ${RAWGL_OIIO_TARGETS}
@@ -355,31 +367,36 @@ target_link_libraries(rawgl PRIVATE
 
 if(NOT WIN32)
     if(TARGET fmt::fmt)
-        target_link_libraries(rawgl PRIVATE fmt::fmt)
+        target_link_libraries(rawgl_core PUBLIC fmt::fmt)
     endif()
     if(TARGET BZip2::BZip2)
-        target_link_libraries(rawgl PRIVATE
+        target_link_libraries(rawgl_core PUBLIC
             "-Wl,--whole-archive"
             "$<TARGET_FILE:BZip2::BZip2>"
             "-Wl,--no-whole-archive")
     endif()
     if(TARGET pugixml::pugixml)
-        target_link_libraries(rawgl PRIVATE pugixml::pugixml)
+        target_link_libraries(rawgl_core PUBLIC pugixml::pugixml)
     elseif(TARGET pugixml)
-        target_link_libraries(rawgl PRIVATE pugixml)
+        target_link_libraries(rawgl_core PUBLIC pugixml)
     endif()
     if(TARGET libuhdr::libuhdr)
-        target_link_libraries(rawgl PRIVATE libuhdr::libuhdr)
+        target_link_libraries(rawgl_core PUBLIC libuhdr::libuhdr)
     endif()
     if(TARGET Freetype::Freetype)
-        target_link_libraries(rawgl PRIVATE Freetype::Freetype)
+        target_link_libraries(rawgl_core PUBLIC Freetype::Freetype)
+    endif()
+    if(RAWGL_HARFBUZZ_LIBRARY)
+        target_link_libraries(rawgl_core PUBLIC "${RAWGL_HARFBUZZ_LIBRARY}")
     endif()
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_options(rawgl PRIVATE -stdlib=libc++)
-    target_link_options(rawgl PRIVATE -stdlib=libc++)
+    target_compile_options(rawgl_core PUBLIC -stdlib=libc++)
+    target_link_options(rawgl_core PUBLIC -stdlib=libc++)
 endif()
+
+target_link_libraries(rawgl PRIVATE rawgl_core)
 
 set_target_properties(rawgl PROPERTIES
     OUTPUT_NAME RawGL)
@@ -387,6 +404,30 @@ set_target_properties(rawgl PROPERTIES
 include(CTest)
 
 if(BUILD_TESTING)
+    add_executable(rawgl_core_inspect_smoke
+        tests/rawgl_core_inspect_smoke.cpp)
+    target_link_libraries(rawgl_core_inspect_smoke PRIVATE rawgl_core)
+    target_include_directories(rawgl_core_inspect_smoke PRIVATE
+        SRC/RawGL/src
+        SRC/RawGL/src/intern)
+
+    add_executable(rawgl_core_graph_smoke
+        tests/rawgl_core_graph_smoke.cpp)
+    target_link_libraries(rawgl_core_graph_smoke PRIVATE rawgl_core)
+    target_include_directories(rawgl_core_graph_smoke PRIVATE
+        SRC/RawGL/src
+        SRC/RawGL/src/intern)
+
+    add_test(NAME rawgl_core_inspect_smoke
+        COMMAND rawgl_core_inspect_smoke)
+    set_tests_properties(rawgl_core_inspect_smoke PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+    add_test(NAME rawgl_core_graph_smoke
+        COMMAND rawgl_core_graph_smoke)
+    set_tests_properties(rawgl_core_graph_smoke PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
     function(rawgl_add_script_test test_name base_name)
         if(WIN32)
             add_test(NAME ${test_name}

@@ -5,6 +5,8 @@ VisualStudioVersion = 17.3.32901.215
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RawGL", "RawGL\RawGL.vcxproj", "{2F6A32D5-6ED1-4352-BC55-92AA0C8EE356}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RawGLCore", "RawGLCore\RawGLCore.vcxproj", "{7B4C0B34-0CF0-4F0B-BB43-2FBCDFE4C540}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -19,6 +21,12 @@ Global
 		{2F6A32D5-6ED1-4352-BC55-92AA0C8EE356}.Release|x64.ActiveCfg = Release|x64
 		{2F6A32D5-6ED1-4352-BC55-92AA0C8EE356}.Release|x64.Build.0 = Release|x64
 		{2F6A32D5-6ED1-4352-BC55-92AA0C8EE356}.Release|x86.ActiveCfg = Release|x64
+		{7B4C0B34-0CF0-4F0B-BB43-2FBCDFE4C540}.Debug|x64.ActiveCfg = Debug|x64
+		{7B4C0B34-0CF0-4F0B-BB43-2FBCDFE4C540}.Debug|x64.Build.0 = Debug|x64
+		{7B4C0B34-0CF0-4F0B-BB43-2FBCDFE4C540}.Debug|x86.ActiveCfg = Debug|x64
+		{7B4C0B34-0CF0-4F0B-BB43-2FBCDFE4C540}.Release|x64.ActiveCfg = Release|x64
+		{7B4C0B34-0CF0-4F0B-BB43-2FBCDFE4C540}.Release|x64.Build.0 = Release|x64
+		{7B4C0B34-0CF0-4F0B-BB43-2FBCDFE4C540}.Release|x86.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
