@@ -103,6 +103,7 @@ struct PassInput {
     std::map<std::string, std::string> attributes;
     GLProgramUniform* uniform;
     std::shared_ptr<Texture> texture;
+    bool runtimeTextureBindingRequired = false;
     GLint tex_min;
     GLint tex_mag;
     GLint tex_s;
@@ -321,6 +322,7 @@ struct Pass {
     };
 
     std::map<std::string, inputCounter> inputCounters;
+    std::map<std::string, std::vector<GLuint>> capturedAtomicCounterValues;
     std::multimap<GLint, passCounters> u_aCounters;
     std::map<std::string, PassInputCounters> u_aBuffers;
     std::map<std::string, PassOutput> outputs;
@@ -502,6 +504,10 @@ public:
     void run(const SequenceSystemUniformState& systemUniforms);
     void run(const SequenceSystemUniformState& systemUniforms,
              const std::vector<SequenceExecutionInputOverride>& inputOverrides);
+    std::shared_ptr<Texture> getPassOutputTexture(size_t passIndex, const std::string& outputName) const;
+    std::vector<GLuint> getPassAtomicCounterValues(size_t passIndex, const std::string& counterName) const;
+    void setPassAtomicCounterValues(size_t passIndex, const std::string& counterName, const std::vector<GLuint>& values);
+    void releaseRunOutputTextures();
 
 private:
     Sequence() {}
@@ -554,6 +560,8 @@ private:
     void buildPassesFromConfig();
     void buildPassesFromRuntimeConfig(const SequenceRuntimeConfig& runtimeConfig);
     void preloadInputTextures();
+    void ensurePassOutputTextures(Pass& pass, int passIndex);
+    void refreshPassTextureInputs(Pass& pass);
     void initializePass(Pass& pass, int passIndex);
     void validatePassSetup() const;
     void buildExecutionPlan();
@@ -562,6 +570,7 @@ private:
     void bindInternalUniforms(const PassExecutionPlan& plan, const SequenceSystemUniformState& systemUniforms);
     void preparePassAtomicCounters(Pass& pass);
     void bindPassAtomicCounters(Pass& pass);
+    void capturePassAtomicCounterResults(Pass& pass);
     void executeComputePass(const PassExecutionPlan& plan, int textureIndex);
     void executeGraphicsPass(const PassExecutionPlan& plan);
     void savePassOutputs(const PassExecutionPlan& plan);

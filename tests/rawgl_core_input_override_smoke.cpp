@@ -61,6 +61,7 @@ make_input_override_request(const std::filesystem::path& outputPath)
         "",
         "",
         0,
+        "",
         {},
     });
     pass.outputs.push_back(rawgl::GraphOutputDefinition {
@@ -70,6 +71,7 @@ make_input_override_request(const std::filesystem::path& outputPath)
         4,
         3,
         16,
+        "",
         {},
     });
 

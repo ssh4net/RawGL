@@ -9,6 +9,9 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
+    <Filter Include="Tests">
+      <UniqueIdentifier>{30D3277F-DF88-4C6A-99EA-3C5813615103}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\RawGL\src\intern\gl_program.cpp">
@@ -88,5 +91,34 @@
     <ClInclude Include="..\RawGL\src\sequence.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\tests\rawgl_core_graph_smoke.cpp">
+      <Filter>Tests</Filter>
+    </None>
+    <None Include="..\..\tests\rawgl_core_input_override_smoke.cpp">
+      <Filter>Tests</Filter>
+    </None>
+    <None Include="..\..\tests\rawgl_core_inspect_smoke.cpp">
+      <Filter>Tests</Filter>
+    </None>
+    <None Include="..\..\tests\rawgl_core_persistent_atomic_counter_smoke.cpp">
+      <Filter>Tests</Filter>
+    </None>
+    <None Include="..\..\tests\rawgl_core_persistent_texture_smoke.cpp">
+      <Filter>Tests</Filter>
+    </None>
+    <None Include="..\..\tests\rawgl_core_shared_context_smoke.cpp">
+      <Filter>Tests</Filter>
+    </None>
+    <None Include="..\..\tests\rawgl_core_shared_file_resources_smoke.cpp">
+      <Filter>Tests</Filter>
+    </None>
+    <None Include="..\..\tests\rawgl_core_system_uniform_reject_smoke.cpp">
+      <Filter>Tests</Filter>
+    </None>
+    <None Include="..\..\tests\rawgl_core_transient_output_reuse_smoke.cpp">
+      <Filter>Tests</Filter>
+    </None>
   </ItemGroup>
 </Project>

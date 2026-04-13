@@ -31,6 +31,7 @@
 #include <mutex>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_set>
 
 const char* APP_NAME    = "RawGL";
 const char* APP_AUTHOR  = "Erium Vladlen";
@@ -97,14 +98,37 @@ struct RawGLGraphState {
         std::vector<std::string> outputNames;
     };
 
+    struct PersistentInputBinding {
+        size_t passIndex = 0;
+        std::string inputName;
+        std::string persistentTextureName;
+    };
+
+    struct PersistentOutputBinding {
+        size_t passIndex = 0;
+        std::string outputName;
+        std::string persistentTextureName;
+    };
+
+    struct PersistentAtomicCounterBinding {
+        size_t passIndex = 0;
+        std::string counterName;
+        std::string persistentCounterName;
+    };
+
     struct ExecutionPlan {
         SequenceRuntimeConfig sequenceRuntimeConfig;
         std::vector<ExecutionPass> passes;
+        std::vector<PersistentInputBinding> persistentInputs;
+        std::vector<PersistentOutputBinding> persistentOutputs;
+        std::vector<PersistentAtomicCounterBinding> persistentAtomicCounters;
     };
 
     ValidatedGraph validatedGraph;
     ResourcePlan resourcePlan;
     ExecutionPlan executionPlan;
+    std::map<std::string, std::shared_ptr<Texture>> persistentTextures;
+    std::map<std::string, std::vector<GLuint>> persistentAtomicCounters;
     std::unique_ptr<Sequence> sequence;
 };
 
@@ -614,6 +638,51 @@ load_cached_gpu_mesh_resource(const RawGLContextState& contextState,
     return sharedGpuMesh;
 }
 
+static GLenum
+infer_texture_type_from_internal_format(const GLenum internalFormat)
+{
+    switch (internalFormat) {
+    case GL_R8:
+    case GL_RG8:
+    case GL_RGB8:
+    case GL_RGBA8: return GL_UNSIGNED_BYTE;
+    case GL_R16:
+    case GL_RG16:
+    case GL_RGB16:
+    case GL_RGBA16: return GL_UNSIGNED_SHORT;
+    case GL_R32UI:
+    case GL_RG32UI:
+    case GL_RGB32UI:
+    case GL_RGBA32UI: return GL_UNSIGNED_INT;
+    case GL_R16F:
+    case GL_RG16F:
+    case GL_RGB16F:
+    case GL_RGBA16F: return GL_HALF_FLOAT;
+    case GL_R32F:
+    case GL_RG32F:
+    case GL_RGB32F:
+    case GL_RGBA32F: return GL_FLOAT;
+    default: return GL_FLOAT;
+    }
+}
+
+static std::shared_ptr<Texture>
+clone_texture_resource(const std::shared_ptr<Texture>& sourceTexture)
+{
+    std::shared_ptr<Texture> cloneTexture = std::make_shared<Texture>(
+        sourceTexture->getWidth(),
+        sourceTexture->getHeight(),
+        sourceTexture->getInternalFormat(),
+        infer_texture_type_from_internal_format(sourceTexture->getInternalFormat()),
+        nullptr);
+
+    GLCall(glCopyImageSubData(sourceTexture->getId(), GL_TEXTURE_2D, 0, 0, 0, 0,
+                              cloneTexture->getId(), GL_TEXTURE_2D, 0, 0, 0, 0,
+                              sourceTexture->getWidth(), sourceTexture->getHeight(), 1));
+
+    return cloneTexture;
+}
+
 static void
 apply_texture_attributes(PassInput& input, const std::vector<GraphAttribute>& attributes)
 {
@@ -759,7 +828,8 @@ validate_input_definition(const RawGLGraphState::ValidatedGraph& graph,
     }
 
     if (definition.sourceKind == GraphInputSourceKind::textureFile
-        || definition.sourceKind == GraphInputSourceKind::passOutput) {
+        || definition.sourceKind == GraphInputSourceKind::passOutput
+        || definition.sourceKind == GraphInputSourceKind::graphTexture) {
         const bool isSampler = find_resource_by_name(pass.shaderInterface.samplers, definition.name) != nullptr;
         const bool isImage   = find_resource_by_name(pass.shaderInterface.images, definition.name) != nullptr;
         if (!isSampler && !isImage) {
@@ -774,7 +844,7 @@ validate_input_definition(const RawGLGraphState::ValidatedGraph& graph,
             if (definition.texturePath.empty()) {
                 throw std::runtime_error("in (" + definition.name + "): texture path is empty");
             }
-        } else {
+        } else if (definition.sourceKind == GraphInputSourceKind::passOutput) {
             if (definition.referencedOutputName.empty()) {
                 throw std::runtime_error("in (" + definition.name + "): empty referenced output name");
             }
@@ -795,6 +865,8 @@ validate_input_definition(const RawGLGraphState::ValidatedGraph& graph,
                                          + definition.referencedOutputName + "::"
                                          + std::to_string(definition.referencedPassIndex) + " not found");
             }
+        } else if (definition.graphTextureName.empty()) {
+            throw std::runtime_error("in (" + definition.name + "): graph texture name is empty");
         }
 
         return;
@@ -837,6 +909,8 @@ validate_graph_definition(const RawGLContextState& contextState, const GraphDefi
     RawGLGraphState::ValidatedGraph validatedGraph;
     validatedGraph.verbosity = definition.verbosity;
     validatedGraph.passes.reserve(definition.passes.size());
+    std::unordered_set<std::string> persistentOutputNames;
+    std::unordered_set<std::string> persistentCounterNames;
 
     for (const GraphPassDefinition& passDefinition : definition.passes) {
         RawGLGraphState::ValidatedPass validatedPass;
@@ -861,6 +935,11 @@ validate_graph_definition(const RawGLContextState& contextState, const GraphDefi
 
         for (const GraphOutputDefinition& outputDefinition : passDefinition.outputs) {
             validate_output_definition(validatedPass, outputDefinition);
+            if (!outputDefinition.persistentTextureName.empty()
+                && !persistentOutputNames.insert(outputDefinition.persistentTextureName).second) {
+                throw std::runtime_error("out (" + outputDefinition.name + "): duplicate persistent texture name "
+                                         + outputDefinition.persistentTextureName);
+            }
         }
 
         for (const GraphInputDefinition& inputDefinition : passDefinition.inputs) {
@@ -869,6 +948,11 @@ validate_graph_definition(const RawGLContextState& contextState, const GraphDefi
 
         for (const GraphAtomicCounterDefinition& counterDefinition : passDefinition.atomicCounters) {
             validate_atomic_counter_definition(validatedPass, counterDefinition);
+            if (!counterDefinition.persistentCounterName.empty()
+                && !persistentCounterNames.insert(counterDefinition.persistentCounterName).second) {
+                throw std::runtime_error("atomic (cntr): duplicate persistent counter name "
+                                         + counterDefinition.persistentCounterName);
+            }
         }
 
         validatedGraph.passes.push_back(std::move(validatedPass));
@@ -986,6 +1070,20 @@ build_sequence_execution_input_override(const RawGLContextState& contextState, c
     }
 
     return sequenceOverride;
+}
+
+static bool
+has_sequence_override(const std::vector<SequenceExecutionInputOverride>& inputOverrides,
+                      const size_t passIndex,
+                      const std::string& inputName)
+{
+    for (const SequenceExecutionInputOverride& inputOverride : inputOverrides) {
+        if (inputOverride.passIndex == passIndex && inputOverride.inputName == inputName) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static RawGLGraphState::ResourcePlan
@@ -1502,6 +1600,9 @@ build_sequence_runtime_config(const RawGLGraphState::ResourcePlan& resourcePlan)
                     input.path = inputDefinition.referencedOutputName + "::"
                                  + std::to_string(inputDefinition.referencedPassIndex);
                 }
+            } else if (inputDefinition.sourceKind == GraphInputSourceKind::graphTexture) {
+                apply_texture_attributes(input, inputDefinition.attributes);
+                input.runtimeTextureBindingRequired = true;
             } else {
                 GraphInputSourceKind expectedKind = GraphInputSourceKind::intValues;
                 uint8_t fieldCount                = 0;
@@ -1533,7 +1634,8 @@ build_sequence_runtime_config(const RawGLGraphState::ResourcePlan& resourcePlan)
             std::shared_ptr<GLProgramBuffers> counter = passConfig.program->findCounter(counterDefinition.name);
             Pass::inputCounter inputCounter;
             inputCounter.size  = counter->size;
-            inputCounter.value = { counterDefinition.initialValue };
+            inputCounter.value.assign(counter->size, 0u);
+            inputCounter.value[0] = counterDefinition.initialValue;
             passConfig.inputCounters.insert({ counterDefinition.name, inputCounter });
         }
 
@@ -1574,11 +1676,34 @@ build_execution_plan(const RawGLGraphState::ResourcePlan& resourcePlan)
             executionPass.inputNames.push_back(inputDefinition.name);
             if (inputDefinition.sourceKind == GraphInputSourceKind::passOutput) {
                 append_unique_dependency(executionPass.dependencyPassIndices, inputDefinition.referencedPassIndex);
+            } else if (inputDefinition.sourceKind == GraphInputSourceKind::graphTexture) {
+                executionPlan.persistentInputs.push_back(RawGLGraphState::PersistentInputBinding {
+                    passIndex,
+                    inputDefinition.name,
+                    inputDefinition.graphTextureName,
+                });
             }
         }
 
         for (const GraphOutputDefinition& outputDefinition : resourcePass.outputs) {
             executionPass.outputNames.push_back(outputDefinition.name);
+            if (!outputDefinition.persistentTextureName.empty()) {
+                executionPlan.persistentOutputs.push_back(RawGLGraphState::PersistentOutputBinding {
+                    passIndex,
+                    outputDefinition.name,
+                    outputDefinition.persistentTextureName,
+                });
+            }
+        }
+
+        for (const GraphAtomicCounterDefinition& counterDefinition : resourcePass.atomicCounters) {
+            if (!counterDefinition.persistentCounterName.empty()) {
+                executionPlan.persistentAtomicCounters.push_back(RawGLGraphState::PersistentAtomicCounterBinding {
+                    passIndex,
+                    counterDefinition.name,
+                    counterDefinition.persistentCounterName,
+                });
+            }
         }
 
         executionPlan.passes.push_back(std::move(executionPass));
@@ -1674,9 +1799,42 @@ RawGLGraph::execute(const GraphExecutionRequest& request)
             validate_execution_input_override(m_state->validatedGraph, inputOverride);
             inputOverrides.push_back(build_sequence_execution_input_override(*m_contextState, inputOverride));
         }
+        std::map<std::string, std::shared_ptr<Texture>> persistentTextureSnapshot;
+        for (const auto& persistentTexture : m_state->persistentTextures) {
+            persistentTextureSnapshot[persistentTexture.first] = clone_texture_resource(persistentTexture.second);
+        }
+        for (const RawGLGraphState::PersistentInputBinding& persistentInput : m_state->executionPlan.persistentInputs) {
+            if (has_sequence_override(inputOverrides, persistentInput.passIndex, persistentInput.inputName)) {
+                continue;
+            }
+
+            auto textureIt = persistentTextureSnapshot.find(persistentInput.persistentTextureName);
+            if (textureIt == persistentTextureSnapshot.end() || !textureIt->second) {
+                continue;
+            }
+
+            SequenceExecutionInputOverride inputOverride;
+            inputOverride.passIndex = persistentInput.passIndex;
+            inputOverride.inputName = persistentInput.inputName;
+            inputOverride.kind      = SequenceExecutionInputOverrideKind::texture;
+            inputOverride.texture   = textureIt->second;
+            inputOverrides.push_back(std::move(inputOverride));
+        }
 
         if (!m_state->sequence) {
             m_state->sequence = std::make_unique<Sequence>(m_state->executionPlan.sequenceRuntimeConfig);
+        }
+
+        for (const RawGLGraphState::PersistentAtomicCounterBinding& persistentCounter :
+             m_state->executionPlan.persistentAtomicCounters) {
+            auto counterIt = m_state->persistentAtomicCounters.find(persistentCounter.persistentCounterName);
+            if (counterIt == m_state->persistentAtomicCounters.end() || counterIt->second.empty()) {
+                continue;
+            }
+
+            m_state->sequence->setPassAtomicCounterValues(persistentCounter.passIndex,
+                                                          persistentCounter.counterName,
+                                                          counterIt->second);
         }
 
         SequenceSystemUniformState systemUniforms;
@@ -1685,6 +1843,25 @@ RawGLGraph::execute(const GraphExecutionRequest& request)
         systemUniforms.frameNumber      = request.systemUniforms.frameNumber;
         systemUniforms.passIndex        = request.systemUniforms.passIndex;
         m_state->sequence->run(systemUniforms, inputOverrides);
+        for (const RawGLGraphState::PersistentOutputBinding& persistentOutput : m_state->executionPlan.persistentOutputs) {
+            std::shared_ptr<Texture> outputTexture =
+                m_state->sequence->getPassOutputTexture(persistentOutput.passIndex, persistentOutput.outputName);
+            if (!outputTexture) {
+                throw std::runtime_error("persistent output capture failed for " + persistentOutput.outputName);
+            }
+            m_state->persistentTextures[persistentOutput.persistentTextureName] = outputTexture;
+        }
+        for (const RawGLGraphState::PersistentAtomicCounterBinding& persistentCounter :
+             m_state->executionPlan.persistentAtomicCounters) {
+            const std::vector<GLuint> counterValues =
+                m_state->sequence->getPassAtomicCounterValues(persistentCounter.passIndex, persistentCounter.counterName);
+            if (counterValues.empty()) {
+                throw std::runtime_error("persistent atomic counter capture failed for "
+                                         + persistentCounter.counterName);
+            }
+            m_state->persistentAtomicCounters[persistentCounter.persistentCounterName] = counterValues;
+        }
+        m_state->sequence->releaseRunOutputTextures();
         result.success = true;
     } catch (const std::exception& exception) {
         result.errorMessage = exception.what();

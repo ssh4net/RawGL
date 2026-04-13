@@ -1,0 +1,41 @@
+include(GNUInstallDirs)
+
+set(RAWGL_LINUX_PREFIX "" CACHE PATH "Linux dependency prefix, for example /mnt/e/UBc/Release or /mnt/e/UBc/Debug")
+set(RAWGL_WINDOWS_DEPS_ROOT "E:/DVS" CACHE PATH "Windows dependency root used by the static CMake build")
+set(RAWGL_WINDOWS_DNG_SDK_ROOT "W:/VisualStudio/dng_sdk_1_7_1" CACHE PATH "Windows DNG SDK root used to resolve dng_sdk.lib for static builds")
+set(RAWGL_WINDOWS_DNG_LIBRARY_RELEASE "${RAWGL_WINDOWS_DNG_SDK_ROOT}/dng_sdk/projects/win/x64/Release/dng_sdk.lib" CACHE FILEPATH "Windows release DNG SDK library")
+set(RAWGL_WINDOWS_DNG_LIBRARY_DEBUG "${RAWGL_WINDOWS_DNG_SDK_ROOT}/dng_sdk/projects/win/x64/Debug/dng_sdk.lib" CACHE FILEPATH "Windows debug DNG SDK library")
+set(RAWGL_WINDOWS_XMP_CORE_LIBRARY_RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/XMPCoreStaticRelease.lib" CACHE FILEPATH "Windows release XMP core library")
+set(RAWGL_WINDOWS_XMP_CORE_LIBRARY_DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/XMPCoreStaticDebug.lib" CACHE FILEPATH "Windows debug XMP core library")
+set(RAWGL_WINDOWS_XMP_FILES_LIBRARY_RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/XMPFilesStaticRelease.lib" CACHE FILEPATH "Windows release XMP files library")
+set(RAWGL_WINDOWS_XMP_FILES_LIBRARY_DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/XMPFilesStaticDebug.lib" CACHE FILEPATH "Windows debug XMP files library")
+set(RAWGL_MINIPLY_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/SRC/RawGL/src/intern" CACHE PATH "Directory containing miniply.h")
+option(RAWGL_WINDOWS_UTF8 "Compile all Windows/MSVC targets with /utf-8." ON)
+
+function(rawgl_cache_prepend_prefix_path prefix_path)
+    if(NOT prefix_path)
+        return()
+    endif()
+
+    set(rawgl_prefix_list ${CMAKE_PREFIX_PATH})
+    list(REMOVE_ITEM rawgl_prefix_list "${prefix_path}")
+    list(PREPEND rawgl_prefix_list "${prefix_path}")
+    set(CMAKE_PREFIX_PATH "${rawgl_prefix_list}" CACHE STRING "Search path for external dependencies." FORCE)
+endfunction()
+
+if(WIN32)
+    rawgl_cache_prepend_prefix_path("${RAWGL_WINDOWS_DEPS_ROOT}")
+    set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON CACHE BOOL "Prefer package config files over Find modules on Windows static builds." FORCE)
+    set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release CACHE STRING "Map RelWithDebInfo imports to Release on Windows static builds." FORCE)
+    set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL Release CACHE STRING "Map MinSizeRel imports to Release on Windows static builds." FORCE)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY
+        "$<$<CONFIG:Debug>:MultiThreadedDebug>$<$<NOT:$<CONFIG:Debug>>:MultiThreaded>"
+        CACHE STRING "MSVC runtime library selection." FORCE)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    rawgl_cache_prepend_prefix_path("${RAWGL_LINUX_PREFIX}")
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "Build position independent code on Linux." FORCE)
+endif()
+
+if(MSVC AND RAWGL_WINDOWS_UTF8)
+    add_compile_options(/utf-8)
+endif()

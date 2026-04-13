@@ -126,6 +126,17 @@
     <ClInclude Include="..\RawGL\src\rawgl_core.h" />
     <ClInclude Include="..\RawGL\src\sequence.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\tests\rawgl_core_graph_smoke.cpp" />
+    <None Include="..\..\tests\rawgl_core_input_override_smoke.cpp" />
+    <None Include="..\..\tests\rawgl_core_inspect_smoke.cpp" />
+    <None Include="..\..\tests\rawgl_core_persistent_atomic_counter_smoke.cpp" />
+    <None Include="..\..\tests\rawgl_core_persistent_texture_smoke.cpp" />
+    <None Include="..\..\tests\rawgl_core_shared_context_smoke.cpp" />
+    <None Include="..\..\tests\rawgl_core_shared_file_resources_smoke.cpp" />
+    <None Include="..\..\tests\rawgl_core_system_uniform_reject_smoke.cpp" />
+    <None Include="..\..\tests\rawgl_core_transient_output_reuse_smoke.cpp" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

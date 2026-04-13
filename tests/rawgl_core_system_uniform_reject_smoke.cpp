@@ -40,6 +40,7 @@ main()
         "",
         "",
         0,
+        "",
         {},
     });
     pass.outputs.push_back(rawgl::GraphOutputDefinition {
@@ -49,6 +50,7 @@ main()
         4,
         3,
         16,
+        "",
         {},
     });
 

@@ -1464,6 +1464,10 @@ Sequence::preloadInputTextures()
             default: continue;
             }
 
+            if (input.runtimeTextureBindingRequired && input.path.empty()) {
+                continue;
+            }
+
             if (input.path.find("::") != std::string::npos) {
                 continue;
             }
@@ -1503,6 +1507,112 @@ Sequence::preloadInputTextures()
                                                       textureData.type, textureData.data, textureData.alphaChannel) });
 
         release_loaded_texture_data(textureData);
+    }
+}
+
+void
+Sequence::ensurePassOutputTextures(Pass& pass, int passIndex)
+{
+    for (auto& outputIt : pass.outputs) {
+        PassOutput& output = outputIt.second;
+
+        if (output.texture) {
+            continue;
+        }
+
+        if (output.alphaChannel >= output.channels) {
+            throw_sequence_error("out_alpha_channel (" + outputIt.first
+                                 + "): index exceeds max channel index for this image.");
+        }
+
+        if (!output.path.empty()) {
+            output.format = image_utils::get_output_format(output.path, output.bits, output.formatDefaulted);
+        }
+
+        const std::string textureName                  = outputIt.first + "::" + std::to_string(passIndex);
+        const std::pair<std::string, GLenum> formats[] = {
+            { "rgba8", GL_RGBA8 }, { "rgba16", GL_RGBA16 }, { "rgba16f", GL_RGBA16F }, { "rgba32f", GL_RGBA32F },
+            { "r8", GL_R8 },       { "r16", GL_R16 },       { "r16f", GL_R16F },       { "r32f", GL_R32F },
+            { "rg8", GL_RG8 },     { "rg16", GL_RG16 },     { "rg16f", GL_RG16F },     { "rg32f", GL_RG32F },
+            { "rgb8", GL_RGB8 },   { "rgb16", GL_RGB16 },   { "rgb16f", GL_RGB16F },   { "rgb32f", GL_RGB32F }
+        };
+
+        GLenum internalFormat = GL_RGBA32F;
+        int formatIndex       = 0;
+
+        for (; formatIndex < 16; ++formatIndex) {
+            if (output.internalFormatText == formats[formatIndex].first) {
+                break;
+            }
+        }
+
+        if (formatIndex == 16) {
+            LOG(warning) << "Pass " << passIndex << ": unknown output framebuffer format "
+                         << output.internalFormatText << " changing to rgba32f.";
+        } else {
+            if (formatIndex > 3 && pass.isCompute) {
+                formatIndex %= 4;
+                LOG(warning)
+                    << "Pass " << passIndex
+                    << ": only 4-component output framebuffer formats are allowed for compute shaders, changing to "
+                    << formats[formatIndex].first;
+            }
+
+            internalFormat = formats[formatIndex].second;
+        }
+
+        auto textureIt = m_textures
+                             .insert({ textureName,
+                                       std::make_shared<Texture>(pass.size[0], pass.size[1], internalFormat, GL_FLOAT,
+                                                                 nullptr, output.alphaChannel) })
+                             .first;
+        output.texture = textureIt->second;
+
+        if (!pass.isCompute) {
+            GLCall(glBindFramebuffer(GL_FRAMEBUFFER, pass.fboId));
+            LOG(debug) << "Pass " << passIndex << ": attaching output " << output.output->location << " "
+                       << outputIt.first << " to FBO";
+            GLCall(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + output.output->location, GL_TEXTURE_2D,
+                                          textureIt->second->getId(), 0));
+        }
+    }
+
+    if (!pass.isCompute) {
+        const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE) {
+            throw_sequence_error("Pass " + std::to_string(passIndex) + ": unable to setup FBO.");
+        }
+
+        LOG(debug) << "Pass " << passIndex << ": FBO created successfully.";
+    }
+}
+
+void
+Sequence::refreshPassTextureInputs(Pass& pass)
+{
+    for (auto& inputIt : pass.inputs) {
+        PassInput& input = inputIt.second;
+
+        switch (input.uniform->type) {
+        case GL_SAMPLER_2D:
+        case GL_IMAGE_2D: break;
+        default: continue;
+        }
+
+        if (input.runtimeTextureBindingRequired && input.path.empty()) {
+            continue;
+        }
+
+        const std::string textureKey = input.path.find("::") == std::string::npos
+                                           ? make_disk_texture_key(input.path, input.attributes)
+                                           : input.path;
+
+        auto textureIt = m_textures.find(textureKey);
+        if (textureIt == m_textures.end()) {
+            throw_sequence_error("input (" + inputIt.first + "): referenced texture is missing.");
+        }
+
+        input.texture = textureIt->second;
     }
 }
 
@@ -1573,94 +1683,8 @@ Sequence::initializePass(Pass& pass, int passIndex)
         pass.glbObject.FBO.push_back(Pass::FBOobject { pass.fboId });
     }
 
-    for (auto& outputIt : pass.outputs) {
-        PassOutput& output = outputIt.second;
-
-        if (output.alphaChannel >= output.channels) {
-            throw_sequence_error("out_alpha_channel (" + outputIt.first
-                                 + "): index exceeds max channel index for this image.");
-        }
-
-        if (!output.path.empty()) {
-            output.format = image_utils::get_output_format(output.path, output.bits, output.formatDefaulted);
-        }
-
-        const std::string textureName                  = outputIt.first + "::" + std::to_string(passIndex);
-        const std::pair<std::string, GLenum> formats[] = {
-            { "rgba8", GL_RGBA8 }, { "rgba16", GL_RGBA16 }, { "rgba16f", GL_RGBA16F }, { "rgba32f", GL_RGBA32F },
-            { "r8", GL_R8 },       { "r16", GL_R16 },       { "r16f", GL_R16F },       { "r32f", GL_R32F },
-            { "rg8", GL_RG8 },     { "rg16", GL_RG16 },     { "rg16f", GL_RG16F },     { "rg32f", GL_RG32F },
-            { "rgb8", GL_RGB8 },   { "rgb16", GL_RGB16 },   { "rgb16f", GL_RGB16F },   { "rgb32f", GL_RGB32F }
-        };
-
-        GLenum internalFormat = GL_RGBA32F;
-        int formatIndex       = 0;
-
-        for (; formatIndex < 16; ++formatIndex) {
-            if (output.internalFormatText == formats[formatIndex].first) {
-                break;
-            }
-        }
-
-        if (formatIndex == 16) {
-            LOG(warning) << "Pass " << passIndex << ": unknown output framebuffer format "
-                         << output.internalFormatText << " changing to rgba32f.";
-        } else {
-            if (formatIndex > 3 && pass.isCompute) {
-                formatIndex %= 4;
-                LOG(warning)
-                    << "Pass " << passIndex
-                    << ": only 4-component output framebuffer formats are allowed for compute shaders, changing to "
-                    << formats[formatIndex].first;
-            }
-
-            internalFormat = formats[formatIndex].second;
-        }
-
-        auto textureIt = m_textures
-                             .insert({ textureName,
-                                       std::make_shared<Texture>(pass.size[0], pass.size[1], internalFormat, GL_FLOAT,
-                                                                 nullptr, output.alphaChannel) })
-                             .first;
-        output.texture = textureIt->second;
-
-        if (!pass.isCompute) {
-            LOG(debug) << "Pass " << passIndex << ": attaching output " << output.output->location << " "
-                       << outputIt.first << " to FBO";
-            GLCall(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + output.output->location, GL_TEXTURE_2D,
-                                          textureIt->second->getId(), 0));
-        }
-    }
-
-    if (!pass.isCompute) {
-        const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-        if (status != GL_FRAMEBUFFER_COMPLETE) {
-            throw_sequence_error("Pass " + std::to_string(passIndex) + ": unable to setup FBO.");
-        }
-
-        LOG(debug) << "Pass " << passIndex << ": FBO created successfully.";
-    }
-
-    for (auto& inputIt : pass.inputs) {
-        PassInput& input = inputIt.second;
-
-        switch (input.uniform->type) {
-        case GL_SAMPLER_2D:
-        case GL_IMAGE_2D: break;
-        default: continue;
-        }
-
-        const std::string textureKey = input.path.find("::") == std::string::npos
-                                           ? make_disk_texture_key(input.path, input.attributes)
-                                           : input.path;
-
-        auto textureIt = m_textures.find(textureKey);
-        if (textureIt == m_textures.end()) {
-            throw_sequence_error("input (" + inputIt.first + "): referenced texture is missing.");
-        }
-
-        input.texture = textureIt->second;
-    }
+    ensurePassOutputTextures(pass, passIndex);
+    refreshPassTextureInputs(pass);
 
     try {
         if (meshInput.mesh.isQuad) {
@@ -1717,7 +1741,9 @@ Sequence::validatePassSetup() const
                 throw_sequence_error("input (" + inputIt.first + "): uniform is not initialized.");
             }
 
-            if ((input.uniform->type == GL_SAMPLER_2D || input.uniform->type == GL_IMAGE_2D) && input.texture == nullptr) {
+            if ((input.uniform->type == GL_SAMPLER_2D || input.uniform->type == GL_IMAGE_2D)
+                && input.texture == nullptr
+                && !input.runtimeTextureBindingRequired) {
                 throw_sequence_error("input (" + inputIt.first + "): texture is not initialized.");
             }
         }
@@ -1780,6 +1806,9 @@ Sequence::bindPassInputs(const PassExecutionPlan& plan,
         std::shared_ptr<Texture> boundTexture = input.texture;
         if (inputOverride && inputOverride->kind == SequenceExecutionInputOverrideKind::texture) {
             boundTexture = inputOverride->texture;
+        }
+        if ((input.uniform->type == GL_SAMPLER_2D || input.uniform->type == GL_IMAGE_2D) && !boundTexture) {
+            throw_sequence_error("input (" + *binding.name + "): runtime texture binding is missing.");
         }
 
         switch (input.uniform->type) {
@@ -1968,6 +1997,7 @@ void
 Sequence::preparePassAtomicCounters(Pass& pass)
 {
     pass.u_aCounters.clear();
+    pass.capturedAtomicCounterValues.clear();
 
     auto& pass_acounters = pass.program->get_m_acounters();
     std::unordered_set<std::string> passUserInputCounters;
@@ -2052,6 +2082,30 @@ Sequence::bindPassAtomicCounters(Pass& pass)
     }
 
     GLCall(glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT));
+}
+
+void
+Sequence::capturePassAtomicCounterResults(Pass& pass)
+{
+    if (pass.u_aCounters.empty()) {
+        return;
+    }
+
+    GLCall(glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT));
+
+    for (auto& counterIt : pass.u_aCounters) {
+        if (counterIt.second.bufferID == 0 || !counterIt.second.buffer) {
+            continue;
+        }
+
+        const GLsizeiptr byteCount = static_cast<GLsizeiptr>(sizeof(GLuint) * counterIt.second.buffer->size);
+        counterIt.second.result.resize(counterIt.second.buffer->size);
+        GLCall(glGetNamedBufferSubData(counterIt.second.bufferID,
+                                       counterIt.second.buffer->offset,
+                                       byteCount,
+                                       counterIt.second.result.data()));
+        pass.capturedAtomicCounterValues[counterIt.second.buffer->name] = counterIt.second.result;
+    }
 }
 
 void
@@ -2176,6 +2230,13 @@ Sequence::run(const SequenceSystemUniformState& systemUniforms,
     //glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
 
     try {
+        for (int passIndex = 0; passIndex < static_cast<int>(m_passes.size()); ++passIndex) {
+            ensurePassOutputTextures(m_passes[passIndex], passIndex);
+        }
+        for (auto& pass : m_passes) {
+            refreshPassTextureInputs(pass);
+        }
+
         for (const PassExecutionPlan& plan : m_executionPlan) {
             Pass& pass = *plan.pass;
             GLCall(glUseProgram(pass.program->getId()));
@@ -2191,6 +2252,7 @@ Sequence::run(const SequenceSystemUniformState& systemUniforms,
                 executeGraphicsPass(plan);
             }
 
+            capturePassAtomicCounterResults(pass);
             savePassOutputs(plan);
         }
     } catch (...) {
@@ -2208,6 +2270,92 @@ Sequence::run(const SequenceSystemUniformState& systemUniforms,
     glUseProgram(0);
 
     LOG(debug) << "Sequence completed in " << timer.nowText();
+}
+
+std::shared_ptr<Texture>
+Sequence::getPassOutputTexture(size_t passIndex, const std::string& outputName) const
+{
+    if (passIndex >= m_passes.size()) {
+        return nullptr;
+    }
+
+    auto outputIt = m_passes[passIndex].outputs.find(outputName);
+    if (outputIt == m_passes[passIndex].outputs.end()) {
+        return nullptr;
+    }
+
+    return outputIt->second.texture;
+}
+
+std::vector<GLuint>
+Sequence::getPassAtomicCounterValues(size_t passIndex, const std::string& counterName) const
+{
+    if (passIndex >= m_passes.size()) {
+        return {};
+    }
+
+    const Pass& pass = m_passes[passIndex];
+    const auto capturedIt = pass.capturedAtomicCounterValues.find(counterName);
+    if (capturedIt != pass.capturedAtomicCounterValues.end()) {
+        return capturedIt->second;
+    }
+
+    const auto inputIt = pass.inputCounters.find(counterName);
+    if (inputIt != pass.inputCounters.end()) {
+        return inputIt->second.value;
+    }
+
+    return {};
+}
+
+void
+Sequence::setPassAtomicCounterValues(size_t passIndex, const std::string& counterName, const std::vector<GLuint>& values)
+{
+    if (passIndex >= m_passes.size()) {
+        throw_sequence_error("invalid pass index for atomic counter override");
+    }
+
+    Pass& pass = m_passes[passIndex];
+    std::shared_ptr<GLProgramBuffers> counter = pass.program->findCounter(counterName);
+    if (!counter) {
+        throw_sequence_error("atomic counter " + counterName + " is not used in the shader");
+    }
+
+    if (values.size() > static_cast<size_t>(counter->size)) {
+        throw_sequence_error("atomic counter " + counterName + " has more values than the shader");
+    }
+
+    auto& inputCounter = pass.inputCounters[counterName];
+    inputCounter.size  = counter->size;
+    inputCounter.value.assign(counter->size, 0u);
+    std::copy(values.begin(), values.end(), inputCounter.value.begin());
+}
+
+void
+Sequence::releaseRunOutputTextures()
+{
+    for (size_t passIndex = 0; passIndex < m_passes.size(); ++passIndex) {
+        Pass& pass = m_passes[passIndex];
+        for (auto& outputIt : pass.outputs) {
+            const std::string textureKey = outputIt.first + "::" + std::to_string(passIndex);
+
+            auto textureIt = m_textures.find(textureKey);
+            if (textureIt != m_textures.end()) {
+                m_textures.erase(textureIt);
+            }
+
+            outputIt.second.texture.reset();
+        }
+    }
+
+    for (auto& pass : m_passes) {
+        for (auto& inputIt : pass.inputs) {
+            PassInput& input = inputIt.second;
+            if (input.path.find("::") != std::string::npos) {
+                input.texture.reset();
+            }
+        }
+    }
 }
 
 #define STRING_USED_DEFAULTS "(used default)"

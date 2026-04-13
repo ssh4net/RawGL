@@ -101,6 +101,7 @@ enum class GraphInputSourceKind {
     doubleValues,
     textureFile,
     passOutput,
+    graphTexture,
 };
 
 struct GraphInputDefinition {
@@ -113,12 +114,14 @@ struct GraphInputDefinition {
     std::string texturePath;
     std::string referencedOutputName;
     size_t referencedPassIndex = 0;
+    std::string graphTextureName;
     std::vector<GraphAttribute> attributes;
 };
 
 struct GraphAtomicCounterDefinition {
     std::string name;
     uint32_t initialValue = 0;
+    std::string persistentCounterName;
 };
 
 struct GraphOutputDefinition {
@@ -128,6 +131,7 @@ struct GraphOutputDefinition {
     int channels       = 3;
     int alphaChannel   = -1;
     int bits           = 16;
+    std::string persistentTextureName;
     std::vector<GraphAttribute> attributes;
 };
 

@@ -98,6 +98,7 @@ make_texture_graph_request(const std::filesystem::path& outputPath)
         "tests/inputs/EmptyPresetLUT.png",
         "",
         0,
+        "",
         {},
     });
     pass.outputs.push_back(rawgl::GraphOutputDefinition {
@@ -107,6 +108,7 @@ make_texture_graph_request(const std::filesystem::path& outputPath)
         4,
         3,
         16,
+        "",
         {},
     });
 
@@ -136,6 +138,7 @@ make_mesh_graph_request(const std::filesystem::path& outputPath)
         4,
         3,
         16,
+        "",
         {},
     });
 
