@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include "Common.h"
-#include "Texture.h"
-#include "ImageUtils.h"
-#include "GLProgram.h"
+#include "common.h"
+#include "texture.h"
+#include "image_utils.h"
+#include "gl_program.h"
 
 #include <functional>
 
@@ -153,6 +153,7 @@ struct MeshInput {
         GLuint iboId = 0;
     };
     VertexBuffer VBO;
+    std::shared_ptr<struct SequenceSharedGpuMesh> sharedGpuMesh;
 
     struct MeshParmValue;
 
@@ -400,33 +401,113 @@ struct SequenceParsedArguments {
 SequenceParsedArguments
 Sequence_ParseArguments(int argc, const char* argv[]);
 
+struct SequencePassConfig {
+    std::shared_ptr<GLProgram> program;
+    bool isCompute = false;
+    std::map<std::string, PassInput> inputs;
+    std::map<std::string, Pass::inputCounter> inputCounters;
+    std::map<std::string, PassOutput> outputs;
+    std::map<std::string, MeshInput> meshes;
+    Pass::CullMode cullMode { GL_CW, GL_BACK, true };
+    std::string sizeText[2] { "512", "512" };
+    std::string workGroupSizeText[2] { "16", "16" };
+    float clearColor[4] { 0.0f, 0.0f, 0.0f, 0.0f };
+};
+
+struct SequenceBuildConfig {
+    int verbosity = 3;
+    std::vector<SequencePassConfig> passes;
+};
+
+struct SequenceRuntimePassConfig {
+    std::shared_ptr<GLProgram> program;
+    bool isCompute = false;
+    std::map<std::string, PassInput> inputs;
+    std::map<std::string, Pass::inputCounter> inputCounters;
+    std::map<std::string, PassOutput> outputs;
+    std::map<std::string, MeshInput> meshes;
+    Pass::CullMode cullMode { GL_CW, GL_BACK, true };
+    int size[2] { 512, 512 };
+    int workGroupSize[2] { 16, 16 };
+    float clearColor[4] { 0.0f, 0.0f, 0.0f, 0.0f };
+};
+
+struct SequenceSharedMeshData {
+    GLsizei vrtSize = 0;
+    GLsizei texSize = 0;
+    GLsizei nrmSize = 0;
+    GLsizei clrSize = 0;
+    GLsizei idxSize = 0;
+    GLsizei numIndxs = 0;
+    std::vector<float> verts;
+    std::vector<float> texcoords;
+    std::vector<float> normals;
+    std::vector<unsigned char> colors;
+    std::vector<uint32_t> indices;
+};
+
+struct SequenceSharedGpuMesh {
+    MeshInput::VertexBuffer vertexBuffer;
+
+    SequenceSharedGpuMesh() = default;
+    ~SequenceSharedGpuMesh();
+
+    SequenceSharedGpuMesh(const SequenceSharedGpuMesh&) = delete;
+    SequenceSharedGpuMesh& operator=(const SequenceSharedGpuMesh&) = delete;
+};
+
+struct SequenceRuntimeConfig {
+    int verbosity = 3;
+    std::vector<SequenceRuntimePassConfig> passes;
+    std::map<std::string, std::shared_ptr<Texture>> sharedTextures;
+    std::map<std::string, std::shared_ptr<SequenceSharedMeshData>> sharedMeshes;
+    std::map<std::string, std::shared_ptr<SequenceSharedGpuMesh>> sharedGpuMeshes;
+};
+
+struct SequenceSystemUniformState {
+    double timeSeconds      = 0.0;
+    double deltaTimeSeconds = 0.0;
+    int frameNumber         = 0;
+    int passIndex           = -1;
+};
+
+enum class SequenceExecutionInputOverrideKind {
+    intValues,
+    uintValues,
+    floatValues,
+    doubleValues,
+    texture,
+};
+
+struct SequenceExecutionInputOverride {
+    size_t passIndex = 0;
+    std::string inputName;
+    SequenceExecutionInputOverrideKind kind = SequenceExecutionInputOverrideKind::intValues;
+    std::vector<int32_t> intValues;
+    std::vector<uint32_t> uintValues;
+    std::vector<float> floatValues;
+    std::vector<double> doubleValues;
+    std::shared_ptr<Texture> texture;
+};
 
 class Sequence {
 public:
     Sequence(int argc, const char* argv[]);
     explicit Sequence(const SequenceParsedArguments& parsedArguments);
+    explicit Sequence(const SequenceBuildConfig& buildConfig);
+    explicit Sequence(const SequenceRuntimeConfig& runtimeConfig);
     ~Sequence();
 
     void run();
+    void run(const SequenceSystemUniformState& systemUniforms);
+    void run(const SequenceSystemUniformState& systemUniforms,
+             const std::vector<SequenceExecutionInputOverride>& inputOverrides);
 
 private:
     Sequence() {}
 
-    struct PassConfig {
-        std::shared_ptr<GLProgram> program;
-        bool isCompute = false;
-        std::map<std::string, PassInput> inputs;
-        std::map<std::string, Pass::inputCounter> inputCounters;
-        std::map<std::string, PassOutput> outputs;
-        std::map<std::string, MeshInput> meshes;
-        Pass::CullMode cullMode { GL_CW, GL_BACK, true };
-        std::string sizeText[2] { "512", "512" };
-        std::string workGroupSizeText[2] { "16", "16" };
-        float clearColor[4] { 0.0f, 0.0f, 0.0f, 0.0f };
-    };
-
     struct ParseState {
-        PassConfig* currentPass     = nullptr;
+        SequencePassConfig* currentPass = nullptr;
         PassInput* currentInput     = nullptr;
         PassOutput* currentOutput   = nullptr;
         MeshInput* currentMeshInput = nullptr;
@@ -450,13 +531,16 @@ private:
     struct PassExecutionPlan {
         Pass* pass                      = nullptr;
         const MeshInput* primaryMesh    = nullptr;
+        int passIndex                   = -1;
         std::vector<PlannedInputBinding> inputs;
         std::vector<PlannedOutputBinding> outputs;
     };
 
     std::map<std::string, std::shared_ptr<Texture>> m_textures;
+    std::map<std::string, std::shared_ptr<SequenceSharedMeshData>> m_sharedMeshes;
+    std::map<std::string, std::shared_ptr<SequenceSharedGpuMesh>> m_sharedGpuMeshes;
 
-    std::vector<PassConfig> m_passConfigs;
+    std::vector<SequencePassConfig> m_passConfigs;
     std::vector<Pass> m_passes;
     std::vector<PassExecutionPlan> m_executionPlan;
 
@@ -468,12 +552,14 @@ private:
     void processInputAttributeOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
     void processOutputOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
     void buildPassesFromConfig();
+    void buildPassesFromRuntimeConfig(const SequenceRuntimeConfig& runtimeConfig);
     void preloadInputTextures();
     void initializePass(Pass& pass, int passIndex);
     void validatePassSetup() const;
     void buildExecutionPlan();
-    int bindPassInputs(const PassExecutionPlan& plan);
-    void bindInternalUniforms(const PassExecutionPlan& plan);
+    int bindPassInputs(const PassExecutionPlan& plan,
+                       const std::vector<SequenceExecutionInputOverride>& inputOverrides);
+    void bindInternalUniforms(const PassExecutionPlan& plan, const SequenceSystemUniformState& systemUniforms);
     void preparePassAtomicCounters(Pass& pass);
     void bindPassAtomicCounters(Pass& pass);
     void executeComputePass(const PassExecutionPlan& plan, int textureIndex);
@@ -482,4 +568,9 @@ private:
     void destroyAtomicCounterBuffers();
     void initCommon();
     void initializeFromParsedArguments(const SequenceParsedArguments& parsedArguments);
+    void initializeFromBuildConfig(const SequenceBuildConfig& buildConfig);
+    void initializeFromRuntimeConfig(const SequenceRuntimeConfig& runtimeConfig);
 };
+
+std::shared_ptr<SequenceSharedGpuMesh>
+Sequence_CreateSharedGpuMesh(const SequenceSharedMeshData& sharedMesh);

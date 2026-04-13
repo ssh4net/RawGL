@@ -18,7 +18,7 @@
 #pragma once
 
 #include <chrono>
-#include "Log.h"
+#include "log.h"
 
 using std::chrono::high_resolution_clock;
 

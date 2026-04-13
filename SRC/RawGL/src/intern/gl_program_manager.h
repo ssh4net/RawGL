@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include "Common.h"
-#include "GLProgram.h"
-#include "AssetManager.h"
+#include "common.h"
+#include "gl_program.h"
+#include "asset_manager.h"
 
 class GLProgramManager : public AssetManager<GLProgram> {
 public:

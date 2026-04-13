@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "Common.h"
+#include "common.h"
 
 #include <OpenImageIO/typedesc.h>
 #include <OpenImageIO/imageio.h>

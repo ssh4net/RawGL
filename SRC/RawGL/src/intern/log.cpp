@@ -16,8 +16,8 @@
  */
 
 
-#include "Common.h"
-#include "Log.h"
+#include "common.h"
+#include "log.h"
 
 #include <algorithm>
 #include <memory>

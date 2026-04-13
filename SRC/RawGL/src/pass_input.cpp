@@ -16,8 +16,8 @@
  */
 
 
-#include "Sequence.h"
-#include "Timer.h"
+#include "sequence.h"
+#include "timer.h"
 
 // String to unsigned int
 template<>

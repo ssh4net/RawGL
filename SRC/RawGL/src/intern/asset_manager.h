@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "Common.h"
+#include "common.h"
 /*
 template<class T>
 class AssetDeleter

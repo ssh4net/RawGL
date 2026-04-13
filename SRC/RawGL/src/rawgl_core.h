@@ -23,8 +23,6 @@
 #include <string>
 #include <vector>
 
-class Sequence;
-
 namespace rawgl {
 
 enum class ShaderProgramKind {
@@ -58,15 +56,20 @@ struct ShaderBufferVariableInfo {
     unsigned int glType = 0;
 };
 
-struct ShaderInspectionResult {
+struct ShaderInterface {
     bool success = false;
-    bool isCompute = false;
     std::string errorMessage;
+    bool isCompute = false;
     std::vector<ShaderResourceInfo> uniforms;
+    std::vector<ShaderResourceInfo> samplers;
+    std::vector<ShaderResourceInfo> images;
     std::vector<ShaderResourceInfo> outputs;
     std::vector<ShaderResourceInfo> atomicCounters;
+    std::vector<ShaderResourceInfo> systemUniforms;
     std::vector<ShaderBufferVariableInfo> bufferVariables;
 };
+
+using ShaderInspectionResult = ShaderInterface;
 
 struct CommandLineRequest {
     int argc                = 0;
@@ -164,8 +167,21 @@ struct GraphBuildRequest {
     GraphDefinition definition;
 };
 
+struct GraphInputOverride {
+    size_t passIndex = 0;
+    std::string name;
+    GraphInputSourceKind sourceKind = GraphInputSourceKind::intValues;
+    std::vector<int32_t> intValues;
+    std::vector<uint32_t> uintValues;
+    std::vector<float> floatValues;
+    std::vector<double> doubleValues;
+    std::string texturePath;
+    std::vector<GraphAttribute> attributes;
+};
+
 struct GraphExecutionRequest {
     SystemUniformState systemUniforms;
+    std::vector<GraphInputOverride> inputOverrides;
 };
 
 struct GraphExecutionResult {
@@ -173,7 +189,15 @@ struct GraphExecutionResult {
     std::string errorMessage;
 };
 
+struct ContextCacheStats {
+    size_t shaderInterfaces = 0;
+    size_t textures         = 0;
+    size_t meshesHost       = 0;
+    size_t meshesGpu        = 0;
+};
+
 class RawGLGraph;
+struct RawGLGraphState;
 
 struct GraphBuildResult {
     bool success = false;
@@ -191,8 +215,9 @@ public:
     RawGLContext(const RawGLContext&) = delete;
     RawGLContext& operator=(const RawGLContext&) = delete;
 
-    ShaderInspectionResult inspectShaderInterface(const ShaderInspectionRequest& request) const;
+    ShaderInterface inspectShaderInterface(const ShaderInspectionRequest& request) const;
     GraphBuildResult buildGraph(const GraphBuildRequest& request) const;
+    ContextCacheStats cacheStats() const;
 
 private:
     std::shared_ptr<RawGLContextState> m_state;
@@ -200,7 +225,7 @@ private:
 
 class RawGLGraph {
 public:
-    RawGLGraph(std::shared_ptr<RawGLContextState> contextState, std::unique_ptr<Sequence> sequence);
+    RawGLGraph(std::shared_ptr<RawGLContextState> contextState, std::unique_ptr<RawGLGraphState> state);
     ~RawGLGraph();
 
     RawGLGraph(const RawGLGraph&) = delete;
@@ -208,12 +233,9 @@ public:
 
     GraphExecutionResult execute(const GraphExecutionRequest& request);
 
-    Sequence& sequence();
-    const Sequence& sequence() const;
-
 private:
     std::shared_ptr<RawGLContextState> m_contextState;
-    std::unique_ptr<Sequence> m_sequence;
+    std::unique_ptr<RawGLGraphState> m_state;
 };
 
 class CoreSession {
@@ -226,9 +248,6 @@ public:
 
     void run();
 
-    Sequence& sequence();
-    const Sequence& sequence() const;
-
 private:
     RawGLContext m_context;
     std::unique_ptr<RawGLGraph> m_graph;
@@ -237,7 +256,7 @@ private:
 CommandLineResult
 Run(const CommandLineRequest& request);
 
-ShaderInspectionResult
+ShaderInterface
 InspectShaderInterface(const ShaderInspectionRequest& request);
 
 int

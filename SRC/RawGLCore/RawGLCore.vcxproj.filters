@@ -11,81 +11,81 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\RawGL\src\intern\GLProgram.cpp">
+    <ClCompile Include="..\RawGL\src\intern\gl_program.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\RawGL\src\intern\GLProgramManager.cpp">
+    <ClCompile Include="..\RawGL\src\intern\gl_program_manager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\RawGL\src\intern\ImageUtils.cpp">
+    <ClCompile Include="..\RawGL\src\intern\image_utils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\RawGL\src\intern\Log.cpp">
+    <ClCompile Include="..\RawGL\src\intern\log.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\RawGL\src\intern\MESH_IO.CPP">
+    <ClCompile Include="..\RawGL\src\intern\mesh_io.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\RawGL\src\intern\OpenGLUtils.cpp">
+    <ClCompile Include="..\RawGL\src\intern\opengl_utils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\RawGL\src\intern\Texture.cpp">
+    <ClCompile Include="..\RawGL\src\intern\texture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\RawGL\src\PassInput.cpp">
+    <ClCompile Include="..\RawGL\src\pass_input.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\RawGL\src\PassOutput.cpp">
+    <ClCompile Include="..\RawGL\src\pass_output.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\RawGL\src\RawGLCore.cpp">
+    <ClCompile Include="..\RawGL\src\rawgl_core.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\RawGL\src\Sequence.cpp">
+    <ClCompile Include="..\RawGL\src\sequence.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\RawGL\src\intern\AssetManager.h">
+    <ClInclude Include="..\RawGL\src\intern\asset_manager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\RawGL\src\intern\Common.h">
+    <ClInclude Include="..\RawGL\src\intern\common.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\RawGL\src\intern\GLProgram.h">
+    <ClInclude Include="..\RawGL\src\intern\gl_program.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\RawGL\src\intern\GLProgramManager.h">
+    <ClInclude Include="..\RawGL\src\intern\gl_program_manager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\RawGL\src\intern\ImageUtils.h">
+    <ClInclude Include="..\RawGL\src\intern\image_utils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\RawGL\src\intern\Log.h">
+    <ClInclude Include="..\RawGL\src\intern\log.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\RawGL\src\intern\MESH_IO.H">
+    <ClInclude Include="..\RawGL\src\intern\mesh_io.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\RawGL\src\intern\miniply.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\RawGL\src\intern\OpenGLUtils.h">
+    <ClInclude Include="..\RawGL\src\intern\opengl_utils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\RawGL\src\intern\Texture.h">
+    <ClInclude Include="..\RawGL\src\intern\texture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\RawGL\src\intern\Timer.h">
+    <ClInclude Include="..\RawGL\src\intern\timer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\RawGL\src\intern\termcolor\termcolor.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\RawGL\src\RawGLCore.h">
+    <ClInclude Include="..\RawGL\src\rawgl_core.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\RawGL\src\Sequence.h">
+    <ClInclude Include="..\RawGL\src\sequence.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

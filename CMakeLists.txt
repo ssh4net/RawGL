@@ -307,24 +307,24 @@ if(NOT WIN32)
 endif()
 
 set(RAWGL_CORE_SOURCES
-    SRC/RawGL/src/PassInput.cpp
-    SRC/RawGL/src/PassOutput.cpp
-    SRC/RawGL/src/RawGLCore.cpp
-    SRC/RawGL/src/Sequence.cpp
-    SRC/RawGL/src/intern/GLProgram.cpp
-    SRC/RawGL/src/intern/GLProgramManager.cpp
-    SRC/RawGL/src/intern/ImageUtils.cpp
-    SRC/RawGL/src/intern/Log.cpp
-    SRC/RawGL/src/intern/MESH_IO.CPP
-    SRC/RawGL/src/intern/OpenGLUtils.cpp
-    SRC/RawGL/src/intern/Texture.cpp)
+    SRC/RawGL/src/pass_input.cpp
+    SRC/RawGL/src/pass_output.cpp
+    SRC/RawGL/src/rawgl_core.cpp
+    SRC/RawGL/src/sequence.cpp
+    SRC/RawGL/src/intern/gl_program.cpp
+    SRC/RawGL/src/intern/gl_program_manager.cpp
+    SRC/RawGL/src/intern/image_utils.cpp
+    SRC/RawGL/src/intern/log.cpp
+    SRC/RawGL/src/intern/mesh_io.cpp
+    SRC/RawGL/src/intern/opengl_utils.cpp
+    SRC/RawGL/src/intern/texture.cpp)
 
 list(APPEND RAWGL_CORE_SOURCES ${RAWGL_MINIPLY_SOURCES})
 
 add_library(rawgl_core STATIC ${RAWGL_CORE_SOURCES})
 add_library(RawGL::core ALIAS rawgl_core)
 
-add_executable(rawgl SRC/RawGL/src/RawGL.cpp)
+add_executable(rawgl SRC/RawGL/src/rawgl.cpp)
 add_executable(RawGL::rawgl ALIAS rawgl)
 
 if(WIN32)
@@ -418,6 +418,34 @@ if(BUILD_TESTING)
         SRC/RawGL/src
         SRC/RawGL/src/intern)
 
+    add_executable(rawgl_core_system_uniform_reject_smoke
+        tests/rawgl_core_system_uniform_reject_smoke.cpp)
+    target_link_libraries(rawgl_core_system_uniform_reject_smoke PRIVATE rawgl_core)
+    target_include_directories(rawgl_core_system_uniform_reject_smoke PRIVATE
+        SRC/RawGL/src
+        SRC/RawGL/src/intern)
+
+    add_executable(rawgl_core_shared_context_smoke
+        tests/rawgl_core_shared_context_smoke.cpp)
+    target_link_libraries(rawgl_core_shared_context_smoke PRIVATE rawgl_core)
+    target_include_directories(rawgl_core_shared_context_smoke PRIVATE
+        SRC/RawGL/src
+        SRC/RawGL/src/intern)
+
+    add_executable(rawgl_core_shared_file_resources_smoke
+        tests/rawgl_core_shared_file_resources_smoke.cpp)
+    target_link_libraries(rawgl_core_shared_file_resources_smoke PRIVATE rawgl_core)
+    target_include_directories(rawgl_core_shared_file_resources_smoke PRIVATE
+        SRC/RawGL/src
+        SRC/RawGL/src/intern)
+
+    add_executable(rawgl_core_input_override_smoke
+        tests/rawgl_core_input_override_smoke.cpp)
+    target_link_libraries(rawgl_core_input_override_smoke PRIVATE rawgl_core)
+    target_include_directories(rawgl_core_input_override_smoke PRIVATE
+        SRC/RawGL/src
+        SRC/RawGL/src/intern)
+
     add_test(NAME rawgl_core_inspect_smoke
         COMMAND rawgl_core_inspect_smoke)
     set_tests_properties(rawgl_core_inspect_smoke PROPERTIES
@@ -426,6 +454,26 @@ if(BUILD_TESTING)
     add_test(NAME rawgl_core_graph_smoke
         COMMAND rawgl_core_graph_smoke)
     set_tests_properties(rawgl_core_graph_smoke PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+    add_test(NAME rawgl_core_system_uniform_reject_smoke
+        COMMAND rawgl_core_system_uniform_reject_smoke)
+    set_tests_properties(rawgl_core_system_uniform_reject_smoke PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+    add_test(NAME rawgl_core_shared_context_smoke
+        COMMAND rawgl_core_shared_context_smoke)
+    set_tests_properties(rawgl_core_shared_context_smoke PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+    add_test(NAME rawgl_core_input_override_smoke
+        COMMAND rawgl_core_input_override_smoke)
+    set_tests_properties(rawgl_core_input_override_smoke PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+    add_test(NAME rawgl_core_shared_file_resources_smoke
+        COMMAND rawgl_core_shared_file_resources_smoke)
+    set_tests_properties(rawgl_core_shared_file_resources_smoke PROPERTIES
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
     function(rawgl_add_script_test test_name base_name)

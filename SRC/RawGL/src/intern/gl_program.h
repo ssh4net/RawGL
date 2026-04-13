@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include "Common.h"
-#include "OpenGLUtils.h"
+#include "common.h"
+#include "opengl_utils.h"
 
 struct GLProgramUniform {
     GLenum type;

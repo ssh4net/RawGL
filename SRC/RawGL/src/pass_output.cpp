@@ -16,8 +16,8 @@
  */
 
 
-#include "Sequence.h"
-#include "Timer.h"
+#include "sequence.h"
+#include "timer.h"
 
 PassOutput::PassOutput()
     : internalFormatText("rgba32f")

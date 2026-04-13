@@ -16,9 +16,9 @@
  */
 
 
-#include "GLProgram.h"
-#include "Log.h"
-#include "OpenGLUtils.h"
+#include "gl_program.h"
+#include "log.h"
+#include "opengl_utils.h"
 
 #include <sstream>
 #include <fstream>

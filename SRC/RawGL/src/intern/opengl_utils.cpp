@@ -16,9 +16,9 @@
  */
 
 
-#include "Common.h"
-#include "OpenGLUtils.h"
-#include "Log.h"
+#include "common.h"
+#include "opengl_utils.h"
+#include "log.h"
 
 #include <cstdlib>
 #include <stdexcept>

@@ -15,7 +15,9 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "RawGLCore.h"
+#include "rawgl_core.h"
+
+#include <OpenImageIO/imageio.h>
 
 #include <filesystem>
 #include <iostream>
@@ -29,13 +31,12 @@ main()
 
     rawgl::GraphPassDefinition pass;
     pass.programKind            = rawgl::ShaderProgramKind::compute;
-    pass.shaderPaths            = { "tests/shaders/atomic_counter.comp" };
+    pass.shaderPaths            = { "tests/shaders/system_uniforms.comp" };
     pass.sizeX                  = 1;
     pass.sizeY                  = 1;
     pass.workGroupSizeX         = 1;
     pass.workGroupSizeY         = 1;
     pass.hasExplicitWorkGroupSize = true;
-    pass.atomicCounters.push_back(rawgl::GraphAtomicCounterDefinition { "counter0", 5 });
     pass.outputs.push_back(rawgl::GraphOutputDefinition {
         "o_out0",
         outputPath.string(),
@@ -67,6 +68,34 @@ main()
 
     if (!std::filesystem::exists(outputPath)) {
         std::cerr << "Graph execution did not produce output image: " << outputPath << std::endl;
+        return 1;
+    }
+
+    std::unique_ptr<OIIO::ImageInput> input = OIIO::ImageInput::open(outputPath.string());
+    if (!input) {
+        std::cerr << "Unable to read graph smoke output image: " << outputPath << std::endl;
+        return 1;
+    }
+
+    const OIIO::ImageSpec spec = input->spec();
+    float pixel[4]             = { 0.0f, 0.0f, 0.0f, 0.0f };
+    if (!input->read_image(0, 0, 0, 4, OIIO::TypeDesc::FLOAT, pixel)) {
+        std::cerr << "Unable to read graph smoke output pixel." << std::endl;
+        return 1;
+    }
+
+    if (!input->close()) {
+        std::cerr << "Unable to close graph smoke image input." << std::endl;
+        return 1;
+    }
+
+    if (spec.width != 1 || spec.height != 1) {
+        std::cerr << "Unexpected graph smoke output dimensions." << std::endl;
+        return 1;
+    }
+    if (pixel[0] != 1.0f || pixel[1] != 24.0f || pixel[2] != 0.0f || pixel[3] != 1.0f) {
+        std::cerr << "Unexpected graph smoke output pixel: [" << pixel[0] << ", " << pixel[1] << ", " << pixel[2]
+                  << ", " << pixel[3] << "]" << std::endl;
         return 1;
     }
 

@@ -108,10 +108,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\RawGL.cpp" />
+    <ClCompile Include="src\rawgl.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\RawGLCore.h" />
+    <ClInclude Include="src\rawgl_core.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\RawGLCore\RawGLCore.vcxproj">

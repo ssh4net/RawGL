@@ -16,13 +16,13 @@
  */
 
 
-#include "Sequence.h"
+#include "sequence.h"
 
-#include "OpenGLUtils.h"
-#include "Timer.h"
-#include "Log.h"
-#include "GLProgramManager.h"
-#include "ImageUtils.h"
+#include "opengl_utils.h"
+#include "timer.h"
+#include "log.h"
+#include "gl_program_manager.h"
+#include "image_utils.h"
 
 #include <charconv>
 #include <future>
@@ -275,6 +275,20 @@ static const unsigned char RAWGL_DEFAULT_COLORS[] = { 255, 255, 255, 255, 255, 2
 
 static const unsigned int RAWGL_DEFAULT_INDICES[] = { 0, 1, 2, 0, 2, 3 };
 
+static const SequenceExecutionInputOverride*
+find_input_override(const std::vector<SequenceExecutionInputOverride>& inputOverrides,
+                    const size_t passIndex,
+                    const std::string& inputName)
+{
+    for (const SequenceExecutionInputOverride& inputOverride : inputOverrides) {
+        if (inputOverride.passIndex == passIndex && inputOverride.inputName == inputName) {
+            return &inputOverride;
+        }
+    }
+
+    return nullptr;
+}
+
 static std::string
 make_disk_texture_key(const std::string& path, const std::map<std::string, std::string>& attributes)
 {
@@ -285,6 +299,14 @@ make_disk_texture_key(const std::string& path, const std::map<std::string, std::
         stream << '\x1F' << attribute.first << '=' << attribute.second;
     }
 
+    return stream.str();
+}
+
+static std::string
+make_mesh_cache_key(const MeshInput::Mesh& mesh)
+{
+    std::ostringstream stream;
+    stream << "file:" << mesh.FileName << '\x1F' << "tris=" << (mesh.Triangles ? 1 : 0);
     return stream.str();
 }
 
@@ -352,6 +374,55 @@ release_loaded_texture_data(LoadedTextureData& texture)
     }
 }
 
+static void
+clone_shared_mesh_data(MeshInput::Mesh& mesh, const SequenceSharedMeshData& sharedMesh)
+{
+    mesh.pVerts = nullptr;
+    mesh.pTexts = nullptr;
+    mesh.pNorms = nullptr;
+    mesh.pColrs = nullptr;
+    mesh.pIndxs = nullptr;
+
+    if (!sharedMesh.verts.empty()) {
+        mesh.pVerts = new float[sharedMesh.verts.size()];
+        std::memcpy(mesh.pVerts, sharedMesh.verts.data(), sharedMesh.verts.size() * sizeof(float));
+    }
+    if (!sharedMesh.texcoords.empty()) {
+        mesh.pTexts = new float[sharedMesh.texcoords.size()];
+        std::memcpy(mesh.pTexts, sharedMesh.texcoords.data(), sharedMesh.texcoords.size() * sizeof(float));
+    }
+    if (!sharedMesh.normals.empty()) {
+        mesh.pNorms = new float[sharedMesh.normals.size()];
+        std::memcpy(mesh.pNorms, sharedMesh.normals.data(), sharedMesh.normals.size() * sizeof(float));
+    }
+    if (!sharedMesh.colors.empty()) {
+        mesh.pColrs = new unsigned char[sharedMesh.colors.size()];
+        std::memcpy(mesh.pColrs, sharedMesh.colors.data(), sharedMesh.colors.size() * sizeof(unsigned char));
+    }
+    if (!sharedMesh.indices.empty()) {
+        mesh.pIndxs = new uint32_t[sharedMesh.indices.size()];
+        std::memcpy(mesh.pIndxs, sharedMesh.indices.data(), sharedMesh.indices.size() * sizeof(uint32_t));
+    }
+
+    mesh.vrtSize  = sharedMesh.vrtSize;
+    mesh.texSize  = sharedMesh.texSize;
+    mesh.nrmSize  = sharedMesh.nrmSize;
+    mesh.clrSize  = sharedMesh.clrSize;
+    mesh.idxSize  = sharedMesh.idxSize;
+    mesh.numIndxs = sharedMesh.numIndxs;
+}
+
+static void
+apply_shared_mesh_metadata(MeshInput::Mesh& mesh, const SequenceSharedMeshData& sharedMesh)
+{
+    mesh.vrtSize  = sharedMesh.vrtSize;
+    mesh.texSize  = sharedMesh.texSize;
+    mesh.nrmSize  = sharedMesh.nrmSize;
+    mesh.clrSize  = sharedMesh.clrSize;
+    mesh.idxSize  = sharedMesh.idxSize;
+    mesh.numIndxs = sharedMesh.numIndxs;
+}
+
 static MeshInput&
 ensure_primary_mesh(Pass& pass)
 {
@@ -370,6 +441,59 @@ require_primary_mesh(const Pass& pass)
     }
 
     return pass.meshes.begin()->second;
+}
+
+static void
+configure_vertex_array(GLuint vaoId, const MeshInput::VertexBuffer& vertexBuffer)
+{
+    GLCall(glBindVertexArray(vaoId));
+
+    GLCall(glVertexArrayVertexBuffer(vaoId, 0, vertexBuffer.vboId, 0, 3 * sizeof(float)));
+    GLCall(glVertexArrayAttribFormat(vaoId, 0, 3, GL_FLOAT, GL_FALSE, 0));
+    GLCall(glVertexArrayAttribBinding(vaoId, 0, 0));
+    GLCall(glEnableVertexArrayAttrib(vaoId, 0));
+
+    GLCall(glVertexArrayVertexBuffer(vaoId, 1, vertexBuffer.tboId, 0, 2 * sizeof(float)));
+    GLCall(glVertexArrayAttribFormat(vaoId, 1, 2, GL_FLOAT, GL_FALSE, 0));
+    GLCall(glVertexArrayAttribBinding(vaoId, 1, 1));
+    GLCall(glEnableVertexArrayAttrib(vaoId, 1));
+
+    GLCall(glVertexArrayVertexBuffer(vaoId, 2, vertexBuffer.nboId, 0, 3 * sizeof(float)));
+    GLCall(glVertexArrayAttribFormat(vaoId, 2, 3, GL_FLOAT, GL_FALSE, 0));
+    GLCall(glVertexArrayAttribBinding(vaoId, 2, 2));
+    GLCall(glEnableVertexArrayAttrib(vaoId, 2));
+
+    GLCall(glVertexArrayVertexBuffer(vaoId, 3, vertexBuffer.cboId, 0, 4 * sizeof(unsigned char)));
+    GLCall(glVertexArrayAttribIFormat(vaoId, 3, 4, GL_UNSIGNED_BYTE, 0));
+    GLCall(glVertexArrayAttribBinding(vaoId, 3, 3));
+    GLCall(glEnableVertexArrayAttrib(vaoId, 3));
+
+    GLCall(glVertexArrayElementBuffer(vaoId, vertexBuffer.iboId));
+}
+
+static void
+delete_vertex_buffers(MeshInput::VertexBuffer& vertexBuffer)
+{
+    if (vertexBuffer.vaoId) {
+        glDeleteVertexArrays(1, &vertexBuffer.vaoId);
+    }
+    if (vertexBuffer.vboId) {
+        glDeleteBuffers(1, &vertexBuffer.vboId);
+    }
+    if (vertexBuffer.nboId) {
+        glDeleteBuffers(1, &vertexBuffer.nboId);
+    }
+    if (vertexBuffer.tboId) {
+        glDeleteBuffers(1, &vertexBuffer.tboId);
+    }
+    if (vertexBuffer.cboId) {
+        glDeleteBuffers(1, &vertexBuffer.cboId);
+    }
+    if (vertexBuffer.iboId) {
+        glDeleteBuffers(1, &vertexBuffer.iboId);
+    }
+
+    vertexBuffer = MeshInput::VertexBuffer();
 }
 
 static void
@@ -450,47 +574,69 @@ release_mesh_cpu_data(MeshInput::Mesh& mesh)
 }
 
 static void
-upload_mesh_buffers(MeshInput& meshInput)
+upload_mesh_buffers_only(const MeshInput::Mesh& mesh, MeshInput::VertexBuffer& vertexBuffer)
 {
-    MeshInput::Mesh& mesh                 = meshInput.mesh;
-    MeshInput::VertexBuffer& vertexBuffer = meshInput.VBO;
-
-    GLCall(glCreateVertexArrays(1, &vertexBuffer.vaoId));
-    GLCall(glBindVertexArray(vertexBuffer.vaoId));
-
     GLCall(glCreateBuffers(1, &vertexBuffer.vboId));
     GLCall(glNamedBufferData(vertexBuffer.vboId, mesh.vrtSize, static_cast<const void*>(mesh.pVerts), GL_STATIC_DRAW));
-    GLCall(glVertexArrayVertexBuffer(vertexBuffer.vaoId, 0, vertexBuffer.vboId, 0, 3 * sizeof(float)));
-    GLCall(glVertexArrayAttribFormat(vertexBuffer.vaoId, 0, 3, GL_FLOAT, GL_FALSE, 0));
-    GLCall(glVertexArrayAttribBinding(vertexBuffer.vaoId, 0, 0));
-    GLCall(glEnableVertexArrayAttrib(vertexBuffer.vaoId, 0));
 
     GLCall(glCreateBuffers(1, &vertexBuffer.tboId));
     GLCall(glNamedBufferData(vertexBuffer.tboId, mesh.texSize, static_cast<const void*>(mesh.pTexts), GL_STATIC_DRAW));
-    GLCall(glVertexArrayVertexBuffer(vertexBuffer.vaoId, 1, vertexBuffer.tboId, 0, 2 * sizeof(float)));
-    GLCall(glVertexArrayAttribFormat(vertexBuffer.vaoId, 1, 2, GL_FLOAT, GL_FALSE, 0));
-    GLCall(glVertexArrayAttribBinding(vertexBuffer.vaoId, 1, 1));
-    GLCall(glEnableVertexArrayAttrib(vertexBuffer.vaoId, 1));
 
     GLCall(glCreateBuffers(1, &vertexBuffer.nboId));
     GLCall(glNamedBufferData(vertexBuffer.nboId, mesh.nrmSize, static_cast<const void*>(mesh.pNorms), GL_STATIC_DRAW));
-    GLCall(glVertexArrayVertexBuffer(vertexBuffer.vaoId, 2, vertexBuffer.nboId, 0, 3 * sizeof(float)));
-    GLCall(glVertexArrayAttribFormat(vertexBuffer.vaoId, 2, 3, GL_FLOAT, GL_FALSE, 0));
-    GLCall(glVertexArrayAttribBinding(vertexBuffer.vaoId, 2, 2));
-    GLCall(glEnableVertexArrayAttrib(vertexBuffer.vaoId, 2));
 
     GLCall(glCreateBuffers(1, &vertexBuffer.cboId));
     GLCall(glNamedBufferData(vertexBuffer.cboId, mesh.clrSize, static_cast<const void*>(mesh.pColrs), GL_STATIC_DRAW));
-    GLCall(glVertexArrayVertexBuffer(vertexBuffer.vaoId, 3, vertexBuffer.cboId, 0, 4 * sizeof(unsigned char)));
-    GLCall(glVertexArrayAttribIFormat(vertexBuffer.vaoId, 3, 4, GL_UNSIGNED_BYTE, 0));
-    GLCall(glVertexArrayAttribBinding(vertexBuffer.vaoId, 3, 3));
-    GLCall(glEnableVertexArrayAttrib(vertexBuffer.vaoId, 3));
 
     GLCall(glCreateBuffers(1, &vertexBuffer.iboId));
     GLCall(glNamedBufferData(vertexBuffer.iboId, mesh.idxSize, static_cast<const void*>(mesh.pIndxs), GL_STATIC_DRAW));
-    GLCall(glVertexArrayElementBuffer(vertexBuffer.vaoId, vertexBuffer.iboId));
+}
+
+static void
+upload_mesh_buffers(const MeshInput::Mesh& mesh, MeshInput::VertexBuffer& vertexBuffer)
+{
+    GLCall(glCreateVertexArrays(1, &vertexBuffer.vaoId));
+    upload_mesh_buffers_only(mesh, vertexBuffer);
+    configure_vertex_array(vertexBuffer.vaoId, vertexBuffer);
+}
+
+static void
+create_shared_mesh_vertex_array(const MeshInput::VertexBuffer& sharedBuffers, MeshInput::VertexBuffer& vertexBuffer)
+{
+    vertexBuffer = sharedBuffers;
+    GLCall(glCreateVertexArrays(1, &vertexBuffer.vaoId));
+    configure_vertex_array(vertexBuffer.vaoId, vertexBuffer);
 }
 }  // namespace
+
+SequenceSharedGpuMesh::~SequenceSharedGpuMesh()
+{
+    delete_vertex_buffers(vertexBuffer);
+}
+
+std::shared_ptr<SequenceSharedGpuMesh>
+Sequence_CreateSharedGpuMesh(const SequenceSharedMeshData& sharedMesh)
+{
+    MeshInput::Mesh mesh;
+    mesh.isQuad    = false;
+    mesh.Triangles = true;
+    mesh.render    = GL_TRIANGLES;
+    mesh.pVerts    = const_cast<float*>(sharedMesh.verts.data());
+    mesh.pTexts    = const_cast<float*>(sharedMesh.texcoords.data());
+    mesh.pNorms    = const_cast<float*>(sharedMesh.normals.data());
+    mesh.pColrs    = const_cast<unsigned char*>(sharedMesh.colors.data());
+    mesh.pIndxs    = const_cast<uint32_t*>(sharedMesh.indices.data());
+    mesh.vrtSize   = sharedMesh.vrtSize;
+    mesh.texSize   = sharedMesh.texSize;
+    mesh.nrmSize   = sharedMesh.nrmSize;
+    mesh.clrSize   = sharedMesh.clrSize;
+    mesh.idxSize   = sharedMesh.idxSize;
+    mesh.numIndxs  = sharedMesh.numIndxs;
+
+    std::shared_ptr<SequenceSharedGpuMesh> sharedGpuMesh = std::make_shared<SequenceSharedGpuMesh>();
+    upload_mesh_buffers_only(mesh, sharedGpuMesh->vertexBuffer);
+    return sharedGpuMesh;
+}
 
 bool
 Sequence_HandleImmediateCommandLine(int argc, const char* argv[], int& exitCode)
@@ -555,7 +701,7 @@ Sequence::processPassDeclaration(const std::string& key, const std::vector<std::
         throw_sequence_error("Failed to load program for the pass.");
     }
 
-    m_passConfigs.push_back(PassConfig());
+    m_passConfigs.push_back(SequencePassConfig());
 
     state.currentPass      = &m_passConfigs.back();
     state.currentInput     = nullptr;
@@ -1121,7 +1267,7 @@ Sequence::buildPassesFromConfig()
     m_passes.clear();
     m_passes.reserve(m_passConfigs.size());
 
-    for (const PassConfig& config : m_passConfigs) {
+    for (const SequencePassConfig& config : m_passConfigs) {
         Pass pass(config.program, config.isCompute);
         pass.inputs        = config.inputs;
         pass.inputCounters = config.inputCounters;
@@ -1132,6 +1278,32 @@ Sequence::buildPassesFromConfig()
         pass.sizeText[1]   = config.sizeText[1];
         pass.workGroupSizeText[0] = config.workGroupSizeText[0];
         pass.workGroupSizeText[1] = config.workGroupSizeText[1];
+        std::memcpy(pass.clearColor, config.clearColor, sizeof(pass.clearColor));
+        m_passes.push_back(std::move(pass));
+    }
+}
+
+void
+Sequence::buildPassesFromRuntimeConfig(const SequenceRuntimeConfig& runtimeConfig)
+{
+    m_passes.clear();
+    m_passes.reserve(runtimeConfig.passes.size());
+
+    for (const SequenceRuntimePassConfig& config : runtimeConfig.passes) {
+        Pass pass(config.program, config.isCompute);
+        pass.inputs        = config.inputs;
+        pass.inputCounters = config.inputCounters;
+        pass.outputs       = config.outputs;
+        pass.meshes        = config.meshes;
+        pass.cullMode      = config.cullMode;
+        pass.size[0]       = config.size[0];
+        pass.size[1]       = config.size[1];
+        pass.workGroupSize[0] = config.workGroupSize[0];
+        pass.workGroupSize[1] = config.workGroupSize[1];
+        pass.sizeText[0].clear();
+        pass.sizeText[1].clear();
+        pass.workGroupSizeText[0].clear();
+        pass.workGroupSizeText[1].clear();
         std::memcpy(pass.clearColor, config.clearColor, sizeof(pass.clearColor));
         m_passes.push_back(std::move(pass));
     }
@@ -1167,6 +1339,18 @@ Sequence::Sequence(const SequenceParsedArguments& parsedArguments)
     initializeFromParsedArguments(parsedArguments);
 }
 
+Sequence::Sequence(const SequenceBuildConfig& buildConfig)
+    : Sequence()
+{
+    initializeFromBuildConfig(buildConfig);
+}
+
+Sequence::Sequence(const SequenceRuntimeConfig& runtimeConfig)
+    : Sequence()
+{
+    initializeFromRuntimeConfig(runtimeConfig);
+}
+
 Sequence::~Sequence()
 {
     for (auto& pass : m_passes) {
@@ -1176,24 +1360,13 @@ Sequence::~Sequence()
 
         for (auto& meshIt : pass.meshes) {
             MeshInput::VertexBuffer& vertexBuffer = meshIt.second.VBO;
-
-            if (vertexBuffer.vaoId) {
-                glDeleteVertexArrays(1, &vertexBuffer.vaoId);
-            }
-            if (vertexBuffer.vboId) {
-                glDeleteBuffers(1, &vertexBuffer.vboId);
-            }
-            if (vertexBuffer.nboId) {
-                glDeleteBuffers(1, &vertexBuffer.nboId);
-            }
-            if (vertexBuffer.tboId) {
-                glDeleteBuffers(1, &vertexBuffer.tboId);
-            }
-            if (vertexBuffer.cboId) {
-                glDeleteBuffers(1, &vertexBuffer.cboId);
-            }
-            if (vertexBuffer.iboId) {
-                glDeleteBuffers(1, &vertexBuffer.iboId);
+            if (meshIt.second.sharedGpuMesh) {
+                if (vertexBuffer.vaoId) {
+                    glDeleteVertexArrays(1, &vertexBuffer.vaoId);
+                }
+                vertexBuffer.vaoId = 0;
+            } else {
+                delete_vertex_buffers(vertexBuffer);
             }
         }
     }
@@ -1211,6 +1384,55 @@ Sequence::initializeFromParsedArguments(const SequenceParsedArguments& parsedArg
     }
 
     buildPassesFromConfig();
+
+    int passIndex = 0;
+    for (auto& pass : m_passes) {
+        const size_t initializedCounters = pass.u_aCounters.size();
+        const size_t reflectedCounters   = pass.program->BuffersSize();
+        if (initializedCounters < reflectedCounters) {
+            LOG(debug) << "Pass #" << passIndex << ": " << initializedCounters << " from " << reflectedCounters
+                       << " atomic counters are initialized";
+        }
+        ++passIndex;
+    }
+
+    initCommon();
+}
+
+void
+Sequence::initializeFromBuildConfig(const SequenceBuildConfig& buildConfig)
+{
+    Log_SetVerbosity(std::clamp(buildConfig.verbosity, 0, 5));
+    LOG(debug) << "Starting RawGL sequence" << std::endl;
+
+    m_passConfigs = buildConfig.passes;
+    buildPassesFromConfig();
+
+    int passIndex = 0;
+    for (auto& pass : m_passes) {
+        const size_t initializedCounters = pass.u_aCounters.size();
+        const size_t reflectedCounters   = pass.program->BuffersSize();
+        if (initializedCounters < reflectedCounters) {
+            LOG(debug) << "Pass #" << passIndex << ": " << initializedCounters << " from " << reflectedCounters
+                       << " atomic counters are initialized";
+        }
+        ++passIndex;
+    }
+
+    initCommon();
+}
+
+void
+Sequence::initializeFromRuntimeConfig(const SequenceRuntimeConfig& runtimeConfig)
+{
+    Log_SetVerbosity(std::clamp(runtimeConfig.verbosity, 0, 5));
+    LOG(debug) << "Starting RawGL sequence" << std::endl;
+
+    m_passConfigs.clear();
+    m_textures        = runtimeConfig.sharedTextures;
+    m_sharedMeshes    = runtimeConfig.sharedMeshes;
+    m_sharedGpuMeshes = runtimeConfig.sharedGpuMeshes;
+    buildPassesFromRuntimeConfig(runtimeConfig);
 
     int passIndex = 0;
     for (auto& pass : m_passes) {
@@ -1289,9 +1511,14 @@ Sequence::initializePass(Pass& pass, int passIndex)
 {
     MeshInput& meshInput = ensure_primary_mesh(pass);
 
-    assert(!pass.sizeText[0].empty());
-
     for (int axis = 0; axis < 2; ++axis) {
+        if (pass.sizeText[axis].empty()) {
+            if (pass.size[axis] <= 0) {
+                throw_sequence_error("pass_size (" + std::to_string(passIndex) + "): value must be > 0");
+            }
+            continue;
+        }
+
         if (pass.sizeText[axis].find("::") == std::string::npos) {
             pass.size[axis]
                 = parse_checked_positive_int(pass.sizeText[axis],
@@ -1330,6 +1557,12 @@ Sequence::initializePass(Pass& pass, int passIndex)
 
     if (pass.isCompute) {
         for (int axis = 0; axis < 2; ++axis) {
+            if (pass.workGroupSizeText[axis].empty()) {
+                if (pass.workGroupSize[axis] <= 0) {
+                    throw_sequence_error("pass_workgroupsize (" + std::to_string(passIndex) + "): value must be > 0");
+                }
+                continue;
+            }
             pass.workGroupSize[axis]
                 = parse_checked_positive_int(pass.workGroupSizeText[axis],
                                              "pass_workgroupsize (" + std::to_string(passIndex) + ")");
@@ -1430,12 +1663,31 @@ Sequence::initializePass(Pass& pass, int passIndex)
     }
 
     try {
-        load_mesh_data(meshInput.mesh);
+        if (meshInput.mesh.isQuad) {
+            load_mesh_data(meshInput.mesh);
+        } else {
+            const auto sharedMeshIt = m_sharedMeshes.find(make_mesh_cache_key(meshInput.mesh));
+            const auto sharedGpuMeshIt = m_sharedGpuMeshes.find(make_mesh_cache_key(meshInput.mesh));
+            if (sharedGpuMeshIt != m_sharedGpuMeshes.end() && sharedGpuMeshIt->second) {
+                if (sharedMeshIt != m_sharedMeshes.end() && sharedMeshIt->second) {
+                    apply_shared_mesh_metadata(meshInput.mesh, *sharedMeshIt->second);
+                }
+                meshInput.sharedGpuMesh = sharedGpuMeshIt->second;
+                create_shared_mesh_vertex_array(sharedGpuMeshIt->second->vertexBuffer, meshInput.VBO);
+                return;
+            }
+
+            if (sharedMeshIt != m_sharedMeshes.end() && sharedMeshIt->second) {
+                clone_shared_mesh_data(meshInput.mesh, *sharedMeshIt->second);
+            } else {
+                load_mesh_data(meshInput.mesh);
+            }
+        }
     } catch (const std::exception& exception) {
         throw_sequence_error(exception.what());
     }
 
-    upload_mesh_buffers(meshInput);
+    upload_mesh_buffers(meshInput.mesh, meshInput.VBO);
     release_mesh_cpu_data(meshInput.mesh);
 }
 
@@ -1493,10 +1745,12 @@ Sequence::buildExecutionPlan()
     m_executionPlan.clear();
     m_executionPlan.reserve(m_passes.size());
 
-    for (Pass& pass : m_passes) {
+    for (int passIndex = 0; passIndex < static_cast<int>(m_passes.size()); ++passIndex) {
+        Pass& pass = m_passes[passIndex];
         PassExecutionPlan plan;
         plan.pass       = &pass;
         plan.primaryMesh = &require_primary_mesh(pass);
+        plan.passIndex   = passIndex;
         plan.inputs.reserve(pass.inputs.size());
         plan.outputs.reserve(pass.outputs.size());
 
@@ -1513,17 +1767,24 @@ Sequence::buildExecutionPlan()
 }
 
 int
-Sequence::bindPassInputs(const PassExecutionPlan& plan)
+Sequence::bindPassInputs(const PassExecutionPlan& plan,
+                         const std::vector<SequenceExecutionInputOverride>& inputOverrides)
 {
     Pass& pass = *plan.pass;
     int textureIndex = 0;
 
     for (const PlannedInputBinding& binding : plan.inputs) {
         PassInput& input = *binding.input;
+        const SequenceExecutionInputOverride* inputOverride =
+            find_input_override(inputOverrides, static_cast<size_t>(plan.passIndex), *binding.name);
+        std::shared_ptr<Texture> boundTexture = input.texture;
+        if (inputOverride && inputOverride->kind == SequenceExecutionInputOverrideKind::texture) {
+            boundTexture = inputOverride->texture;
+        }
 
         switch (input.uniform->type) {
         case GL_SAMPLER_2D: {
-            const GLuint textureId = input.texture->getId();
+            const GLuint textureId = boundTexture->getId();
 
             GLCall(glActiveTexture(GL_TEXTURE0 + textureIndex));
             GLCall(glBindTexture(GL_TEXTURE_2D, textureId));
@@ -1538,16 +1799,16 @@ Sequence::bindPassInputs(const PassExecutionPlan& plan)
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1000);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, 0);
                 GLCall(glGenerateTextureMipmap(textureId));
-                LOG(debug) << "Generated mip-maps for " << *binding.name << " at " << input.texture;
+                LOG(debug) << "Generated mip-maps for " << *binding.name << " at " << boundTexture;
             }
 
             input.uniform->set(textureIndex++);
             break;
         }
         case GL_IMAGE_2D: {
-            const GLuint textureId = input.texture->getId();
+            const GLuint textureId = boundTexture->getId();
             GLCall(glBindImageTexture(textureIndex, textureId, 0, GL_FALSE, 0, GL_READ_ONLY,
-                                      input.texture->getInternalFormat()));
+                                      boundTexture->getInternalFormat()));
             LOG(debug) << "Image " << textureId << " binding is " << textureIndex;
             input.uniform->set(textureIndex++);
             break;
@@ -1559,19 +1820,43 @@ Sequence::bindPassInputs(const PassExecutionPlan& plan)
         case GL_INT:
         case GL_INT_VEC2:
         case GL_INT_VEC3:
-        case GL_INT_VEC4: input.uniform->set(&input.ints[0]); break;
+        case GL_INT_VEC4:
+            if (inputOverride && inputOverride->kind == SequenceExecutionInputOverrideKind::intValues) {
+                input.uniform->set(inputOverride->intValues.data());
+            } else {
+                input.uniform->set(&input.ints[0]);
+            }
+            break;
         case GL_UNSIGNED_INT:
         case GL_UNSIGNED_INT_VEC2:
         case GL_UNSIGNED_INT_VEC3:
-        case GL_UNSIGNED_INT_VEC4: input.uniform->set(&input.uints[0]); break;
+        case GL_UNSIGNED_INT_VEC4:
+            if (inputOverride && inputOverride->kind == SequenceExecutionInputOverrideKind::uintValues) {
+                input.uniform->set(inputOverride->uintValues.data());
+            } else {
+                input.uniform->set(&input.uints[0]);
+            }
+            break;
         case GL_FLOAT:
         case GL_FLOAT_VEC2:
         case GL_FLOAT_VEC3:
-        case GL_FLOAT_VEC4: input.uniform->set(&input.floats[0]); break;
+        case GL_FLOAT_VEC4:
+            if (inputOverride && inputOverride->kind == SequenceExecutionInputOverrideKind::floatValues) {
+                input.uniform->set(inputOverride->floatValues.data());
+            } else {
+                input.uniform->set(&input.floats[0]);
+            }
+            break;
         case GL_DOUBLE:
         case GL_DOUBLE_VEC2:
         case GL_DOUBLE_VEC3:
-        case GL_DOUBLE_VEC4: input.uniform->set(&input.doubles[0]); break;
+        case GL_DOUBLE_VEC4:
+            if (inputOverride && inputOverride->kind == SequenceExecutionInputOverrideKind::doubleValues) {
+                input.uniform->set(inputOverride->doubleValues.data());
+            } else {
+                input.uniform->set(&input.doubles[0]);
+            }
+            break;
         default: input.uniform->set(&input.floats[0]); break;
         }
     }
@@ -1580,17 +1865,103 @@ Sequence::bindPassInputs(const PassExecutionPlan& plan)
 }
 
 void
-Sequence::bindInternalUniforms(const PassExecutionPlan& plan)
+Sequence::bindInternalUniforms(const PassExecutionPlan& plan, const SequenceSystemUniformState& systemUniforms)
 {
     Pass& pass = *plan.pass;
-    GLint uniform_loc = glGetUniformLocation(pass.program->getId(), "iFBsize");
-    GLCall(glUniform2uiv(uniform_loc, 1, reinterpret_cast<unsigned int*>(pass.size)));
+    const GLuint framebufferSizeUint[2] = { static_cast<GLuint>(pass.size[0]), static_cast<GLuint>(pass.size[1]) };
+    const GLint framebufferSizeInt[2]   = { pass.size[0], pass.size[1] };
+    const GLfloat framebufferSizeFloat[2] = { static_cast<GLfloat>(pass.size[0]), static_cast<GLfloat>(pass.size[1]) };
+    const GLdouble framebufferSizeDouble[2] = { static_cast<GLdouble>(pass.size[0]),
+                                                static_cast<GLdouble>(pass.size[1]) };
+    const GLfloat framebufferAspectFloat     = pass.size[0] / static_cast<GLfloat>(pass.size[1]);
+    const GLdouble framebufferAspectDouble   = pass.size[0] / static_cast<GLdouble>(pass.size[1]);
+    const GLint isQuadInt                    = plan.primaryMesh->mesh.isQuad ? 1 : 0;
+    const GLuint isQuadUint                  = plan.primaryMesh->mesh.isQuad ? 1u : 0u;
+    const GLfloat isQuadFloat                = plan.primaryMesh->mesh.isQuad ? 1.0f : 0.0f;
+    const GLdouble isQuadDouble              = plan.primaryMesh->mesh.isQuad ? 1.0 : 0.0;
+    const GLint frameInt                     = systemUniforms.frameNumber;
+    const GLuint frameUint                   = static_cast<GLuint>(std::max(systemUniforms.frameNumber, 0));
+    const GLfloat timeFloat                  = static_cast<GLfloat>(systemUniforms.timeSeconds);
+    const GLdouble timeDouble                = static_cast<GLdouble>(systemUniforms.timeSeconds);
+    const GLfloat deltaTimeFloat             = static_cast<GLfloat>(systemUniforms.deltaTimeSeconds);
+    const GLdouble deltaTimeDouble           = static_cast<GLdouble>(systemUniforms.deltaTimeSeconds);
+    const GLint passIndexInt = (systemUniforms.passIndex >= 0) ? systemUniforms.passIndex : plan.passIndex;
+    const GLuint passIndexUint = static_cast<GLuint>(std::max(passIndexInt, 0));
 
-    uniform_loc = glGetUniformLocation(pass.program->getId(), "iFBaspect");
-    GLCall(glUniform1f(uniform_loc, pass.size[0] / (float)pass.size[1]));
+    GLProgramUniform* uniform = pass.program->findUniform("iFBsize");
+    if (uniform) {
+        switch (uniform->type) {
+        case GL_INT_VEC2:
+        case GL_BOOL_VEC2: uniform->set(framebufferSizeInt); break;
+        case GL_UNSIGNED_INT_VEC2: uniform->set(framebufferSizeUint); break;
+        case GL_FLOAT_VEC2: uniform->set(framebufferSizeFloat); break;
+        case GL_DOUBLE_VEC2: uniform->set(framebufferSizeDouble); break;
+        default: break;
+        }
+    }
 
-    uniform_loc = glGetUniformLocation(pass.program->getId(), "isQuad");
-    GLCall(glUniform1i(uniform_loc, plan.primaryMesh->mesh.isQuad));
+    uniform = pass.program->findUniform("iFBaspect");
+    if (uniform) {
+        switch (uniform->type) {
+        case GL_DOUBLE: uniform->set(framebufferAspectDouble); break;
+        case GL_FLOAT: uniform->set(framebufferAspectFloat); break;
+        default: break;
+        }
+    }
+
+    uniform = pass.program->findUniform("isQuad");
+    if (uniform) {
+        switch (uniform->type) {
+        case GL_BOOL:
+        case GL_INT: uniform->set(isQuadInt); break;
+        case GL_UNSIGNED_INT: uniform->set(isQuadUint); break;
+        case GL_FLOAT: uniform->set(isQuadFloat); break;
+        case GL_DOUBLE: uniform->set(isQuadDouble); break;
+        default: break;
+        }
+    }
+
+    uniform = pass.program->findUniform("iTime");
+    if (uniform) {
+        switch (uniform->type) {
+        case GL_DOUBLE: uniform->set(timeDouble); break;
+        case GL_FLOAT: uniform->set(timeFloat); break;
+        default: break;
+        }
+    }
+
+    uniform = pass.program->findUniform("iTimeDelta");
+    if (uniform) {
+        switch (uniform->type) {
+        case GL_DOUBLE: uniform->set(deltaTimeDouble); break;
+        case GL_FLOAT: uniform->set(deltaTimeFloat); break;
+        default: break;
+        }
+    }
+
+    uniform = pass.program->findUniform("iFrame");
+    if (uniform) {
+        switch (uniform->type) {
+        case GL_BOOL:
+        case GL_INT: uniform->set(frameInt); break;
+        case GL_UNSIGNED_INT: uniform->set(frameUint); break;
+        case GL_FLOAT: uniform->set(static_cast<GLfloat>(frameInt)); break;
+        case GL_DOUBLE: uniform->set(static_cast<GLdouble>(frameInt)); break;
+        default: break;
+        }
+    }
+
+    uniform = pass.program->findUniform("iPassIndex");
+    if (uniform) {
+        switch (uniform->type) {
+        case GL_BOOL:
+        case GL_INT: uniform->set(passIndexInt); break;
+        case GL_UNSIGNED_INT: uniform->set(passIndexUint); break;
+        case GL_FLOAT: uniform->set(static_cast<GLfloat>(passIndexInt)); break;
+        case GL_DOUBLE: uniform->set(static_cast<GLdouble>(passIndexInt)); break;
+        default: break;
+        }
+    }
 }
 
 void
@@ -1780,6 +2151,19 @@ Sequence::destroyAtomicCounterBuffers()
 void
 Sequence::run()
 {
+    run(SequenceSystemUniformState {}, {});
+}
+
+void
+Sequence::run(const SequenceSystemUniformState& systemUniforms)
+{
+    run(systemUniforms, {});
+}
+
+void
+Sequence::run(const SequenceSystemUniformState& systemUniforms,
+              const std::vector<SequenceExecutionInputOverride>& inputOverrides)
+{
     Timer timer;
 
     LOG(debug) << "Rendering...";
@@ -1796,8 +2180,8 @@ Sequence::run()
             Pass& pass = *plan.pass;
             GLCall(glUseProgram(pass.program->getId()));
 
-            const int textureIndex = bindPassInputs(plan);
-            bindInternalUniforms(plan);
+            const int textureIndex = bindPassInputs(plan, inputOverrides);
+            bindInternalUniforms(plan, systemUniforms);
             preparePassAtomicCounters(pass);
             bindPassAtomicCounters(pass);
 

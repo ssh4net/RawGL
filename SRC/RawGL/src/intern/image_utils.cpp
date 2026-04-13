@@ -16,9 +16,9 @@
  */
 
 
-#include "ImageUtils.h"
-#include "Log.h"
-#include "Timer.h"
+#include "image_utils.h"
+#include "log.h"
+#include "timer.h"
 
 #include <OpenImageIO/filesystem.h>
 

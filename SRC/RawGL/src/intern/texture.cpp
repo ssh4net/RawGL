@@ -16,7 +16,7 @@
  */
 
 
-#include "Texture.h"
+#include "texture.h"
 
 Texture::Texture(GLsizei width, GLsizei height, GLenum internalFormat, GLenum type, const GLvoid* data,
                  int alphaChannel)

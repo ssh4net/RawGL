@@ -15,7 +15,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "RawGLCore.h"
+#include "rawgl_core.h"
 
 //#include "shader.hpp"
 

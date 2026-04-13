@@ -16,8 +16,8 @@
  */
 
 
-#include "GLProgramManager.h"
-#include "Log.h"
+#include "gl_program_manager.h"
+#include "log.h"
 
 GLProgramManager g_glslProgramManager;
 
