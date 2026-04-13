@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 #include "mesh_io.h"
 #include <stdio.h>
 
