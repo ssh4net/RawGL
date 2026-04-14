@@ -4,7 +4,7 @@
 #pragma once
 
 #include "common.h"
-#include "opengl_utils.h"
+#include "gl_utils.h"
 
 class Texture {
 public:

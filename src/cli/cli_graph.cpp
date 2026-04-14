@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "command_line_graph.h"
+#include "cli_graph.h"
 
-#include "command_line_parser.h"
+#include "cli_parser.h"
 #include "common.h"
-#include "gl_program_manager.h"
-#include "rawgl_graph_shared.h"
+#include "program_manager.h"
+#include "graph_shared.h"
 #include "sequence.h"
 
 #include <stdexcept>

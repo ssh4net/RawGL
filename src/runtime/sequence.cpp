@@ -4,11 +4,11 @@
 
 #include "sequence.h"
 
-#include "opengl_utils.h"
+#include "gl_utils.h"
 #include "timer.h"
 #include "log.h"
-#include "gl_program_manager.h"
-#include "image_utils.h"
+#include "image_io.h"
+#include "program_manager.h"
 
 #include <future>
 #include <sstream>

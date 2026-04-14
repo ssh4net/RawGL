@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "command_line_parser.h"
+#include "cli_parser.h"
 
 #include "common.h"
-#include "opengl_utils.h"
+#include "gl_utils.h"
 #include "sequence.h"
 
 #include <charconv>

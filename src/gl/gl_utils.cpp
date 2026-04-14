@@ -3,7 +3,7 @@
 
 
 #include "common.h"
-#include "opengl_utils.h"
+#include "gl_utils.h"
 #include "log.h"
 
 #include <cstdlib>

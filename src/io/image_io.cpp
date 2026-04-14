@@ -2,7 +2,7 @@
 // Copyright (c) 2022-2026 Erium Vladlen.
 
 
-#include "image_utils.h"
+#include "image_io.h"
 #include "log.h"
 #include "timer.h"
 

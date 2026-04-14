@@ -4,7 +4,7 @@
 #pragma once
 
 #include "common.h"
-#include "gl_program.h"
+#include "program.h"
 #include "asset_manager.h"
 
 class GLProgramManager : public AssetManager<GLProgram> {

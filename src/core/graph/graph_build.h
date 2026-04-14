@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "opengl_utils.h"
-#include "rawgl_core.h"
+#include "gl_utils.h"
+#include "rawgl/rawgl_core.h"
 #include "sequence.h"
 
 #include <map>

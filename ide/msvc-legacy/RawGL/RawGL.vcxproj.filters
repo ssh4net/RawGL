@@ -20,7 +20,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\src\core\rawgl_core.h">
+    <ClInclude Include="..\..\..\include\rawgl\rawgl_core.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

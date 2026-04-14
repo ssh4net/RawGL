@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "rawgl_graph_build.h"
+#include "graph_build.h"
 
 namespace rawgl {
 

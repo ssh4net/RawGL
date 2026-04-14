@@ -5,8 +5,6 @@ if(BUILD_TESTING)
         add_executable(${target_name}
             ${source_file})
         target_link_libraries(${target_name} PRIVATE rawgl_core)
-        target_include_directories(${target_name} PRIVATE
-            src/core)
         set_target_properties(${target_name} PROPERTIES
             FOLDER "tests")
         source_group(TREE "${CMAKE_SOURCE_DIR}/tests" PREFIX "tests" FILES

@@ -111,7 +111,7 @@
     <ClCompile Include="..\..\..\src\app\main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\src\core\rawgl_core.h" />
+    <ClInclude Include="..\..\..\include\rawgl\rawgl_core.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\RawGLCore\RawGLCore.vcxproj">

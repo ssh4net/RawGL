@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "rawgl_core.h"
+#include "rawgl/rawgl_core.h"
 
-#include "command_line_graph.h"
+#include "cli_graph.h"
 #include "common.h"
+#include "graph_build.h"
 #include "log.h"
-#include "rawgl_graph_build.h"
-#include "rawgl_shader_interface_cache.h"
+#include "shader_interface_cache.h"
 #include "timer.h"
 
 #include <iostream>

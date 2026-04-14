@@ -2,9 +2,9 @@
 // Copyright (c) 2022-2026 Erium Vladlen.
 
 
-#include "gl_program.h"
+#include "program.h"
 #include "log.h"
-#include "opengl_utils.h"
+#include "gl_utils.h"
 
 #include <sstream>
 #include <fstream>

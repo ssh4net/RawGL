@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "rawgl_graph_validation.h"
+#include "graph_validation.h"
 
-#include "rawgl_graph_shared.h"
-#include "rawgl_shader_interface_cache.h"
+#include "graph_shared.h"
+#include "shader_interface_cache.h"
 
 #include <stdexcept>
 #include <unordered_set>

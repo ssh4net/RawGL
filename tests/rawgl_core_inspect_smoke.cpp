@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "rawgl_core.h"
+#include "rawgl/rawgl_core.h"
 
 #include <iostream>
 

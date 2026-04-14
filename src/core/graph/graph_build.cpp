@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "rawgl_graph_build.h"
+#include "graph_build.h"
 
-#include "rawgl_graph_resources.h"
-#include "rawgl_graph_runtime_plan.h"
-#include "rawgl_graph_validation.h"
+#include "graph_resources.h"
+#include "graph_runtime_plan.h"
+#include "graph_validation.h"
 
 #include <vector>
 

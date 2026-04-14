@@ -98,48 +98,48 @@
     <Lib />
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\src\cli\command_line_graph.cpp" />
-    <ClCompile Include="..\..\..\src\cli\command_line_parser.cpp" />
-    <ClCompile Include="..\..\..\src\gl\gl_program.cpp" />
-    <ClCompile Include="..\..\..\src\gl\gl_program_manager.cpp" />
-    <ClCompile Include="..\..\..\src\io\image_utils.cpp" />
+    <ClCompile Include="..\..\..\src\cli\cli_graph.cpp" />
+    <ClCompile Include="..\..\..\src\cli\cli_parser.cpp" />
+    <ClCompile Include="..\..\..\src\gl\program.cpp" />
+    <ClCompile Include="..\..\..\src\gl\program_manager.cpp" />
+    <ClCompile Include="..\..\..\src\io\image_io.cpp" />
     <ClCompile Include="..\..\..\src\support\log.cpp" />
     <ClCompile Include="..\..\..\src\io\mesh_io.cpp" />
-    <ClCompile Include="..\..\..\src\gl\opengl_utils.cpp" />
+    <ClCompile Include="..\..\..\src\gl\gl_utils.cpp" />
     <ClCompile Include="..\..\..\src\gl\texture.cpp" />
     <ClCompile Include="..\..\..\src\runtime\pass_input.cpp" />
     <ClCompile Include="..\..\..\src\runtime\pass_output.cpp" />
-    <ClCompile Include="..\..\..\src\core\rawgl_core.cpp" />
-    <ClCompile Include="..\..\..\src\core\graph\rawgl_graph_build.cpp" />
-    <ClCompile Include="..\..\..\src\core\graph\rawgl_graph_resources.cpp" />
-    <ClCompile Include="..\..\..\src\core\graph\rawgl_graph_runtime_plan.cpp" />
-    <ClCompile Include="..\..\..\src\core\graph\rawgl_graph_shared.cpp" />
-    <ClCompile Include="..\..\..\src\core\graph\rawgl_graph_validation.cpp" />
-    <ClCompile Include="..\..\..\src\core\graph\rawgl_shader_interface_cache.cpp" />
+    <ClCompile Include="..\..\..\src\core\context.cpp" />
+    <ClCompile Include="..\..\..\src\core\graph\graph_build.cpp" />
+    <ClCompile Include="..\..\..\src\core\graph\graph_resources.cpp" />
+    <ClCompile Include="..\..\..\src\core\graph\graph_runtime_plan.cpp" />
+    <ClCompile Include="..\..\..\src\core\graph\graph_shared.cpp" />
+    <ClCompile Include="..\..\..\src\core\graph\graph_validation.cpp" />
+    <ClCompile Include="..\..\..\src\core\graph\shader_interface_cache.cpp" />
     <ClCompile Include="..\..\..\src\runtime\sequence.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\src\cli\command_line_graph.h" />
-    <ClInclude Include="..\..\..\src\cli\command_line_parser.h" />
+    <ClInclude Include="..\..\..\src\cli\cli_graph.h" />
+    <ClInclude Include="..\..\..\src\cli\cli_parser.h" />
     <ClInclude Include="..\..\..\src\support\asset_manager.h" />
     <ClInclude Include="..\..\..\src\support\common.h" />
-    <ClInclude Include="..\..\..\src\gl\gl_program.h" />
-    <ClInclude Include="..\..\..\src\gl\gl_program_manager.h" />
-    <ClInclude Include="..\..\..\src\io\image_utils.h" />
+    <ClInclude Include="..\..\..\src\gl\program.h" />
+    <ClInclude Include="..\..\..\src\gl\program_manager.h" />
+    <ClInclude Include="..\..\..\src\io\image_io.h" />
     <ClInclude Include="..\..\..\src\support\log.h" />
     <ClInclude Include="..\..\..\src\io\mesh_io.h" />
     <ClInclude Include="..\..\..\src\third_party\miniply\miniply.h" />
-    <ClInclude Include="..\..\..\src\gl\opengl_utils.h" />
+    <ClInclude Include="..\..\..\src\gl\gl_utils.h" />
     <ClInclude Include="..\..\..\src\gl\texture.h" />
     <ClInclude Include="..\..\..\src\support\timer.h" />
     <ClInclude Include="..\..\..\src\third_party\termcolor\termcolor.hpp" />
-    <ClInclude Include="..\..\..\src\core\rawgl_core.h" />
-    <ClInclude Include="..\..\..\src\core\graph\rawgl_graph_build.h" />
-    <ClInclude Include="..\..\..\src\core\graph\rawgl_graph_resources.h" />
-    <ClInclude Include="..\..\..\src\core\graph\rawgl_graph_runtime_plan.h" />
-    <ClInclude Include="..\..\..\src\core\graph\rawgl_graph_shared.h" />
-    <ClInclude Include="..\..\..\src\core\graph\rawgl_graph_validation.h" />
-    <ClInclude Include="..\..\..\src\core\graph\rawgl_shader_interface_cache.h" />
+    <ClInclude Include="..\..\..\include\rawgl\rawgl_core.h" />
+    <ClInclude Include="..\..\..\src\core\graph\graph_build.h" />
+    <ClInclude Include="..\..\..\src\core\graph\graph_resources.h" />
+    <ClInclude Include="..\..\..\src\core\graph\graph_runtime_plan.h" />
+    <ClInclude Include="..\..\..\src\core\graph\graph_shared.h" />
+    <ClInclude Include="..\..\..\src\core\graph\graph_validation.h" />
+    <ClInclude Include="..\..\..\src\core\graph\shader_interface_cache.h" />
     <ClInclude Include="..\..\..\src\runtime\sequence.h" />
   </ItemGroup>
   <ItemGroup>

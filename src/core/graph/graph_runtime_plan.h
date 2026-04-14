@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include "rawgl_core.h"
+#include "graph_build.h"
 
 namespace rawgl {
 
-GraphBuildRequest
-BuildGraphRequestFromCommandLine(const CommandLineRequest& request);
+RawGLGraphState::ExecutionPlan
+build_execution_plan(const RawGLGraphState::ResourcePlan& resourcePlan);
 
 }  // namespace rawgl

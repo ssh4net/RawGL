@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "rawgl_shader_interface_cache.h"
+#include "shader_interface_cache.h"
 
-#include "gl_program_manager.h"
+#include "program_manager.h"
 
 #include <mutex>
 #include <sstream>

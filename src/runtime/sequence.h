@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include "command_line_parser.h"
+#include "cli_parser.h"
 #include "common.h"
 #include "texture.h"
-#include "image_utils.h"
-#include "gl_program.h"
+#include "image_io.h"
+#include "program.h"
 
 #include <functional>
 

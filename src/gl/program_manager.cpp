@@ -2,7 +2,7 @@
 // Copyright (c) 2022-2026 Erium Vladlen.
 
 
-#include "gl_program_manager.h"
+#include "program_manager.h"
 #include "log.h"
 
 GLProgramManager g_glslProgramManager;
