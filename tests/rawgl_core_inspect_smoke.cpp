@@ -19,6 +19,18 @@ has_named_resource(const std::vector<rawgl::ShaderResourceInfo>& resources, cons
     return false;
 }
 
+const rawgl::ShaderResourceInfo*
+find_named_resource(const std::vector<rawgl::ShaderResourceInfo>& resources, const char* name)
+{
+    for (const rawgl::ShaderResourceInfo& resource : resources) {
+        if (resource.name == name) {
+            return &resource;
+        }
+    }
+
+    return nullptr;
+}
+
 }  // namespace
 
 int
@@ -39,8 +51,17 @@ main()
         std::cerr << "Compute shader inspection did not report image uniform o_out0." << std::endl;
         return 1;
     }
-    if (!has_named_resource(computeResult.atomicCounters, "counter0")) {
+    const rawgl::ShaderResourceInfo* atomicCounter = find_named_resource(computeResult.atomicCounters, "counter0");
+    if (!atomicCounter) {
         std::cerr << "Compute shader inspection did not report atomic counter counter0." << std::endl;
+        return 1;
+    }
+    if (!computeResult.bufferVariables.empty()) {
+        std::cerr << "Atomic-counter-only shader unexpectedly reported SSBO variables." << std::endl;
+        return 1;
+    }
+    if (atomicCounter->binding < 0) {
+        std::cerr << "Compute shader inspection reported atomic counter without a valid binding." << std::endl;
         return 1;
     }
 

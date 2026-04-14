@@ -14,6 +14,15 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\RawGL\src\command_line_graph.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\RawGL\src\command_line_parser.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\RawGL\src\rawgl_graph_build.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\RawGL\src\intern\gl_program.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -49,6 +58,15 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\RawGL\src\command_line_graph.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\RawGL\src\command_line_parser.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\RawGL\src\rawgl_graph_build.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\RawGL\src\intern\asset_manager.h">
       <Filter>Header Files</Filter>
     </ClInclude>

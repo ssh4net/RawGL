@@ -10,94 +10,15 @@
 #include "gl_program_manager.h"
 #include "image_utils.h"
 
-#include <charconv>
 #include <future>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_set>
 #include <unordered_map>
 
-#include <termcolor/termcolor.hpp>
-
 #include "mesh_io.h"
 
 namespace {
-enum class ParsedOptionMode {
-    flag,
-    single,
-    multi,
-};
-
-struct ParsedOptionSpec {
-    const char* long_key;
-    char short_key;
-    ParsedOptionMode mode;
-};
-
-static const ParsedOptionSpec RAWGL_OPTION_SPECS[] = {
-    { "help", 'h', ParsedOptionMode::flag },
-    { "version", 'v', ParsedOptionMode::flag },
-    { "verbosity", 'V', ParsedOptionMode::single },
-    { "pass_vertfrag", 'P', ParsedOptionMode::multi },
-    { "pass_comp", 'C', ParsedOptionMode::single },
-    { "pass_size", 'S', ParsedOptionMode::multi },
-    { "pass_workgroupsize", 'W', ParsedOptionMode::multi },
-    { "bg_color", '\0', ParsedOptionMode::multi },
-    { "cull", '\0', ParsedOptionMode::multi },
-    { "pass_mesh", 'M', ParsedOptionMode::multi },
-    { "in", 'i', ParsedOptionMode::multi },
-    { "atomic", 'B', ParsedOptionMode::multi },
-    { "in_attr", 't', ParsedOptionMode::multi },
-    { "out", 'o', ParsedOptionMode::multi },
-    { "out_format", 'f', ParsedOptionMode::single },
-    { "out_attr", 'r', ParsedOptionMode::multi },
-    { "out_channels", 'n', ParsedOptionMode::single },
-    { "out_alpha_channel", 'a', ParsedOptionMode::single },
-    { "out_bits", 'b', ParsedOptionMode::single },
-};
-
-static const ParsedOptionSpec*
-find_option_spec(const std::string& token)
-{
-    if (token.size() > 2 && token[0] == '-' && token[1] == '-') {
-        const std::string option_name = token.substr(2);
-        for (const ParsedOptionSpec& spec : RAWGL_OPTION_SPECS) {
-            if (option_name == spec.long_key) {
-                return &spec;
-            }
-        }
-    } else if (token.size() == 2 && token[0] == '-') {
-        for (const ParsedOptionSpec& spec : RAWGL_OPTION_SPECS) {
-            if (spec.short_key != '\0' && token[1] == spec.short_key) {
-                return &spec;
-            }
-        }
-    }
-
-    return nullptr;
-}
-
-static bool
-is_option_token(const std::string& token)
-{
-    return find_option_spec(token) != nullptr;
-}
-
-static int
-parse_option_int(const std::string& text, const char* option_name)
-{
-    int value                           = 0;
-    const char* begin                   = text.data();
-    const char* end                     = begin + text.size();
-    const std::from_chars_result result = std::from_chars(begin, end, value);
-
-    if (result.ec != std::errc() || result.ptr != end) {
-        throw std::runtime_error(std::string("Invalid integer value for --") + option_name + ": " + text);
-    }
-
-    return value;
-}
-
 template<typename T>
 static T
 parse_checked_numeric(const std::string& text, const std::string& context)
@@ -126,109 +47,7 @@ throw_sequence_error(const std::string& message)
     throw std::runtime_error(message);
 }
 
-static std::string
-build_help_text()
-{
-    std::ostringstream stream;
-    stream << "Options\n"
-           << "  --help, -h\n"
-           << "  --version, -v\n"
-           << "  --verbosity, -V <0-5>\n"
-           << "  --pass_vertfrag, -P <file> [file]\n"
-           << "  --pass_comp, -C <file>\n"
-           << "  --pass_size, -S <X> [Y]\n"
-           << "  --pass_workgroupsize, -W <X> [Y]\n"
-           << "  --bg_color <R> [G] [B] [A]\n"
-           << "  --cull <name value>...\n"
-           << "  --pass_mesh, -M <quad|mesh> ...\n"
-           << "  --in, -i <uniform> <value...>\n"
-           << "  --atomic, -B <mode> <args...>\n"
-           << "  --in_attr, -t <name> <value>\n"
-           << "  --out, -o <name> <path>\n"
-           << "  --out_format, -f <format>\n"
-           << "  --out_attr, -r <name> <value>\n"
-           << "  --out_channels, -n <count>\n"
-           << "  --out_alpha_channel, -a <index>\n"
-           << "  --out_bits, -b <bits>\n\n"
-           << "Supported texture attributes:\n"
-           << PassInput::get_possible_tex_attr_fmt() << '\n'
-           << "Supported mesh attributes:\n"
-           << MeshInput::get_possible_mesh_parm_fmt() << '\n'
-           << "Supported culling attributes:\n"
-           << Pass::get_possible_culling_fmt();
-    return stream.str();
-}
-
-static void
-print_version_text()
-{
-    std::cout << termcolor::bright_yellow << termcolor::bold;
-    std::cout << APP_NAME << " version " << APP_VERSION[0] << "." << APP_VERSION[1] << "." << APP_VERSION[2]
-              << " Copyright (c) " << APP_AUTHOR << std::endl;
-    std::cout << "Build from: " << __DATE__ << ", " << __TIME__ << "." << std::endl;
-    std::cout << termcolor::reset;
-}
-
 }  // namespace
-
-SequenceParsedArguments
-Sequence_ParseArguments(int argc, const char* argv[])
-{
-    SequenceParsedArguments parsed;
-
-    for (int index = 1; index < argc; ++index) {
-        const std::string token      = argv[index];
-        const ParsedOptionSpec* spec = find_option_spec(token);
-
-        if (spec == nullptr) {
-            throw std::runtime_error("Unknown option: " + token);
-        }
-
-        if (spec->mode == ParsedOptionMode::flag) {
-            if (std::string(spec->long_key) == "help") {
-                parsed.showHelp = true;
-            } else if (std::string(spec->long_key) == "version") {
-                parsed.showVersion = true;
-            }
-
-            continue;
-        }
-
-        SequenceParsedOption option;
-        option.string_key = spec->long_key;
-
-        if (spec->mode == ParsedOptionMode::single) {
-            if (index + 1 >= argc) {
-                throw std::runtime_error("Missing value for option --" + option.string_key);
-            }
-
-            option.value.push_back(argv[++index]);
-        } else {
-            while (index + 1 < argc) {
-                const std::string next_token = argv[index + 1];
-                if (is_option_token(next_token)) {
-                    break;
-                }
-
-                option.value.push_back(next_token);
-                ++index;
-            }
-
-            if (option.value.empty()) {
-                throw std::runtime_error("Missing value for option --" + option.string_key);
-            }
-        }
-
-        if (option.string_key == "verbosity") {
-            parsed.verbosity = parse_option_int(option.value[0], "verbosity");
-            continue;
-        }
-
-        parsed.options.push_back(std::move(option));
-    }
-
-    return parsed;
-}
 
 namespace {
 
@@ -622,32 +441,6 @@ Sequence_CreateSharedGpuMesh(const SequenceSharedMeshData& sharedMesh)
     std::shared_ptr<SequenceSharedGpuMesh> sharedGpuMesh = std::make_shared<SequenceSharedGpuMesh>();
     upload_mesh_buffers_only(mesh, sharedGpuMesh->vertexBuffer);
     return sharedGpuMesh;
-}
-
-bool
-Sequence_HandleImmediateCommandLine(int argc, const char* argv[], int& exitCode)
-{
-    try {
-        const SequenceParsedArguments parsedArguments = Sequence_ParseArguments(argc, argv);
-
-        if (parsedArguments.showHelp || argc < 2) {
-            std::cout << build_help_text() << std::endl;
-            exitCode = 0;
-            return true;
-        }
-
-        if (parsedArguments.showVersion) {
-            print_version_text();
-            exitCode = 0;
-            return true;
-        }
-    } catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
-        exitCode = 1;
-        return true;
-    }
-
-    return false;
 }
 
 namespace std {
@@ -1299,20 +1092,8 @@ Sequence::Sequence(int argc, const char* argv[])
     : Sequence()
 {
     const SequenceParsedArguments parsedArguments = Sequence_ParseArguments(argc, argv);
-
-    bool infoExit = false;
-    if (parsedArguments.showHelp || argc < 2) {
-        std::cout << build_help_text() << std::endl;
-        infoExit = true;
-    }
-
-    if (parsedArguments.showVersion) {
-        print_version_text();
-        get_GPUfeatures();
-        infoExit = true;
-    }
-
-    if (infoExit) {
+    int immediateExitCode = 0;
+    if (Sequence_HandleImmediateParsedArguments(parsedArguments, argc, immediateExitCode)) {
         return;
     }
 
@@ -1339,6 +1120,8 @@ Sequence::Sequence(const SequenceRuntimeConfig& runtimeConfig)
 
 Sequence::~Sequence()
 {
+    destroyAtomicCounterBuffers();
+
     for (auto& pass : m_passes) {
         if (pass.fboId) {
             glDeleteFramebuffers(1, &pass.fboId);
@@ -1603,6 +1386,24 @@ Sequence::refreshPassTextureInputs(Pass& pass)
 }
 
 void
+Sequence::prepareRunTextures()
+{
+    if (!m_runTexturesDirty) {
+        return;
+    }
+
+    for (int passIndex = 0; passIndex < static_cast<int>(m_passes.size()); ++passIndex) {
+        ensurePassOutputTextures(m_passes[passIndex], passIndex);
+    }
+
+    for (Pass& pass : m_passes) {
+        refreshPassTextureInputs(pass);
+    }
+
+    m_runTexturesDirty = false;
+}
+
+void
 Sequence::initializePass(Pass& pass, int passIndex)
 {
     MeshInput& meshInput = ensure_primary_mesh(pass);
@@ -1712,6 +1513,12 @@ Sequence::initCommon()
 
     validatePassSetup();
     buildExecutionPlan();
+
+    for (Pass& pass : m_passes) {
+        initializePassAtomicCounters(pass);
+    }
+
+    m_runTexturesDirty = false;
 }
 
 void
@@ -1980,7 +1787,7 @@ Sequence::bindInternalUniforms(const PassExecutionPlan& plan, const SequenceSyst
 }
 
 void
-Sequence::preparePassAtomicCounters(Pass& pass)
+Sequence::initializePassAtomicCounters(Pass& pass)
 {
     pass.u_aCounters.clear();
     pass.capturedAtomicCounterValues.clear();
@@ -2025,6 +1832,64 @@ Sequence::preparePassAtomicCounters(Pass& pass)
 
         LOG(trace) << "Atomic counter " << counterIt.first << " binding is " << counterIt.second->binding << std::endl;
     }
+
+    auto it = pass.u_aCounters.begin();
+    while (it != pass.u_aCounters.end()) {
+        GLuint bufferSize = 0;
+        auto range        = pass.u_aCounters.equal_range(it->first);
+
+        for (auto groupIt = range.first; groupIt != range.second; ++groupIt) {
+            const GLuint groupSize =
+                groupIt->second.buffer->offset + groupIt->second.buffer->size * sizeof(GLuint);
+            bufferSize = std::max(bufferSize, groupSize);
+        }
+
+        GLuint bufferId = 0;
+        GLCall(glCreateBuffers(1, &bufferId));
+        GLCall(glNamedBufferData(bufferId, bufferSize, nullptr, GL_DYNAMIC_DRAW));
+
+        for (auto groupIt = range.first; groupIt != range.second; ++groupIt) {
+            groupIt->second.bufferID = bufferId;
+        }
+
+        it = range.second;
+    }
+}
+
+void
+Sequence::preparePassAtomicCounters(Pass& pass)
+{
+    pass.capturedAtomicCounterValues.clear();
+
+    for (auto& counterIt : pass.u_aCounters) {
+        std::fill(counterIt.second.value.begin(), counterIt.second.value.end(), 0u);
+    }
+
+    for (const auto& inputCounterIt : pass.inputCounters) {
+        bool foundPreparedCounter = false;
+
+        for (auto& preparedCounterIt : pass.u_aCounters) {
+            if (!preparedCounterIt.second.buffer || preparedCounterIt.second.buffer->name != inputCounterIt.first) {
+                continue;
+            }
+
+            if (inputCounterIt.second.value.size() > preparedCounterIt.second.value.size()) {
+                throw_sequence_error("Atomic counter " + inputCounterIt.first + " has more values than the shader");
+            }
+
+            const std::size_t copyCount =
+                std::min(inputCounterIt.second.value.size(), preparedCounterIt.second.value.size());
+            std::memcpy(preparedCounterIt.second.value.data(),
+                        inputCounterIt.second.value.data(),
+                        copyCount * sizeof(GLuint));
+            foundPreparedCounter = true;
+            break;
+        }
+
+        if (!foundPreparedCounter) {
+            throw_sequence_error("Atomic counter " + inputCounterIt.first + " is not used in the shader");
+        }
+    }
 }
 
 void
@@ -2036,12 +1901,10 @@ Sequence::bindPassAtomicCounters(Pass& pass)
     while (it != pass.u_aCounters.end()) {
         GLuint buff_size = 0;
         auto range       = pass.u_aCounters.equal_range(it->first);
+        const GLuint bufferId = it->second.bufferID;
 
         LOG(trace) << "Binding: " << it->first << " have " << std::distance(range.first, range.second)
                    << " counter[s]." << std::endl;
-
-        GLCall(glGenBuffers(1, &it->second.bufferID));
-        GLCall(glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, it->second.bufferID));
 
         for (auto groupIt = range.first; groupIt != range.second; ++groupIt) {
             const GLuint groupSize =
@@ -2050,24 +1913,19 @@ Sequence::bindPassAtomicCounters(Pass& pass)
             LOG(trace) << groupIt->second.buffer->name << " buff_size: " << buff_size / sizeof(GLuint) << std::endl;
         }
 
-        GLCall(glBufferData(GL_ATOMIC_COUNTER_BUFFER, buff_size, nullptr, GL_DYNAMIC_DRAW));
-
         for (auto groupIt = range.first; groupIt != range.second; ++groupIt) {
             auto buffer = groupIt->second.buffer;
-            GLCall(glBufferSubData(GL_ATOMIC_COUNTER_BUFFER, buffer->offset, sizeof(GLuint) * buffer->size,
-                                   groupIt->second.value.data()));
+            GLCall(glNamedBufferSubData(bufferId, buffer->offset, sizeof(GLuint) * buffer->size,
+                                        groupIt->second.value.data()));
             LOG(trace) << buffer->name << " offset: " << buffer->offset << " size: " << buffer->size << std::endl;
 
-            groupIt->second.bufferID = it->second.bufferID;
             buffer->isSet            = true;
         }
 
-        GLCall(glBindBufferRange(GL_ATOMIC_COUNTER_BUFFER, it->first, it->second.bufferID, 0, buff_size));
-        glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, 0);
+        GLCall(glBindBufferRange(GL_ATOMIC_COUNTER_BUFFER, it->first, bufferId, 0, buff_size));
         it = range.second;
     }
 
-    GLCall(glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT));
 }
 
 void
@@ -2077,7 +1935,7 @@ Sequence::capturePassAtomicCounterResults(Pass& pass)
         return;
     }
 
-    GLCall(glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT));
+    GLCall(glMemoryBarrier(GL_ATOMIC_COUNTER_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT));
 
     for (auto& counterIt : pass.u_aCounters) {
         if (counterIt.second.bufferID == 0 || !counterIt.second.buffer) {
@@ -2159,6 +2017,8 @@ Sequence::executeGraphicsPass(const PassExecutionPlan& plan)
     }
 
     GLCall(glDeleteRenderbuffers(1, &depthBuffer));
+    GLCall(glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT
+                           | GL_TEXTURE_UPDATE_BARRIER_BIT));
 }
 
 void
@@ -2216,12 +2076,7 @@ Sequence::run(const SequenceSystemUniformState& systemUniforms,
     //glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
 
     try {
-        for (int passIndex = 0; passIndex < static_cast<int>(m_passes.size()); ++passIndex) {
-            ensurePassOutputTextures(m_passes[passIndex], passIndex);
-        }
-        for (auto& pass : m_passes) {
-            refreshPassTextureInputs(pass);
-        }
+        prepareRunTextures();
 
         for (const PassExecutionPlan& plan : m_executionPlan) {
             Pass& pass = *plan.pass;
@@ -2242,14 +2097,11 @@ Sequence::run(const SequenceSystemUniformState& systemUniforms,
             savePassOutputs(plan);
         }
     } catch (...) {
-        destroyAtomicCounterBuffers();
         glBindVertexArray(0);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glUseProgram(0);
         throw;
     }
-
-    destroyAtomicCounterBuffers();
 
     glBindVertexArray(0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -2342,6 +2194,8 @@ Sequence::releaseRunOutputTextures()
             }
         }
     }
+
+    m_runTexturesDirty = true;
 }
 
 #define STRING_USED_DEFAULTS "(used default)"

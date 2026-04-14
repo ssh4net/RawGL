@@ -7,9 +7,15 @@
 
 PassOutput::PassOutput()
     : internalFormatText("rgba32f")
+    , path("")
+    , attributes()
     , channels(3)
     , alphaChannel(-1)
     , bits(16)
+    , output(nullptr)
+    , uniform(nullptr)
+    , texture(nullptr)
+    , format(OIIO::TypeDesc::UNKNOWN)
     , formatDefaulted(false)
 {
 }

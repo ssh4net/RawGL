@@ -98,6 +98,8 @@
     <Lib />
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\RawGL\src\command_line_graph.cpp" />
+    <ClCompile Include="..\RawGL\src\command_line_parser.cpp" />
     <ClCompile Include="..\RawGL\src\intern\gl_program.cpp" />
     <ClCompile Include="..\RawGL\src\intern\gl_program_manager.cpp" />
     <ClCompile Include="..\RawGL\src\intern\image_utils.cpp" />
@@ -108,9 +110,12 @@
     <ClCompile Include="..\RawGL\src\pass_input.cpp" />
     <ClCompile Include="..\RawGL\src\pass_output.cpp" />
     <ClCompile Include="..\RawGL\src\rawgl_core.cpp" />
+    <ClCompile Include="..\RawGL\src\rawgl_graph_build.cpp" />
     <ClCompile Include="..\RawGL\src\sequence.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\RawGL\src\command_line_graph.h" />
+    <ClInclude Include="..\RawGL\src\command_line_parser.h" />
     <ClInclude Include="..\RawGL\src\intern\asset_manager.h" />
     <ClInclude Include="..\RawGL\src\intern\common.h" />
     <ClInclude Include="..\RawGL\src\intern\gl_program.h" />
@@ -124,6 +129,7 @@
     <ClInclude Include="..\RawGL\src\intern\timer.h" />
     <ClInclude Include="..\RawGL\src\intern\termcolor\termcolor.hpp" />
     <ClInclude Include="..\RawGL\src\rawgl_core.h" />
+    <ClInclude Include="..\RawGL\src\rawgl_graph_build.h" />
     <ClInclude Include="..\RawGL\src\sequence.h" />
   </ItemGroup>
   <ItemGroup>

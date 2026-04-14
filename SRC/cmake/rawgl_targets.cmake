@@ -1,7 +1,10 @@
 set(RAWGL_CORE_SOURCES
+    SRC/RawGL/src/command_line_graph.cpp
+    SRC/RawGL/src/command_line_parser.cpp
     SRC/RawGL/src/pass_input.cpp
     SRC/RawGL/src/pass_output.cpp
     SRC/RawGL/src/rawgl_core.cpp
+    SRC/RawGL/src/rawgl_graph_build.cpp
     SRC/RawGL/src/sequence.cpp
     SRC/RawGL/src/intern/gl_program.cpp
     SRC/RawGL/src/intern/gl_program_manager.cpp

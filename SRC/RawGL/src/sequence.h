@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "command_line_parser.h"
 #include "common.h"
 #include "texture.h"
 #include "image_utils.h"
@@ -178,20 +179,6 @@ _pass_input_set_triangles(MeshInput& pi, const GLuint& val);
 const void
 _pass_input_set_render(MeshInput& pi, const GLuint& val);
 
-struct PassInputCounters {
-    PassInputCounters();
-
-    std::string name;
-    GLuint bufferID;
-    GLint binding;
-    GLint offset;
-    GLint size;
-    std::vector<GLuint> value;
-    std::vector<GLuint> result;
-
-    int passIn;
-};
-
 struct passCounters {
     GLuint bufferID;
 
@@ -271,14 +258,12 @@ struct Pass {
     struct FBOobject;
     struct VAObject;
 
-    using BObject   = GenericObject<GLuint>;
-    using SSBObject = GenericObject<GLint>;
+    using BObject = GenericObject<GLuint>;
 
     struct GLBO {
         std::vector<FBOobject> FBO;
         std::vector<VAObject> VBO;
         std::map<std::string, BObject> BO;
-        std::map<std::string, SSBObject> SSBO;
     };
     GLBO glbObject;
 
@@ -310,7 +295,6 @@ struct Pass {
     std::map<std::string, inputCounter> inputCounters;
     std::map<std::string, std::vector<GLuint>> capturedAtomicCounterValues;
     std::multimap<GLint, passCounters> u_aCounters;
-    std::map<std::string, PassInputCounters> u_aBuffers;
     std::map<std::string, PassOutput> outputs;
     std::map<std::string, MeshInput> meshes;
 
@@ -370,24 +354,6 @@ const void
 _pass_input_set_wind_order(Pass::CullMode& mm, const GLuint& val);
 const void
 _pass_input_set_cull_enable(Pass::CullMode& mm, const GLuint& val);
-
-bool
-Sequence_HandleImmediateCommandLine(int argc, const char* argv[], int& exitCode);
-
-struct SequenceParsedOption {
-    std::string string_key;
-    std::vector<std::string> value;
-};
-
-struct SequenceParsedArguments {
-    bool showHelp    = false;
-    bool showVersion = false;
-    int verbosity    = 3;
-    std::vector<SequenceParsedOption> options;
-};
-
-SequenceParsedArguments
-Sequence_ParseArguments(int argc, const char* argv[]);
 
 struct SequencePassConfig {
     std::shared_ptr<GLProgram> program;
@@ -535,6 +501,7 @@ private:
     std::vector<SequencePassConfig> m_passConfigs;
     std::vector<Pass> m_passes;
     std::vector<PassExecutionPlan> m_executionPlan;
+    bool m_runTexturesDirty = false;
 
     void processParsedOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
     void processPassDeclaration(const std::string& key, const std::vector<std::string>& value, ParseState& state);
@@ -548,12 +515,14 @@ private:
     void preloadInputTextures();
     void ensurePassOutputTextures(Pass& pass, int passIndex);
     void refreshPassTextureInputs(Pass& pass);
+    void prepareRunTextures();
     void initializePass(Pass& pass, int passIndex);
     void validatePassSetup() const;
     void buildExecutionPlan();
     int bindPassInputs(const PassExecutionPlan& plan,
                        const std::vector<SequenceExecutionInputOverride>& inputOverrides);
     void bindInternalUniforms(const PassExecutionPlan& plan, const SequenceSystemUniformState& systemUniforms);
+    void initializePassAtomicCounters(Pass& pass);
     void preparePassAtomicCounters(Pass& pass);
     void bindPassAtomicCounters(Pass& pass);
     void capturePassAtomicCounterResults(Pass& pass);

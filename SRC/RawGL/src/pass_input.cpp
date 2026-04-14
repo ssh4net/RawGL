@@ -491,20 +491,6 @@ PassInput::PassInput()
     }
 }
 
-PassInputCounters::PassInputCounters()
-{
-    name     = "";
-    bufferID = 0;
-
-    binding = 0;
-    offset  = 0;
-    size    = 0;
-    value   = { 0 };
-    result  = { 0 };
-
-    passIn = -1;
-}
-
 #if 0
 
 void PassInput::loadTexture()
