@@ -69,7 +69,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>..\RawGL\src;..\RawGL\src\intern;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -83,7 +83,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>..\RawGL\src;..\RawGL\src\intern;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <WarningLevel>Level3</WarningLevel>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -98,50 +98,60 @@
     <Lib />
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\RawGL\src\command_line_graph.cpp" />
-    <ClCompile Include="..\RawGL\src\command_line_parser.cpp" />
-    <ClCompile Include="..\RawGL\src\intern\gl_program.cpp" />
-    <ClCompile Include="..\RawGL\src\intern\gl_program_manager.cpp" />
-    <ClCompile Include="..\RawGL\src\intern\image_utils.cpp" />
-    <ClCompile Include="..\RawGL\src\intern\log.cpp" />
-    <ClCompile Include="..\RawGL\src\intern\mesh_io.cpp" />
-    <ClCompile Include="..\RawGL\src\intern\opengl_utils.cpp" />
-    <ClCompile Include="..\RawGL\src\intern\texture.cpp" />
-    <ClCompile Include="..\RawGL\src\pass_input.cpp" />
-    <ClCompile Include="..\RawGL\src\pass_output.cpp" />
-    <ClCompile Include="..\RawGL\src\rawgl_core.cpp" />
-    <ClCompile Include="..\RawGL\src\rawgl_graph_build.cpp" />
-    <ClCompile Include="..\RawGL\src\sequence.cpp" />
+    <ClCompile Include="..\..\..\src\cli\command_line_graph.cpp" />
+    <ClCompile Include="..\..\..\src\cli\command_line_parser.cpp" />
+    <ClCompile Include="..\..\..\src\gl\gl_program.cpp" />
+    <ClCompile Include="..\..\..\src\gl\gl_program_manager.cpp" />
+    <ClCompile Include="..\..\..\src\io\image_utils.cpp" />
+    <ClCompile Include="..\..\..\src\support\log.cpp" />
+    <ClCompile Include="..\..\..\src\io\mesh_io.cpp" />
+    <ClCompile Include="..\..\..\src\gl\opengl_utils.cpp" />
+    <ClCompile Include="..\..\..\src\gl\texture.cpp" />
+    <ClCompile Include="..\..\..\src\runtime\pass_input.cpp" />
+    <ClCompile Include="..\..\..\src\runtime\pass_output.cpp" />
+    <ClCompile Include="..\..\..\src\core\rawgl_core.cpp" />
+    <ClCompile Include="..\..\..\src\core\graph\rawgl_graph_build.cpp" />
+    <ClCompile Include="..\..\..\src\core\graph\rawgl_graph_resources.cpp" />
+    <ClCompile Include="..\..\..\src\core\graph\rawgl_graph_runtime_plan.cpp" />
+    <ClCompile Include="..\..\..\src\core\graph\rawgl_graph_shared.cpp" />
+    <ClCompile Include="..\..\..\src\core\graph\rawgl_graph_validation.cpp" />
+    <ClCompile Include="..\..\..\src\core\graph\rawgl_shader_interface_cache.cpp" />
+    <ClCompile Include="..\..\..\src\runtime\sequence.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\RawGL\src\command_line_graph.h" />
-    <ClInclude Include="..\RawGL\src\command_line_parser.h" />
-    <ClInclude Include="..\RawGL\src\intern\asset_manager.h" />
-    <ClInclude Include="..\RawGL\src\intern\common.h" />
-    <ClInclude Include="..\RawGL\src\intern\gl_program.h" />
-    <ClInclude Include="..\RawGL\src\intern\gl_program_manager.h" />
-    <ClInclude Include="..\RawGL\src\intern\image_utils.h" />
-    <ClInclude Include="..\RawGL\src\intern\log.h" />
-    <ClInclude Include="..\RawGL\src\intern\mesh_io.h" />
-    <ClInclude Include="..\RawGL\src\intern\miniply.h" />
-    <ClInclude Include="..\RawGL\src\intern\opengl_utils.h" />
-    <ClInclude Include="..\RawGL\src\intern\texture.h" />
-    <ClInclude Include="..\RawGL\src\intern\timer.h" />
-    <ClInclude Include="..\RawGL\src\intern\termcolor\termcolor.hpp" />
-    <ClInclude Include="..\RawGL\src\rawgl_core.h" />
-    <ClInclude Include="..\RawGL\src\rawgl_graph_build.h" />
-    <ClInclude Include="..\RawGL\src\sequence.h" />
+    <ClInclude Include="..\..\..\src\cli\command_line_graph.h" />
+    <ClInclude Include="..\..\..\src\cli\command_line_parser.h" />
+    <ClInclude Include="..\..\..\src\support\asset_manager.h" />
+    <ClInclude Include="..\..\..\src\support\common.h" />
+    <ClInclude Include="..\..\..\src\gl\gl_program.h" />
+    <ClInclude Include="..\..\..\src\gl\gl_program_manager.h" />
+    <ClInclude Include="..\..\..\src\io\image_utils.h" />
+    <ClInclude Include="..\..\..\src\support\log.h" />
+    <ClInclude Include="..\..\..\src\io\mesh_io.h" />
+    <ClInclude Include="..\..\..\src\third_party\miniply\miniply.h" />
+    <ClInclude Include="..\..\..\src\gl\opengl_utils.h" />
+    <ClInclude Include="..\..\..\src\gl\texture.h" />
+    <ClInclude Include="..\..\..\src\support\timer.h" />
+    <ClInclude Include="..\..\..\src\third_party\termcolor\termcolor.hpp" />
+    <ClInclude Include="..\..\..\src\core\rawgl_core.h" />
+    <ClInclude Include="..\..\..\src\core\graph\rawgl_graph_build.h" />
+    <ClInclude Include="..\..\..\src\core\graph\rawgl_graph_resources.h" />
+    <ClInclude Include="..\..\..\src\core\graph\rawgl_graph_runtime_plan.h" />
+    <ClInclude Include="..\..\..\src\core\graph\rawgl_graph_shared.h" />
+    <ClInclude Include="..\..\..\src\core\graph\rawgl_graph_validation.h" />
+    <ClInclude Include="..\..\..\src\core\graph\rawgl_shader_interface_cache.h" />
+    <ClInclude Include="..\..\..\src\runtime\sequence.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\tests\rawgl_core_graph_smoke.cpp" />
-    <None Include="..\..\tests\rawgl_core_input_override_smoke.cpp" />
-    <None Include="..\..\tests\rawgl_core_inspect_smoke.cpp" />
-    <None Include="..\..\tests\rawgl_core_persistent_atomic_counter_smoke.cpp" />
-    <None Include="..\..\tests\rawgl_core_persistent_texture_smoke.cpp" />
-    <None Include="..\..\tests\rawgl_core_shared_context_smoke.cpp" />
-    <None Include="..\..\tests\rawgl_core_shared_file_resources_smoke.cpp" />
-    <None Include="..\..\tests\rawgl_core_system_uniform_reject_smoke.cpp" />
-    <None Include="..\..\tests\rawgl_core_transient_output_reuse_smoke.cpp" />
+    <None Include="..\..\..\tests\rawgl_core_graph_smoke.cpp" />
+    <None Include="..\..\..\tests\rawgl_core_input_override_smoke.cpp" />
+    <None Include="..\..\..\tests\rawgl_core_inspect_smoke.cpp" />
+    <None Include="..\..\..\tests\rawgl_core_persistent_atomic_counter_smoke.cpp" />
+    <None Include="..\..\..\tests\rawgl_core_persistent_texture_smoke.cpp" />
+    <None Include="..\..\..\tests\rawgl_core_shared_context_smoke.cpp" />
+    <None Include="..\..\..\tests\rawgl_core_shared_file_resources_smoke.cpp" />
+    <None Include="..\..\..\tests\rawgl_core_system_uniform_reject_smoke.cpp" />
+    <None Include="..\..\..\tests\rawgl_core_transient_output_reuse_smoke.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

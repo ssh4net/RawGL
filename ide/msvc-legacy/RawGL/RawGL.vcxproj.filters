@@ -15,12 +15,12 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\rawgl.cpp">
+    <ClCompile Include="..\..\..\src\app\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\rawgl_core.h">
+    <ClInclude Include="..\..\..\src\core\rawgl_core.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

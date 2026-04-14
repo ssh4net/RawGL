@@ -108,11 +108,6 @@ struct RawGLGraphState {
     std::unique_ptr<Sequence> sequence;
 };
 
-RawGLContextState::CachedShaderInterface
-load_cached_shader_interface(const RawGLContextState& contextState,
-                             ShaderProgramKind kind,
-                             const std::vector<std::string>& paths);
-
 void
 build_graph_state(const RawGLContextState& contextState,
                   const GraphBuildRequest& request,

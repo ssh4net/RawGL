@@ -7,6 +7,7 @@
 #include "common.h"
 #include "log.h"
 #include "rawgl_graph_build.h"
+#include "rawgl_shader_interface_cache.h"
 #include "timer.h"
 
 #include <iostream>

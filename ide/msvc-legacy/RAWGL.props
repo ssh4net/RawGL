@@ -9,7 +9,7 @@
   <PropertyGroup />
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(RAWGLDepsRoot)\include;$(ProjectDir)\src\intern;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(RAWGLDepsRoot)\include;$(SolutionDir)..\..\src\cli;$(SolutionDir)..\..\src\core;$(SolutionDir)..\..\src\core\graph;$(SolutionDir)..\..\src\runtime;$(SolutionDir)..\..\src\gl;$(SolutionDir)..\..\src\io;$(SolutionDir)..\..\src\support;$(SolutionDir)..\..\src\third_party;$(SolutionDir)..\..\src\third_party\miniply;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />

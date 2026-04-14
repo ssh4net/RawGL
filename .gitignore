@@ -1,6 +1,8 @@
 x64
 bin
 .vs
+install
+logs
 
 # Prerequisites
 *.d
@@ -38,3 +40,5 @@ bin
 /build-*
 /build_*
 /bld
+*.aps
+*.vcxproj.user

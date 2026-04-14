@@ -57,7 +57,7 @@ if(TARGET miniply::miniply)
     message(STATUS "RawGL miniply provider: package target miniply::miniply")
 elseif(EXISTS "${RAWGL_MINIPLY_INCLUDE_DIR}/miniply.h")
     set(RAWGL_MINIPLY_SOURCES
-        SRC/RawGL/src/intern/miniply.cpp)
+        src/third_party/miniply/miniply.cpp)
     message(STATUS "RawGL miniply provider: vendored fallback from ${RAWGL_MINIPLY_INCLUDE_DIR}")
 else()
     message(FATAL_ERROR "miniply was not found. Install a miniply package in CMAKE_PREFIX_PATH or set RAWGL_MINIPLY_INCLUDE_DIR to the directory that contains miniply.h.")

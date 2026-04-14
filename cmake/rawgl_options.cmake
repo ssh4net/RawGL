@@ -9,7 +9,7 @@ set(RAWGL_WINDOWS_XMP_CORE_LIBRARY_RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/XMPCo
 set(RAWGL_WINDOWS_XMP_CORE_LIBRARY_DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/XMPCoreStaticDebug.lib" CACHE FILEPATH "Windows debug XMP core library")
 set(RAWGL_WINDOWS_XMP_FILES_LIBRARY_RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/XMPFilesStaticRelease.lib" CACHE FILEPATH "Windows release XMP files library")
 set(RAWGL_WINDOWS_XMP_FILES_LIBRARY_DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/XMPFilesStaticDebug.lib" CACHE FILEPATH "Windows debug XMP files library")
-set(RAWGL_MINIPLY_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/SRC/RawGL/src/intern" CACHE PATH "Directory containing miniply.h")
+set(RAWGL_MINIPLY_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/miniply" CACHE PATH "Directory containing miniply.h")
 option(RAWGL_WINDOWS_UTF8 "Compile all Windows/MSVC targets with /utf-8." ON)
 
 function(rawgl_cache_prepend_prefix_path prefix_path)

@@ -6,8 +6,7 @@ if(BUILD_TESTING)
             ${source_file})
         target_link_libraries(${target_name} PRIVATE rawgl_core)
         target_include_directories(${target_name} PRIVATE
-            SRC/RawGL/src
-            SRC/RawGL/src/intern)
+            src/core)
         set_target_properties(${target_name} PROPERTIES
             FOLDER "tests")
         source_group(TREE "${CMAKE_SOURCE_DIR}/tests" PREFIX "tests" FILES

@@ -47,12 +47,12 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>$(SolutionDir)\..\bin\Debug\</OutDir>
+    <OutDir>$(SolutionDir)\..\..\bin\Debug\</OutDir>
     <ExternalIncludePath>$(RAWGLDepsRoot)\include;$(VC_IncludePath);$(WindowsSDK_IncludePath)</ExternalIncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>$(SolutionDir)\..\bin\RawGL\</OutDir>
+    <OutDir>$(SolutionDir)\..\..\bin\RawGL\</OutDir>
     <ExternalIncludePath>$(RAWGLDepsRoot)\include;$(VC_IncludePath);$(WindowsSDK_IncludePath)</ExternalIncludePath>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -108,10 +108,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\rawgl.cpp" />
+    <ClCompile Include="..\..\..\src\app\main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\rawgl_core.h" />
+    <ClInclude Include="..\..\..\src\core\rawgl_core.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\RawGLCore\RawGLCore.vcxproj">

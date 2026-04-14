@@ -1,39 +1,52 @@
 set(RAWGL_CORE_SOURCES
-    SRC/RawGL/src/command_line_graph.cpp
-    SRC/RawGL/src/command_line_parser.cpp
-    SRC/RawGL/src/pass_input.cpp
-    SRC/RawGL/src/pass_output.cpp
-    SRC/RawGL/src/rawgl_core.cpp
-    SRC/RawGL/src/rawgl_graph_build.cpp
-    SRC/RawGL/src/sequence.cpp
-    SRC/RawGL/src/intern/gl_program.cpp
-    SRC/RawGL/src/intern/gl_program_manager.cpp
-    SRC/RawGL/src/intern/image_utils.cpp
-    SRC/RawGL/src/intern/log.cpp
-    SRC/RawGL/src/intern/mesh_io.cpp
-    SRC/RawGL/src/intern/opengl_utils.cpp
-    SRC/RawGL/src/intern/texture.cpp)
+    src/cli/command_line_graph.cpp
+    src/cli/command_line_parser.cpp
+    src/runtime/pass_input.cpp
+    src/runtime/pass_output.cpp
+    src/core/rawgl_core.cpp
+    src/core/graph/rawgl_graph_build.cpp
+    src/core/graph/rawgl_graph_resources.cpp
+    src/core/graph/rawgl_graph_runtime_plan.cpp
+    src/core/graph/rawgl_graph_shared.cpp
+    src/core/graph/rawgl_graph_validation.cpp
+    src/core/graph/rawgl_shader_interface_cache.cpp
+    src/runtime/sequence.cpp
+    src/gl/gl_program.cpp
+    src/gl/gl_program_manager.cpp
+    src/io/image_utils.cpp
+    src/support/log.cpp
+    src/io/mesh_io.cpp
+    src/gl/opengl_utils.cpp
+    src/gl/texture.cpp)
 
 list(APPEND RAWGL_CORE_SOURCES ${RAWGL_MINIPLY_SOURCES})
 
 add_library(rawgl_core STATIC ${RAWGL_CORE_SOURCES})
 add_library(RawGL::core ALIAS rawgl_core)
 
-add_executable(rawgl SRC/RawGL/src/rawgl.cpp)
+add_executable(rawgl src/app/main.cpp)
 add_executable(RawGL::rawgl ALIAS rawgl)
 
 if(WIN32)
     enable_language(RC)
     target_sources(rawgl PRIVATE
-        SRC/RawGL/RawGL.rc)
+        src/app/windows/RawGL.rc)
 endif()
 
 target_include_directories(rawgl_core
     PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/SRC/RawGL/src>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/core>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/SRC/RawGL/src/intern
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/cli
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/graph
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/gl
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/io
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/support
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/miniply
         "${RAWGL_LIBRAW_INCLUDE_DIR}"
         "${RAWGL_SPDLOG_INCLUDE_DIR}")
 
@@ -111,7 +124,7 @@ install(TARGETS rawgl_core rawgl
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 install(FILES
-    SRC/RawGL/src/rawgl_core.h
+    src/core/rawgl_core.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rawgl)
 
 install(EXPORT RawGLTargets
