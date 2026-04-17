@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "rawgl/rawgl_core.h"
+#include "rawgl/rawgl.h"
 
 #include <OpenImageIO/imageio.h>
 
@@ -11,6 +11,16 @@
 #include <vector>
 
 namespace {
+
+rawgl::ShaderModuleDefinition
+make_file_module(const char* path)
+{
+    rawgl::ShaderModuleDefinition module;
+    module.role       = rawgl::ShaderModuleRole::compute;
+    module.sourceKind = rawgl::ShaderModuleSourceKind::filePath;
+    module.path       = path;
+    return module;
+}
 
 bool
 read_pixel_rgba32f(const std::filesystem::path& path, float pixel[4])
@@ -55,37 +65,36 @@ verify_output(const std::filesystem::path& outputPath, float expectedValue)
     return true;
 }
 
-rawgl::GraphBuildRequest
-make_persistent_counter_request(const std::filesystem::path& outputPath)
+rawgl::Workflow
+make_persistent_counter_workflow(const std::filesystem::path& outputPath)
 {
-    rawgl::GraphPassDefinition pass;
+    rawgl::Pass pass;
     pass.programKind              = rawgl::ShaderProgramKind::compute;
-    pass.shaderPaths              = { "tests/shaders/persistent_atomic_counter.comp" };
+    pass.shaderModules.push_back(make_file_module("tests/shaders/persistent_atomic_counter.comp"));
     pass.sizeX                    = 1;
     pass.sizeY                    = 1;
     pass.workGroupSizeX           = 1;
     pass.workGroupSizeY           = 1;
     pass.hasExplicitWorkGroupSize = true;
-    pass.atomicCounters.push_back(rawgl::GraphAtomicCounterDefinition {
-        "counter0",
-        2u,
-        "graph_counter0",
-    });
-    pass.outputs.push_back(rawgl::GraphOutputDefinition {
-        "o_out0",
-        outputPath.string(),
-        "rgba32f",
-        4,
-        3,
-        16,
-        "",
-        {},
-    });
+    rawgl::CounterBinding counter;
+    counter.name                  = "counter0";
+    counter.initialValue          = 2u;
+    counter.persistentCounterName = "graph_counter0";
+    pass.counters.push_back(std::move(counter));
 
-    rawgl::GraphBuildRequest request;
-    request.definition.verbosity = 0;
-    request.definition.passes.push_back(std::move(pass));
-    return request;
+    rawgl::OutputBinding output;
+    output.name         = "o_out0";
+    output.path         = outputPath.string();
+    output.format       = "rgba32f";
+    output.channels     = 4;
+    output.alphaChannel = 3;
+    output.bits         = 16;
+    pass.outputs.push_back(std::move(output));
+
+    rawgl::Workflow workflow;
+    workflow.verbosity = 0;
+    workflow.passes.push_back(std::move(pass));
+    return workflow;
 }
 
 }  // namespace
@@ -97,25 +106,25 @@ main()
     std::error_code removeError;
     std::filesystem::remove(outputPath, removeError);
 
-    rawgl::RawGLContext context;
-    rawgl::GraphBuildResult buildResult = context.buildGraph(make_persistent_counter_request(outputPath));
-    if (!buildResult.success || !buildResult.graph) {
-        std::cerr << "Graph build failed: " << buildResult.errorMessage << std::endl;
+    rawgl::Session session;
+    rawgl::PrepareResult prepareResult = session.prepare(make_persistent_counter_workflow(outputPath));
+    if (!prepareResult.success || !prepareResult.workflow) {
+        std::cerr << "Workflow preparation failed: " << prepareResult.errorMessage << std::endl;
         return 1;
     }
 
-    const rawgl::GraphExecutionResult firstRun = buildResult.graph->execute(rawgl::GraphExecutionRequest {});
+    const rawgl::RunResult firstRun = prepareResult.workflow->run(rawgl::RunSettings {});
     if (!firstRun.success) {
-        std::cerr << "First graph execution failed: " << firstRun.errorMessage << std::endl;
+        std::cerr << "First workflow execution failed: " << firstRun.errorMessage << std::endl;
         return 1;
     }
     if (!verify_output(outputPath, 3.0f)) {
         return 1;
     }
 
-    const rawgl::GraphExecutionResult secondRun = buildResult.graph->execute(rawgl::GraphExecutionRequest {});
+    const rawgl::RunResult secondRun = prepareResult.workflow->run(rawgl::RunSettings {});
     if (!secondRun.success) {
-        std::cerr << "Second graph execution failed: " << secondRun.errorMessage << std::endl;
+        std::cerr << "Second workflow execution failed: " << secondRun.errorMessage << std::endl;
         return 1;
     }
     if (!verify_output(outputPath, 4.0f)) {

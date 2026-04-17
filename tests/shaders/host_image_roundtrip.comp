@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// Copyright (c) 2022-2026 Erium Vladlen.
+
+#version 430 core
+
+layout(local_size_x = 1, local_size_y = 1) in;
+
+layout(rgba32f, binding = 0) uniform writeonly image2D o_out0;
+layout(binding = 0, offset = 0) uniform atomic_uint counter0;
+
+uniform sampler2D u_src0;
+
+void
+main()
+{
+    const ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    const vec4 pixelValue  = texelFetch(u_src0, pixelCoord, 0);
+    atomicCounterIncrement(counter0);
+    imageStore(o_out0, pixelCoord, pixelValue);
+}

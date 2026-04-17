@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "rawgl/rawgl_core.h"
+#include "rawgl/rawgl.h"
 
 #include <OpenImageIO/imageio.h>
 
@@ -10,6 +10,16 @@
 #include <memory>
 
 namespace {
+
+rawgl::ShaderModuleDefinition
+make_file_module(const char* path)
+{
+    rawgl::ShaderModuleDefinition module;
+    module.role       = rawgl::ShaderModuleRole::compute;
+    module.sourceKind = rawgl::ShaderModuleSourceKind::filePath;
+    module.path       = path;
+    return module;
+}
 
 bool
 read_pixel_rgba32f(const std::filesystem::path& path, float pixel[4])
@@ -26,45 +36,37 @@ read_pixel_rgba32f(const std::filesystem::path& path, float pixel[4])
     return input->close();
 }
 
-rawgl::GraphBuildRequest
-make_input_override_request(const std::filesystem::path& outputPath)
+rawgl::Workflow
+make_input_override_workflow(const std::filesystem::path& outputPath)
 {
-    rawgl::GraphPassDefinition pass;
+    rawgl::Pass pass;
     pass.programKind              = rawgl::ShaderProgramKind::compute;
-    pass.shaderPaths              = { "tests/shaders/input_override.comp" };
+    pass.shaderModules.push_back(make_file_module("tests/shaders/input_override.comp"));
     pass.sizeX                    = 1;
     pass.sizeY                    = 1;
     pass.workGroupSizeX           = 1;
     pass.workGroupSizeY           = 1;
     pass.hasExplicitWorkGroupSize = true;
-    pass.inputs.push_back(rawgl::GraphInputDefinition {
-        "gain",
-        rawgl::GraphInputSourceKind::floatValues,
-        {},
-        {},
-        { 0.25f },
-        {},
-        "",
-        "",
-        0,
-        "",
-        {},
-    });
-    pass.outputs.push_back(rawgl::GraphOutputDefinition {
-        "o_out0",
-        outputPath.string(),
-        "rgba32f",
-        4,
-        3,
-        16,
-        "",
-        {},
-    });
 
-    rawgl::GraphBuildRequest request;
-    request.definition.verbosity = 0;
-    request.definition.passes.push_back(std::move(pass));
-    return request;
+    rawgl::InputBinding input;
+    input.name       = "gain";
+    input.sourceKind = rawgl::InputSourceKind::floatValues;
+    input.floatValues.push_back(0.25f);
+    pass.inputs.push_back(std::move(input));
+
+    rawgl::OutputBinding output;
+    output.name         = "o_out0";
+    output.path         = outputPath.string();
+    output.format       = "rgba32f";
+    output.channels     = 4;
+    output.alphaChannel = 3;
+    output.bits         = 16;
+    pass.outputs.push_back(std::move(output));
+
+    rawgl::Workflow workflow;
+    workflow.verbosity = 0;
+    workflow.passes.push_back(std::move(pass));
+    return workflow;
 }
 
 bool
@@ -94,38 +96,33 @@ main()
     std::error_code removeError;
     std::filesystem::remove(outputPath, removeError);
 
-    rawgl::RawGLContext context;
-    rawgl::GraphBuildResult buildResult = context.buildGraph(make_input_override_request(outputPath));
-    if (!buildResult.success || !buildResult.graph) {
-        std::cerr << "Graph build failed: " << buildResult.errorMessage << std::endl;
+    rawgl::Session session;
+    rawgl::PrepareResult prepareResult = session.prepare(make_input_override_workflow(outputPath));
+    if (!prepareResult.success || !prepareResult.workflow) {
+        std::cerr << "Workflow preparation failed: " << prepareResult.errorMessage << std::endl;
         return 1;
     }
 
-    const rawgl::GraphExecutionResult defaultRun = buildResult.graph->execute(rawgl::GraphExecutionRequest {});
+    const rawgl::RunResult defaultRun = prepareResult.workflow->run(rawgl::RunSettings {});
     if (!defaultRun.success) {
-        std::cerr << "Default graph execution failed: " << defaultRun.errorMessage << std::endl;
+        std::cerr << "Default workflow execution failed: " << defaultRun.errorMessage << std::endl;
         return 1;
     }
     if (!verify_output(outputPath, 0.25f)) {
         return 1;
     }
 
-    rawgl::GraphExecutionRequest overrideRun;
-    overrideRun.inputOverrides.push_back(rawgl::GraphInputOverride {
-        0,
-        "gain",
-        rawgl::GraphInputSourceKind::floatValues,
-        {},
-        {},
-        { 0.75f },
-        {},
-        "",
-        {},
-    });
+    rawgl::RunSettings overrideRun;
+    rawgl::InputOverride overrideInput;
+    overrideInput.passIndex   = 0;
+    overrideInput.name        = "gain";
+    overrideInput.sourceKind  = rawgl::InputSourceKind::floatValues;
+    overrideInput.floatValues = { 0.75f };
+    overrideRun.overrides.push_back(std::move(overrideInput));
 
-    const rawgl::GraphExecutionResult overriddenRun = buildResult.graph->execute(overrideRun);
+    const rawgl::RunResult overriddenRun = prepareResult.workflow->run(overrideRun);
     if (!overriddenRun.success) {
-        std::cerr << "Overridden graph execution failed: " << overriddenRun.errorMessage << std::endl;
+        std::cerr << "Overridden workflow execution failed: " << overriddenRun.errorMessage << std::endl;
         return 1;
     }
     if (!verify_output(outputPath, 0.75f)) {

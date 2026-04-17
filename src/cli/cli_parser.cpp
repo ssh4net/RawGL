@@ -5,7 +5,7 @@
 
 #include "common.h"
 #include "gl_utils.h"
-#include "sequence.h"
+#include "runtime_help_text.h"
 
 #include <charconv>
 #include <iostream>
@@ -117,11 +117,11 @@ build_help_text()
            << "  --out_alpha_channel, -a <index>\n"
            << "  --out_bits, -b <bits>\n\n"
            << "Supported texture attributes:\n"
-           << PassInput::get_possible_tex_attr_fmt() << '\n'
+           << GetTextureAttributeHelpText() << '\n'
            << "Supported mesh attributes:\n"
-           << MeshInput::get_possible_mesh_parm_fmt() << '\n'
+           << GetMeshParameterHelpText() << '\n'
            << "Supported culling attributes:\n"
-           << Pass::get_possible_culling_fmt();
+           << GetCullingHelpText();
     return stream.str();
 }
 
@@ -137,10 +137,10 @@ print_version_text()
 
 }  // namespace
 
-SequenceParsedArguments
-Sequence_ParseArguments(int argc, const char* argv[])
+CommandLineParsedArguments
+ParseCommandLineArguments(int argc, const char* argv[])
 {
-    SequenceParsedArguments parsed;
+    CommandLineParsedArguments parsed;
 
     for (int index = 1; index < argc; ++index) {
         const std::string token      = argv[index];
@@ -159,7 +159,7 @@ Sequence_ParseArguments(int argc, const char* argv[])
             continue;
         }
 
-        SequenceParsedOption option;
+        CommandLineParsedOption option;
         option.string_key = spec->long_key;
 
         if (spec->mode == ParsedOptionMode::single) {
@@ -196,7 +196,7 @@ Sequence_ParseArguments(int argc, const char* argv[])
 }
 
 bool
-Sequence_HandleImmediateParsedArguments(const SequenceParsedArguments& parsedArguments, int argc, int& exitCode)
+HandleImmediateParsedArguments(const CommandLineParsedArguments& parsedArguments, int argc, int& exitCode)
 {
     bool immediateExit = false;
 
@@ -217,8 +217,8 @@ Sequence_HandleImmediateParsedArguments(const SequenceParsedArguments& parsedArg
 }
 
 bool
-Sequence_HandleImmediateCommandLine(int argc, const char* argv[], int& exitCode)
+HandleImmediateCommandLine(int argc, const char* argv[], int& exitCode)
 {
-    const SequenceParsedArguments parsedArguments = Sequence_ParseArguments(argc, argv);
-    return Sequence_HandleImmediateParsedArguments(parsedArguments, argc, exitCode);
+    const CommandLineParsedArguments parsedArguments = ParseCommandLineArguments(argc, argv);
+    return HandleImmediateParsedArguments(parsedArguments, argc, exitCode);
 }

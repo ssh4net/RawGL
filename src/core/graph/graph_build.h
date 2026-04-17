@@ -4,11 +4,13 @@
 #pragma once
 
 #include "gl_utils.h"
+#include "program_manager.h"
 #include "rawgl/rawgl_core.h"
 #include "sequence.h"
 
 #include <map>
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
 #include <string>
 #include <vector>
@@ -22,6 +24,8 @@ struct RawGLContextState {
     };
 
     OpenGLHandle glHandle;
+    mutable std::mutex programManagerMutex;
+    mutable GLProgramManager programManager;
     mutable std::shared_mutex shaderCacheMutex;
     mutable std::map<std::string, CachedShaderInterface> shaderCache;
     mutable std::shared_mutex textureCacheMutex;
@@ -51,7 +55,7 @@ struct RawGLGraphState {
         int size[2] { 512, 512 };
         int workGroupSize[2] { 16, 16 };
         float clearColor[4] { 0.0f, 0.0f, 0.0f, 0.0f };
-        Pass::CullMode cullMode { GL_CW, GL_BACK, true };
+        SequencePass::CullMode cullMode { GL_CW, GL_BACK, true };
         std::vector<GraphInputDefinition> inputs;
         std::vector<GraphAtomicCounterDefinition> atomicCounters;
         std::vector<GraphOutputDefinition> outputs;

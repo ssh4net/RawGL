@@ -54,6 +54,116 @@ build_mesh_cache_key(const GraphMeshDefinition& mesh)
     return stream.str();
 }
 
+static size_t
+byte_size_for_gl_type(const GLenum type)
+{
+    switch (type) {
+    case GL_UNSIGNED_BYTE: return 1u;
+    case GL_UNSIGNED_SHORT:
+    case GL_HALF_FLOAT: return 2u;
+    case GL_UNSIGNED_INT:
+    case GL_FLOAT: return 4u;
+    default: break;
+    }
+
+    return 0u;
+}
+
+static int
+channel_count_for_internal_format(const GLenum internalFormat)
+{
+    switch (internalFormat) {
+    case GL_R8:
+    case GL_R8I:
+    case GL_R8UI:
+    case GL_R8_SNORM:
+    case GL_R16:
+    case GL_R16I:
+    case GL_R16UI:
+    case GL_R16_SNORM:
+    case GL_R16F:
+    case GL_R32I:
+    case GL_R32UI:
+    case GL_R32F: return 1;
+    case GL_RG8:
+    case GL_RG8I:
+    case GL_RG8UI:
+    case GL_RG8_SNORM:
+    case GL_RG16:
+    case GL_RG16I:
+    case GL_RG16UI:
+    case GL_RG16_SNORM:
+    case GL_RG16F:
+    case GL_RG32I:
+    case GL_RG32UI:
+    case GL_RG32F: return 2;
+    case GL_RGB8:
+    case GL_RGB8I:
+    case GL_RGB8UI:
+    case GL_RGB8_SNORM:
+    case GL_RGB10_A2:
+    case GL_R11F_G11F_B10F:
+    case GL_RGB16:
+    case GL_RGB16I:
+    case GL_RGB16UI:
+    case GL_RGB16_SNORM:
+    case GL_RGB16F:
+    case GL_RGB32I:
+    case GL_RGB32UI:
+    case GL_RGB32F:
+    case GL_SRGB8: return 3;
+    case GL_RGBA8:
+    case GL_RGBA8I:
+    case GL_RGBA8UI:
+    case GL_RGBA8_SNORM:
+    case GL_RGBA16:
+    case GL_RGBA16I:
+    case GL_RGBA16UI:
+    case GL_RGBA16_SNORM:
+    case GL_RGBA16F:
+    case GL_RGBA32I:
+    case GL_RGBA32UI:
+    case GL_RGBA32F:
+    case GL_SRGB8_ALPHA8: return 4;
+    default: break;
+    }
+
+    return 0;
+}
+
+static void
+validate_host_image_data(const HostImageData& hostImage, const std::string& context)
+{
+    if (hostImage.width <= 0 || hostImage.height <= 0) {
+        throw std::runtime_error(context + ": host texture dimensions must be > 0");
+    }
+    if (hostImage.channels <= 0 || hostImage.channels > 4) {
+        throw std::runtime_error(context + ": host texture channel count must be between 1 and 4");
+    }
+    if (hostImage.alphaChannel >= hostImage.channels) {
+        throw std::runtime_error(context + ": host texture alpha channel exceeds the channel count");
+    }
+
+    const int inferredChannels = channel_count_for_internal_format(hostImage.glInternalFormat);
+    if (inferredChannels == 0) {
+        throw std::runtime_error(context + ": unsupported OpenGL internal format");
+    }
+    if (inferredChannels != hostImage.channels) {
+        throw std::runtime_error(context + ": host texture channel count does not match the OpenGL internal format");
+    }
+
+    const size_t bytesPerComponent = byte_size_for_gl_type(hostImage.glType);
+    if (bytesPerComponent == 0u) {
+        throw std::runtime_error(context + ": unsupported OpenGL host texture element type");
+    }
+
+    const size_t expectedByteCount = static_cast<size_t>(hostImage.width) * static_cast<size_t>(hostImage.height)
+                                     * static_cast<size_t>(hostImage.channels) * bytesPerComponent;
+    if (hostImage.bytes.size() != expectedByteCount) {
+        throw std::runtime_error(context + ": host texture byte size does not match width, height, channels, and type");
+    }
+}
+
 static void
 resolve_texture_storage(LoadedTextureData& texture)
 {
@@ -238,12 +348,28 @@ load_cached_gpu_mesh_resource(const RawGLContextState& contextState,
 
 }  // namespace
 
+std::shared_ptr<Texture>
+create_host_texture_resource(const HostImageData& hostImage, const std::string& context)
+{
+    validate_host_image_data(hostImage, context);
+
+    return std::make_shared<Texture>(hostImage.width,
+                                     hostImage.height,
+                                     hostImage.glInternalFormat,
+                                     hostImage.glType,
+                                     hostImage.bytes.empty() ? nullptr : hostImage.bytes.data(),
+                                     hostImage.alphaChannel);
+}
+
 SequenceExecutionInputOverride
 build_sequence_execution_input_override(const RawGLContextState& contextState, const GraphInputOverride& inputOverride)
 {
     SequenceExecutionInputOverride sequenceOverride;
     sequenceOverride.passIndex = inputOverride.passIndex;
-    sequenceOverride.inputName = inputOverride.name;
+    sequenceOverride.inputName =
+        build_addressed_resource_name(inputOverride.name, inputOverride.usesArrayElement, inputOverride.arrayElement);
+    sequenceOverride.usesArrayElement = inputOverride.usesArrayElement;
+    sequenceOverride.arrayElement     = inputOverride.arrayElement;
 
     switch (inputOverride.sourceKind) {
     case GraphInputSourceKind::intValues:
@@ -266,6 +392,14 @@ build_sequence_execution_input_override(const RawGLContextState& contextState, c
         sequenceOverride.kind    = SequenceExecutionInputOverrideKind::texture;
         sequenceOverride.texture =
             load_cached_texture_resource(contextState, inputOverride.texturePath, inputOverride.attributes);
+        break;
+    case GraphInputSourceKind::hostTexture:
+        if (!inputOverride.hostTexture) {
+            throw std::runtime_error("input override (" + inputOverride.name + "): host texture payload is missing");
+        }
+        sequenceOverride.kind    = SequenceExecutionInputOverrideKind::texture;
+        sequenceOverride.texture = create_host_texture_resource(*inputOverride.hostTexture,
+                                                                "input override (" + inputOverride.name + ")");
         break;
     default:
         throw std::runtime_error("input override (" + inputOverride.name + "): unsupported override kind");

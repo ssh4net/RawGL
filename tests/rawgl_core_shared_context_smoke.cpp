@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "rawgl/rawgl_core.h"
+#include "rawgl/rawgl.h"
 
 #include <OpenImageIO/imageio.h>
 
@@ -10,6 +10,16 @@
 #include <memory>
 
 namespace {
+
+rawgl::ShaderModuleDefinition
+make_file_module(const char* path)
+{
+    rawgl::ShaderModuleDefinition module;
+    module.role       = rawgl::ShaderModuleRole::compute;
+    module.sourceKind = rawgl::ShaderModuleSourceKind::filePath;
+    module.path       = path;
+    return module;
+}
 
 bool
 read_pixel_rgba32f(const std::filesystem::path& path, float pixel[4])
@@ -26,32 +36,31 @@ read_pixel_rgba32f(const std::filesystem::path& path, float pixel[4])
     return input->close();
 }
 
-rawgl::GraphBuildRequest
-make_system_uniform_graph_request(const std::filesystem::path& outputPath)
+rawgl::Workflow
+make_system_uniform_workflow(const std::filesystem::path& outputPath)
 {
-    rawgl::GraphPassDefinition pass;
+    rawgl::Pass pass;
     pass.programKind              = rawgl::ShaderProgramKind::compute;
-    pass.shaderPaths              = { "tests/shaders/system_uniforms.comp" };
+    pass.shaderModules.push_back(make_file_module("tests/shaders/system_uniforms.comp"));
     pass.sizeX                    = 1;
     pass.sizeY                    = 1;
     pass.workGroupSizeX           = 1;
     pass.workGroupSizeY           = 1;
     pass.hasExplicitWorkGroupSize = true;
-    pass.outputs.push_back(rawgl::GraphOutputDefinition {
-        "o_out0",
-        outputPath.string(),
-        "rgba32f",
-        4,
-        3,
-        16,
-        "",
-        {},
-    });
 
-    rawgl::GraphBuildRequest request;
-    request.definition.verbosity = 0;
-    request.definition.passes.push_back(std::move(pass));
-    return request;
+    rawgl::OutputBinding output;
+    output.name         = "o_out0";
+    output.path         = outputPath.string();
+    output.format       = "rgba32f";
+    output.channels     = 4;
+    output.alphaChannel = 3;
+    output.bits         = 16;
+    pass.outputs.push_back(std::move(output));
+
+    rawgl::Workflow workflow;
+    workflow.verbosity = 0;
+    workflow.passes.push_back(std::move(pass));
+    return workflow;
 }
 
 bool
@@ -83,17 +92,19 @@ main()
     std::filesystem::remove(outputA, removeError);
     std::filesystem::remove(outputB, removeError);
 
-    rawgl::RawGLContext context;
+    rawgl::Session session;
 
     const rawgl::ShaderInterface inspectionA =
-        context.inspectShaderInterface(rawgl::ShaderInspectionRequest {
+        session.inspectShaderInterface(rawgl::ShaderInspectionRequest {
             rawgl::ShaderProgramKind::compute,
-            { "tests/shaders/system_uniforms.comp" },
+            {},
+            { make_file_module("tests/shaders/system_uniforms.comp") },
         });
     const rawgl::ShaderInterface inspectionB =
-        context.inspectShaderInterface(rawgl::ShaderInspectionRequest {
+        session.inspectShaderInterface(rawgl::ShaderInspectionRequest {
             rawgl::ShaderProgramKind::compute,
-            { "tests/shaders/system_uniforms.comp" },
+            {},
+            { make_file_module("tests/shaders/system_uniforms.comp") },
         });
 
     if (!inspectionA.success || !inspectionB.success) {
@@ -101,31 +112,32 @@ main()
         return 1;
     }
 
-    rawgl::GraphBuildResult graphA = context.buildGraph(make_system_uniform_graph_request(outputA));
-    rawgl::GraphBuildResult graphB = context.buildGraph(make_system_uniform_graph_request(outputB));
+    rawgl::PrepareResult workflowA = session.prepare(make_system_uniform_workflow(outputA));
+    rawgl::PrepareResult workflowB = session.prepare(make_system_uniform_workflow(outputB));
 
-    if (!graphA.success || !graphA.graph) {
-        std::cerr << "Shared-context graph A build failed: " << graphA.errorMessage << std::endl;
+    if (!workflowA.success || !workflowA.workflow) {
+        std::cerr << "Shared-session workflow A preparation failed: " << workflowA.errorMessage << std::endl;
         return 1;
     }
-    if (!graphB.success || !graphB.graph) {
-        std::cerr << "Shared-context graph B build failed: " << graphB.errorMessage << std::endl;
+    if (!workflowB.success || !workflowB.workflow) {
+        std::cerr << "Shared-session workflow B preparation failed: " << workflowB.errorMessage << std::endl;
         return 1;
     }
 
-    const rawgl::GraphExecutionResult runA = graphA.graph->execute(rawgl::GraphExecutionRequest {
-        rawgl::SystemUniformState { 2.0, 0.5, 7, 0 },
-    });
-    const rawgl::GraphExecutionResult runB = graphB.graph->execute(rawgl::GraphExecutionRequest {
-        rawgl::SystemUniformState { 3.0, 0.25, 9, 0 },
-    });
+    rawgl::RunSettings runSettingsA;
+    runSettingsA.systemUniforms = rawgl::SystemUniformState { 2.0, 0.5, 7, 0 };
+    rawgl::RunSettings runSettingsB;
+    runSettingsB.systemUniforms = rawgl::SystemUniformState { 3.0, 0.25, 9, 0 };
+
+    const rawgl::RunResult runA = workflowA.workflow->run(runSettingsA);
+    const rawgl::RunResult runB = workflowB.workflow->run(runSettingsB);
 
     if (!runA.success) {
-        std::cerr << "Shared-context graph A execution failed: " << runA.errorMessage << std::endl;
+        std::cerr << "Shared-session workflow A execution failed: " << runA.errorMessage << std::endl;
         return 1;
     }
     if (!runB.success) {
-        std::cerr << "Shared-context graph B execution failed: " << runB.errorMessage << std::endl;
+        std::cerr << "Shared-session workflow B execution failed: " << runB.errorMessage << std::endl;
         return 1;
     }
 

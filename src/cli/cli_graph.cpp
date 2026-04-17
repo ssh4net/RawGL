@@ -5,7 +5,6 @@
 
 #include "cli_parser.h"
 #include "common.h"
-#include "program_manager.h"
 #include "graph_shared.h"
 #include "sequence.h"
 
@@ -15,15 +14,101 @@ namespace rawgl {
 namespace {
 
 struct GraphTranslationState {
-    GraphPassDefinition* currentPass     = nullptr;
-    GraphInputDefinition* currentInput   = nullptr;
-    GraphOutputDefinition* currentOutput = nullptr;
-    std::shared_ptr<GLProgram> currentProgram;
+    Pass* currentPass = nullptr;
+    InputBinding* currentInput = nullptr;
+    OutputBinding* currentOutput = nullptr;
+    ShaderInterface currentShaderInterface;
     std::string previousFormat = "rgb32f";
     int previousChannels       = 3;
     int previousAlphaChannel   = -1;
     int previousBits           = 16;
 };
+
+static ShaderInterface
+inspect_shader_interface(const ShaderInterfaceInspector& inspector,
+                         const ShaderProgramKind kind,
+                         const std::vector<std::string>& paths)
+{
+    if (!inspector.inspect) {
+        throw std::runtime_error("Shader interface inspector is not configured.");
+    }
+
+    return inspector.inspect(inspector.userData, kind, paths);
+}
+
+static InputSourceKind
+to_input_source_kind(const GraphInputSourceKind sourceKind)
+{
+    switch (sourceKind) {
+    case GraphInputSourceKind::intValues: return InputSourceKind::intValues;
+    case GraphInputSourceKind::uintValues: return InputSourceKind::uintValues;
+    case GraphInputSourceKind::floatValues: return InputSourceKind::floatValues;
+    case GraphInputSourceKind::doubleValues: return InputSourceKind::doubleValues;
+    case GraphInputSourceKind::textureFile: return InputSourceKind::textureFile;
+    case GraphInputSourceKind::hostTexture: return InputSourceKind::hostTexture;
+    case GraphInputSourceKind::passOutput: return InputSourceKind::passOutput;
+    case GraphInputSourceKind::graphTexture: return InputSourceKind::workflowTexture;
+    }
+
+    return InputSourceKind::intValues;
+}
+
+static std::vector<ShaderModuleDefinition>
+build_shader_modules(const ShaderProgramKind programKind, const std::vector<std::string>& paths)
+{
+    std::vector<ShaderModuleDefinition> modules;
+    modules.reserve(paths.size());
+
+    if (programKind == ShaderProgramKind::compute) {
+        if (paths.size() != 1u) {
+            throw std::runtime_error("pass_comp: must have one shader file.");
+        }
+
+        ShaderModuleDefinition module;
+        module.role = ShaderModuleRole::compute;
+        module.sourceKind = ShaderModuleSourceKind::filePath;
+        module.path = paths[0];
+        modules.push_back(std::move(module));
+        return modules;
+    }
+
+    if (paths.empty() || paths.size() > 2u) {
+        throw std::runtime_error("pass_vertfrag: must have one combined shader file or two stage files.");
+    }
+
+    if (paths.size() == 1u) {
+        ShaderModuleDefinition module;
+        module.role = ShaderModuleRole::automatic;
+        module.sourceKind = ShaderModuleSourceKind::filePath;
+        module.path = paths[0];
+        modules.push_back(std::move(module));
+        return modules;
+    }
+
+    ShaderModuleDefinition vertexModule;
+    vertexModule.role = ShaderModuleRole::vertex;
+    vertexModule.sourceKind = ShaderModuleSourceKind::filePath;
+    vertexModule.path = paths[0];
+    modules.push_back(std::move(vertexModule));
+
+    ShaderModuleDefinition fragmentModule;
+    fragmentModule.role = ShaderModuleRole::fragment;
+    fragmentModule.sourceKind = ShaderModuleSourceKind::filePath;
+    fragmentModule.path = paths[1];
+    modules.push_back(std::move(fragmentModule));
+    return modules;
+}
+
+static std::vector<std::string>
+build_module_paths(const std::vector<ShaderModuleDefinition>& modules)
+{
+    std::vector<std::string> paths;
+    paths.reserve(modules.size());
+    for (const ShaderModuleDefinition& module : modules) {
+        paths.push_back(module.path);
+    }
+    return paths;
+}
 
 template<typename T>
 static T
@@ -47,59 +132,64 @@ parse_positive_int(const std::string& text, const char* context)
     return value;
 }
 
-static std::shared_ptr<GLProgram>
-load_program_for_command_line(const ShaderProgramKind kind, const std::vector<std::string>& paths)
+static const ShaderResourceInfo*
+find_shader_resource(const ShaderInterface& shaderInterface, const std::string& name)
 {
-    if (kind == ShaderProgramKind::compute) {
-        if (paths.size() != 1) {
-            throw std::runtime_error("Compute shaders require exactly one path.");
+    auto find_in = [&name](const auto& resources) -> const ShaderResourceInfo* {
+        for (const ShaderResourceInfo& resource : resources) {
+            if (resource.name == name) {
+                return &resource;
+            }
         }
-        return g_glslProgramManager.loadComp(paths[0]);
+        return nullptr;
+    };
+
+    if (const ShaderResourceInfo* resource = find_in(shaderInterface.uniforms)) {
+        return resource;
+    }
+    if (const ShaderResourceInfo* resource = find_in(shaderInterface.samplers)) {
+        return resource;
+    }
+    if (const ShaderResourceInfo* resource = find_in(shaderInterface.images)) {
+        return resource;
+    }
+    if (const ShaderResourceInfo* resource = find_in(shaderInterface.systemUniforms)) {
+        return resource;
     }
 
-    if (paths.empty() || paths.size() > 2) {
-        throw std::runtime_error("Vertex/fragment shaders require one combined file or two stage files.");
-    }
-
-    if (paths.size() == 1) {
-        return g_glslProgramManager.loadVertFrag(paths[0]);
-    }
-
-    std::string shaderPaths[] { paths[0], paths[1] };
-    return g_glslProgramManager.loadVertFrag(shaderPaths);
+    return nullptr;
 }
 
 static void
-translate_pass_declaration(const SequenceParsedOption& option, GraphDefinition& definition, GraphTranslationState& state)
+translate_pass_declaration(const CommandLineParsedOption& option,
+                          Workflow& workflow,
+                          const ShaderInterfaceInspector& inspectShaderInterface,
+                          GraphTranslationState& state)
 {
-    GraphPassDefinition pass;
+    Pass pass;
     pass.programKind = (option.string_key == "pass_comp") ? ShaderProgramKind::compute : ShaderProgramKind::vertfrag;
-    pass.shaderPaths = option.value;
-    if (!definition.passes.empty()) {
-        pass.sizeX = definition.passes.back().sizeX;
-        pass.sizeY = definition.passes.back().sizeY;
+    pass.shaderModules = build_shader_modules(pass.programKind, option.value);
+    if (!workflow.passes.empty()) {
+        pass.sizeX = workflow.passes.back().sizeX;
+        pass.sizeY = workflow.passes.back().sizeY;
     }
 
-    try {
-        state.currentProgram = load_program_for_command_line(pass.programKind, pass.shaderPaths);
-    } catch (const std::exception&) {
-        if (option.string_key == "pass_vertfrag") {
-            throw std::runtime_error("pass_vertfrag: must have one combined shader file or two stage files.");
-        }
-        throw;
-    }
-    if (!state.currentProgram || !state.currentProgram->isValid()) {
-        throw std::runtime_error("Failed to load program for graph translation.");
+    state.currentShaderInterface =
+        inspect_shader_interface(inspectShaderInterface, pass.programKind, build_module_paths(pass.shaderModules));
+    if (!state.currentShaderInterface.success) {
+        throw std::runtime_error(state.currentShaderInterface.errorMessage.empty()
+                                     ? "Failed to load program for graph translation."
+                                     : state.currentShaderInterface.errorMessage);
     }
 
-    definition.passes.push_back(std::move(pass));
-    state.currentPass   = &definition.passes.back();
+    workflow.passes.push_back(std::move(pass));
+    state.currentPass   = &workflow.passes.back();
     state.currentInput  = nullptr;
     state.currentOutput = nullptr;
 }
 
 static void
-translate_pass_property(const SequenceParsedOption& option, GraphTranslationState& state)
+translate_pass_property(const CommandLineParsedOption& option, GraphTranslationState& state)
 {
     if (!state.currentPass) {
         throw std::runtime_error(option.string_key + ": no preceding pass declaration.");
@@ -145,7 +235,7 @@ translate_pass_property(const SequenceParsedOption& option, GraphTranslationStat
             throw std::runtime_error("cull: must have key/value pairs.");
         }
         for (size_t i = 0; i < option.value.size(); i += 2) {
-            state.currentPass->cullParameters.push_back(GraphAttribute { option.value[i], option.value[i + 1] });
+            state.currentPass->cullParameters.push_back(Attribute { option.value[i], option.value[i + 1] });
         }
         return;
     }
@@ -158,12 +248,12 @@ translate_pass_property(const SequenceParsedOption& option, GraphTranslationStat
         throw std::runtime_error("pass_mesh: must have at least 1 parameter.");
     }
 
-    GraphMeshDefinition mesh;
+    MeshBinding mesh;
     const size_t split         = option.value[0].find("::");
     const std::string meshType = option.value[0].substr(0, split);
 
     if (meshType == "quad") {
-        mesh.sourceKind = GraphMeshSourceKind::quad;
+        mesh.sourceKind = MeshSourceKind::quad;
         state.currentPass->meshes.push_back(std::move(mesh));
         return;
     }
@@ -175,7 +265,7 @@ translate_pass_property(const SequenceParsedOption& option, GraphTranslationStat
         throw std::runtime_error("pass_mesh: mesh references are not supported");
     }
 
-    mesh.sourceKind = GraphMeshSourceKind::file;
+    mesh.sourceKind = MeshSourceKind::file;
     for (size_t i = 1; i < option.value.size(); ++i) {
         const std::string extension = get_file_ext(option.value[i]);
         if (extension == "ply" || extension == "obj") {
@@ -187,7 +277,7 @@ translate_pass_property(const SequenceParsedOption& option, GraphTranslationStat
             throw std::runtime_error("pass_mesh: mesh attributes must be key/value pairs.");
         }
 
-        mesh.parameters.push_back(GraphAttribute { option.value[i], option.value[i + 1] });
+        mesh.parameters.push_back(Attribute { option.value[i], option.value[i + 1] });
         ++i;
     }
 
@@ -199,32 +289,32 @@ translate_pass_property(const SequenceParsedOption& option, GraphTranslationStat
 }
 
 static void
-translate_input_option(const SequenceParsedOption& option, GraphTranslationState& state)
+translate_input_option(const CommandLineParsedOption& option, GraphTranslationState& state)
 {
-    if (!state.currentPass || !state.currentProgram) {
+    if (!state.currentPass || !state.currentShaderInterface.success) {
         throw std::runtime_error("in (" + option.value[0] + "): no preceding pass declaration.");
     }
     if (option.value.size() < 2) {
         throw std::runtime_error("in (" + option.value[0] + "): must have at least 2 parameters.");
     }
 
-    GLProgramUniform* shaderUniform = state.currentProgram->findUniform(option.value[0]);
+    const ShaderResourceInfo* shaderUniform = find_shader_resource(state.currentShaderInterface, option.value[0]);
     if (!shaderUniform) {
         throw std::runtime_error("in (" + option.value[0] + "): program uniform not found");
     }
 
-    GraphInputDefinition input;
+    InputBinding input;
     input.name = option.value[0];
 
-    if (shaderUniform->type == GL_SAMPLER_2D || shaderUniform->type == GL_IMAGE_2D) {
-        input.sourceKind = GraphInputSourceKind::textureFile;
+    if (shaderUniform->glType == GL_SAMPLER_2D || shaderUniform->glType == GL_IMAGE_2D) {
+        input.sourceKind = InputSourceKind::textureFile;
 
         for (size_t i = 1; i < option.value.size(); ++i) {
             const std::string& token = option.value[i];
 
             if (token.find("::") != std::string::npos) {
                 const size_t split = token.find("::");
-                input.sourceKind          = GraphInputSourceKind::passOutput;
+                input.sourceKind                 = InputSourceKind::passOutput;
                 input.referencedOutputName = token.substr(0, split);
                 input.referencedPassIndex  = static_cast<size_t>(
                     parse_numeric_value<int32_t>(token.substr(split + 2), "in pass reference"));
@@ -236,7 +326,7 @@ translate_input_option(const SequenceParsedOption& option, GraphTranslationState
                 hres attrResult = hres::OK;
                 probeInput.eval_tex_attr(attrResult, token, option.value[i + 1]);
                 if (attrResult == hres::OK) {
-                    input.attributes.push_back(GraphAttribute { token, option.value[i + 1] });
+                    input.attributes.push_back(Attribute { token, option.value[i + 1] });
                     ++i;
                     continue;
                 }
@@ -245,14 +335,16 @@ translate_input_option(const SequenceParsedOption& option, GraphTranslationState
             input.texturePath = token;
         }
 
-        if (input.sourceKind == GraphInputSourceKind::textureFile && input.texturePath.empty()) {
+        if (input.sourceKind == InputSourceKind::textureFile && input.texturePath.empty()) {
             throw std::runtime_error("in (" + option.value[0] + "): texture path not found");
         }
     } else {
+        GraphInputSourceKind graphSourceKind = GraphInputSourceKind::intValues;
         uint8_t fieldCount = 0;
-        if (!extract_numeric_layout(shaderUniform->type, input.sourceKind, fieldCount)) {
+        if (!extract_numeric_layout(shaderUniform->glType, graphSourceKind, fieldCount)) {
             throw std::runtime_error("in (" + option.value[0] + "): unsupported uniform type");
         }
+        input.sourceKind = to_input_source_kind(graphSourceKind);
         if ((option.value.size() - 1) < fieldCount) {
             throw std::runtime_error("in (" + option.value[0] + "): missing numeric values");
         }
@@ -260,16 +352,16 @@ translate_input_option(const SequenceParsedOption& option, GraphTranslationState
         for (uint8_t i = 0; i < fieldCount; ++i) {
             const std::string& textValue = option.value[1 + i];
             switch (input.sourceKind) {
-            case GraphInputSourceKind::intValues:
+            case InputSourceKind::intValues:
                 input.intValues.push_back(parse_numeric_value<int32_t>(textValue, "in"));
                 break;
-            case GraphInputSourceKind::uintValues:
+            case InputSourceKind::uintValues:
                 input.uintValues.push_back(parse_numeric_value<uint32_t>(textValue, "in"));
                 break;
-            case GraphInputSourceKind::floatValues:
+            case InputSourceKind::floatValues:
                 input.floatValues.push_back(parse_numeric_value<float_t>(textValue, "in"));
                 break;
-            case GraphInputSourceKind::doubleValues:
+            case InputSourceKind::doubleValues:
                 input.doubleValues.push_back(parse_numeric_value<double_t>(textValue, "in"));
                 break;
             default: break;
@@ -282,7 +374,7 @@ translate_input_option(const SequenceParsedOption& option, GraphTranslationState
 }
 
 static void
-translate_atomic_option(const SequenceParsedOption& option, GraphTranslationState& state)
+translate_atomic_option(const CommandLineParsedOption& option, GraphTranslationState& state)
 {
     if (!state.currentPass) {
         throw std::runtime_error("atomic: no preceding pass declaration.");
@@ -297,14 +389,14 @@ translate_atomic_option(const SequenceParsedOption& option, GraphTranslationStat
         throw std::runtime_error("atomic (" + option.value[0] + "): can only have a single value");
     }
 
-    GraphAtomicCounterDefinition counter;
+    CounterBinding counter;
     counter.name         = option.value[1];
     counter.initialValue = parse_numeric_value<uint32_t>(option.value[2], "atomic");
-    state.currentPass->atomicCounters.push_back(std::move(counter));
+    state.currentPass->counters.push_back(std::move(counter));
 }
 
 static void
-translate_input_attribute_option(const SequenceParsedOption& option, GraphTranslationState& state)
+translate_input_attribute_option(const CommandLineParsedOption& option, GraphTranslationState& state)
 {
     if (!state.currentInput) {
         throw std::runtime_error("in_attr: no preceding input declaration.");
@@ -313,13 +405,13 @@ translate_input_attribute_option(const SequenceParsedOption& option, GraphTransl
         throw std::runtime_error("in_attr: must have 2 parameters.");
     }
 
-    state.currentInput->attributes.push_back(GraphAttribute { option.value[0], option.value[1] });
+    state.currentInput->attributes.push_back(Attribute { option.value[0], option.value[1] });
 }
 
 static void
-translate_output_option(const SequenceParsedOption& option, GraphTranslationState& state)
+translate_output_option(const CommandLineParsedOption& option, GraphTranslationState& state)
 {
-    if (!state.currentPass || !state.currentProgram) {
+    if (!state.currentPass || !state.currentShaderInterface.success) {
         throw std::runtime_error(option.string_key + ": no preceding pass declaration.");
     }
 
@@ -328,7 +420,7 @@ translate_output_option(const SequenceParsedOption& option, GraphTranslationStat
             throw std::runtime_error("out: must have 2 parameters.");
         }
 
-        GraphOutputDefinition output;
+        OutputBinding output;
         output.name         = option.value[0];
         output.path         = option.value[1];
         output.format       = state.previousFormat;
@@ -373,24 +465,24 @@ translate_output_option(const SequenceParsedOption& option, GraphTranslationStat
         if (option.value.size() < 2) {
             throw std::runtime_error("out_attr: must have 2 parameters.");
         }
-        state.currentOutput->attributes.push_back(GraphAttribute { option.value[0], option.value[1] });
+        state.currentOutput->attributes.push_back(Attribute { option.value[0], option.value[1] });
     }
 }
 
 }  // namespace
 
-GraphBuildRequest
-BuildGraphRequestFromCommandLine(const CommandLineRequest& request)
+Workflow
+BuildWorkflowFromCommandLine(const CommandLineRequest& request, const ShaderInterfaceInspector& inspectShaderInterface)
 {
-    const SequenceParsedArguments parsedArguments = Sequence_ParseArguments(request.argc, request.argv);
+    const CommandLineParsedArguments parsedArguments = ParseCommandLineArguments(request.argc, request.argv);
 
-    GraphBuildRequest graphRequest;
-    graphRequest.definition.verbosity = parsedArguments.verbosity;
+    Workflow workflow;
+    workflow.verbosity = parsedArguments.verbosity;
 
     GraphTranslationState state;
-    for (const SequenceParsedOption& option : parsedArguments.options) {
+    for (const CommandLineParsedOption& option : parsedArguments.options) {
         if (option.string_key == "pass_vertfrag" || option.string_key == "pass_comp") {
-            translate_pass_declaration(option, graphRequest.definition, state);
+            translate_pass_declaration(option, workflow, inspectShaderInterface, state);
             continue;
         }
 
@@ -418,7 +510,7 @@ BuildGraphRequestFromCommandLine(const CommandLineRequest& request)
         translate_output_option(option, state);
     }
 
-    return graphRequest;
+    return workflow;
 }
 
 }  // namespace rawgl

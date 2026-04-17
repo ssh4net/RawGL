@@ -3,11 +3,19 @@
 
 #pragma once
 
-#include "rawgl/rawgl_core.h"
+#include "rawgl/rawgl_cli.h"
+#include "rawgl/rawgl.h"
 
 namespace rawgl {
 
-GraphBuildRequest
-BuildGraphRequestFromCommandLine(const CommandLineRequest& request);
+struct ShaderInterfaceInspector {
+    const void* userData = nullptr;
+    ShaderInterface (*inspect)(const void* userData,
+                               ShaderProgramKind kind,
+                               const std::vector<std::string>& paths) = nullptr;
+};
+
+Workflow
+BuildWorkflowFromCommandLine(const CommandLineRequest& request, const ShaderInterfaceInspector& inspectShaderInterface);
 
 }  // namespace rawgl

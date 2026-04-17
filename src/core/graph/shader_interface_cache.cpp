@@ -12,6 +12,206 @@
 namespace rawgl {
 namespace {
 
+static void
+set_numeric_shape_metadata(ShaderResourceInfo& info, const GLenum glType)
+{
+    switch (glType) {
+    case GL_BOOL:
+    case GL_INT:
+    case GL_UNSIGNED_INT:
+    case GL_FLOAT:
+    case GL_DOUBLE:
+        info.vectorWidth   = 1;
+        info.matrixColumns = 1;
+        info.matrixRows    = 1;
+        return;
+    case GL_BOOL_VEC2:
+    case GL_INT_VEC2:
+    case GL_UNSIGNED_INT_VEC2:
+    case GL_FLOAT_VEC2:
+    case GL_DOUBLE_VEC2:
+        info.vectorWidth   = 2;
+        info.matrixColumns = 1;
+        info.matrixRows    = 1;
+        return;
+    case GL_BOOL_VEC3:
+    case GL_INT_VEC3:
+    case GL_UNSIGNED_INT_VEC3:
+    case GL_FLOAT_VEC3:
+    case GL_DOUBLE_VEC3:
+        info.vectorWidth   = 3;
+        info.matrixColumns = 1;
+        info.matrixRows    = 1;
+        return;
+    case GL_BOOL_VEC4:
+    case GL_INT_VEC4:
+    case GL_UNSIGNED_INT_VEC4:
+    case GL_FLOAT_VEC4:
+    case GL_DOUBLE_VEC4:
+        info.vectorWidth   = 4;
+        info.matrixColumns = 1;
+        info.matrixRows    = 1;
+        return;
+    case GL_FLOAT_MAT2:
+    case GL_DOUBLE_MAT2:
+        info.matrixColumns = 2;
+        info.matrixRows    = 2;
+        return;
+    case GL_FLOAT_MAT2x3:
+    case GL_DOUBLE_MAT2x3:
+        info.matrixColumns = 2;
+        info.matrixRows    = 3;
+        return;
+    case GL_FLOAT_MAT2x4:
+    case GL_DOUBLE_MAT2x4:
+        info.matrixColumns = 2;
+        info.matrixRows    = 4;
+        return;
+    case GL_FLOAT_MAT3x2:
+    case GL_DOUBLE_MAT3x2:
+        info.matrixColumns = 3;
+        info.matrixRows    = 2;
+        return;
+    case GL_FLOAT_MAT3:
+    case GL_DOUBLE_MAT3:
+        info.matrixColumns = 3;
+        info.matrixRows    = 3;
+        return;
+    case GL_FLOAT_MAT3x4:
+    case GL_DOUBLE_MAT3x4:
+        info.matrixColumns = 3;
+        info.matrixRows    = 4;
+        return;
+    case GL_FLOAT_MAT4x2:
+    case GL_DOUBLE_MAT4x2:
+        info.matrixColumns = 4;
+        info.matrixRows    = 2;
+        return;
+    case GL_FLOAT_MAT4x3:
+    case GL_DOUBLE_MAT4x3:
+        info.matrixColumns = 4;
+        info.matrixRows    = 3;
+        return;
+    case GL_FLOAT_MAT4:
+    case GL_DOUBLE_MAT4:
+        info.matrixColumns = 4;
+        info.matrixRows    = 4;
+        return;
+    default: return;
+    }
+}
+
+static void
+set_texture_shape_metadata(ShaderResourceInfo& info, const GLenum glType)
+{
+    switch (glType) {
+    case GL_SAMPLER_2D:
+    case GL_INT_SAMPLER_2D:
+    case GL_UNSIGNED_INT_SAMPLER_2D:
+    case GL_IMAGE_2D:
+    case GL_INT_IMAGE_2D:
+    case GL_UNSIGNED_INT_IMAGE_2D:
+        info.textureShape = ShaderTextureShape::tex_2d;
+        return;
+    default: return;
+    }
+}
+
+static bool
+is_sampler_gl_type(const GLenum glType)
+{
+    switch (glType) {
+    case GL_SAMPLER_1D:
+    case GL_SAMPLER_2D:
+    case GL_SAMPLER_3D:
+    case GL_SAMPLER_CUBE:
+    case GL_SAMPLER_1D_SHADOW:
+    case GL_SAMPLER_2D_SHADOW:
+    case GL_SAMPLER_1D_ARRAY:
+    case GL_SAMPLER_2D_ARRAY:
+    case GL_SAMPLER_1D_ARRAY_SHADOW:
+    case GL_SAMPLER_2D_ARRAY_SHADOW:
+    case GL_SAMPLER_2D_MULTISAMPLE:
+    case GL_SAMPLER_2D_MULTISAMPLE_ARRAY:
+    case GL_SAMPLER_CUBE_SHADOW:
+    case GL_SAMPLER_BUFFER:
+    case GL_SAMPLER_2D_RECT:
+    case GL_SAMPLER_2D_RECT_SHADOW:
+    case GL_INT_SAMPLER_1D:
+    case GL_INT_SAMPLER_2D:
+    case GL_INT_SAMPLER_3D:
+    case GL_INT_SAMPLER_CUBE:
+    case GL_INT_SAMPLER_1D_ARRAY:
+    case GL_INT_SAMPLER_2D_ARRAY:
+    case GL_INT_SAMPLER_2D_MULTISAMPLE:
+    case GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
+    case GL_INT_SAMPLER_BUFFER:
+    case GL_INT_SAMPLER_2D_RECT:
+    case GL_UNSIGNED_INT_SAMPLER_1D:
+    case GL_UNSIGNED_INT_SAMPLER_2D:
+    case GL_UNSIGNED_INT_SAMPLER_3D:
+    case GL_UNSIGNED_INT_SAMPLER_CUBE:
+    case GL_UNSIGNED_INT_SAMPLER_1D_ARRAY:
+    case GL_UNSIGNED_INT_SAMPLER_2D_ARRAY:
+    case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE:
+    case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
+    case GL_UNSIGNED_INT_SAMPLER_BUFFER:
+    case GL_UNSIGNED_INT_SAMPLER_2D_RECT: return true;
+    default: return false;
+    }
+}
+
+static bool
+is_image_gl_type(const GLenum glType)
+{
+    switch (glType) {
+    case GL_IMAGE_1D:
+    case GL_IMAGE_2D:
+    case GL_IMAGE_3D:
+    case GL_IMAGE_2D_RECT:
+    case GL_IMAGE_CUBE:
+    case GL_IMAGE_BUFFER:
+    case GL_IMAGE_1D_ARRAY:
+    case GL_IMAGE_2D_ARRAY:
+    case GL_IMAGE_2D_MULTISAMPLE:
+    case GL_IMAGE_2D_MULTISAMPLE_ARRAY:
+    case GL_INT_IMAGE_1D:
+    case GL_INT_IMAGE_2D:
+    case GL_INT_IMAGE_3D:
+    case GL_INT_IMAGE_2D_RECT:
+    case GL_INT_IMAGE_CUBE:
+    case GL_INT_IMAGE_BUFFER:
+    case GL_INT_IMAGE_1D_ARRAY:
+    case GL_INT_IMAGE_2D_ARRAY:
+    case GL_INT_IMAGE_2D_MULTISAMPLE:
+    case GL_INT_IMAGE_2D_MULTISAMPLE_ARRAY:
+    case GL_UNSIGNED_INT_IMAGE_1D:
+    case GL_UNSIGNED_INT_IMAGE_2D:
+    case GL_UNSIGNED_INT_IMAGE_3D:
+    case GL_UNSIGNED_INT_IMAGE_2D_RECT:
+    case GL_UNSIGNED_INT_IMAGE_CUBE:
+    case GL_UNSIGNED_INT_IMAGE_BUFFER:
+    case GL_UNSIGNED_INT_IMAGE_1D_ARRAY:
+    case GL_UNSIGNED_INT_IMAGE_2D_ARRAY:
+    case GL_UNSIGNED_INT_IMAGE_2D_MULTISAMPLE:
+    case GL_UNSIGNED_INT_IMAGE_2D_MULTISAMPLE_ARRAY: return true;
+    default: return false;
+    }
+}
+
+static void
+finalize_resource_info(ShaderResourceInfo& info, const ShaderResourceClass resourceClass)
+{
+    info.resourceClass = resourceClass;
+    info.isArray       = (info.size > 1);
+    info.arrayLength   = static_cast<std::size_t>(info.size > 0 ? info.size : 1);
+    info.vectorWidth   = 1;
+    info.matrixColumns = 1;
+    info.matrixRows    = 1;
+    set_numeric_shape_metadata(info, info.glType);
+    set_texture_shape_metadata(info, info.glType);
+}
+
 static ShaderResourceInfo
 make_resource_info(const std::string& name, const GLProgramUniform& uniform)
 {
@@ -32,7 +232,7 @@ make_resource_info(const std::string& name, const GLProgramOutput& output)
     info.typeName = output.type_name;
     info.location = static_cast<int>(output.location);
     info.glType   = output.type;
-    info.size     = 1;
+    info.size     = output.size;
     return info;
 }
 
@@ -66,34 +266,43 @@ make_buffer_variable_info(const std::string& blockName, const std::string& name,
 }
 
 static std::shared_ptr<GLProgram>
-load_program(const ShaderProgramKind kind, const std::vector<std::string>& paths)
+load_program(const RawGLContextState& contextState,
+             const ShaderProgramKind kind,
+             const std::vector<ShaderModuleDefinition>& modules)
 {
+    std::lock_guard<std::mutex> programLoadLock(contextState.programManagerMutex);
+
     if (kind == ShaderProgramKind::compute) {
-        if (paths.size() != 1) {
-            throw std::runtime_error("Compute shaders require exactly one path.");
+        if (modules.size() != 1u) {
+            throw std::runtime_error("Compute shaders require exactly one module.");
         }
-        return g_glslProgramManager.loadComp(paths[0]);
+        return contextState.programManager.loadCompModule("compute-module", modules[0]);
     }
 
-    if (paths.empty() || paths.size() > 2) {
-        throw std::runtime_error("Vertex/fragment shaders require one combined file or two stage files.");
+    if (modules.empty() || modules.size() > 2u) {
+        throw std::runtime_error("Vertex/fragment shaders require one combined module or two stage modules.");
     }
 
-    if (paths.size() == 1) {
-        return g_glslProgramManager.loadVertFrag(paths[0]);
-    }
-
-    std::string shaderPaths[] { paths[0], paths[1] };
-    return g_glslProgramManager.loadVertFrag(shaderPaths);
+    return contextState.programManager.loadVertFragModules("vertfrag-modules", modules);
 }
 
 static std::string
-build_shader_cache_key(const ShaderProgramKind kind, const std::vector<std::string>& paths)
+build_shader_cache_key(const ShaderProgramKind kind, const std::vector<ShaderModuleDefinition>& modules)
 {
     std::ostringstream stream;
     stream << static_cast<int>(kind);
-    for (const std::string& path : paths) {
-        stream << '\n' << path;
+    for (const ShaderModuleDefinition& module : modules) {
+        stream << '\n'
+               << static_cast<int>(module.role) << ':'
+               << static_cast<int>(module.sourceKind) << ':'
+               << module.path << ':'
+               << module.debugLabel << ':'
+               << module.glslText.size() << ':';
+        for (const std::byte byteValue : module.spirvBytes) {
+            const unsigned int value = std::to_integer<unsigned int>(byteValue);
+            const char digits[] = "0123456789abcdef";
+            stream << digits[(value >> 4u) & 0x0fu] << digits[value & 0x0fu];
+        }
     }
     return stream.str();
 }
@@ -107,6 +316,52 @@ is_system_uniform_name(const std::string& name)
 
 }  // namespace
 
+std::vector<ShaderModuleDefinition>
+build_file_backed_shader_modules(const ShaderProgramKind kind, const std::vector<std::string>& paths)
+{
+    std::vector<ShaderModuleDefinition> modules;
+    modules.reserve(paths.size());
+
+    if (kind == ShaderProgramKind::compute) {
+        if (paths.size() != 1u) {
+            throw std::runtime_error("Compute shaders require exactly one path.");
+        }
+
+        ShaderModuleDefinition module;
+        module.role = ShaderModuleRole::compute;
+        module.sourceKind = ShaderModuleSourceKind::filePath;
+        module.path = paths[0];
+        modules.push_back(std::move(module));
+        return modules;
+    }
+
+    if (paths.empty() || paths.size() > 2u) {
+        throw std::runtime_error("Vertex/fragment shaders require one combined file or two stage files.");
+    }
+
+    if (paths.size() == 1u) {
+        ShaderModuleDefinition module;
+        module.role = ShaderModuleRole::automatic;
+        module.sourceKind = ShaderModuleSourceKind::filePath;
+        module.path = paths[0];
+        modules.push_back(std::move(module));
+        return modules;
+    }
+
+    ShaderModuleDefinition vertexModule;
+    vertexModule.role = ShaderModuleRole::vertex;
+    vertexModule.sourceKind = ShaderModuleSourceKind::filePath;
+    vertexModule.path = paths[0];
+    modules.push_back(std::move(vertexModule));
+
+    ShaderModuleDefinition fragmentModule;
+    fragmentModule.role = ShaderModuleRole::fragment;
+    fragmentModule.sourceKind = ShaderModuleSourceKind::filePath;
+    fragmentModule.path = paths[1];
+    modules.push_back(std::move(fragmentModule));
+    return modules;
+}
+
 ShaderInterface
 build_shader_interface(const std::shared_ptr<GLProgram>& program, const ShaderProgramKind kind)
 {
@@ -119,27 +374,39 @@ build_shader_interface(const std::shared_ptr<GLProgram>& program, const ShaderPr
     }
 
     for (const auto& uniformIt : program->getUniforms()) {
-        const ShaderResourceInfo info = make_resource_info(uniformIt.first, uniformIt.second);
+        ShaderResourceInfo info = make_resource_info(uniformIt.first, uniformIt.second);
 
-        switch (uniformIt.second.type) {
-        case GL_SAMPLER_2D: shaderInterface.samplers.push_back(info); break;
-        case GL_IMAGE_2D: shaderInterface.images.push_back(info); break;
-        default:
-            if (is_system_uniform_name(uniformIt.first)) {
-                shaderInterface.systemUniforms.push_back(info);
-            } else {
-                shaderInterface.uniforms.push_back(info);
-            }
-            break;
+        if (is_sampler_gl_type(uniformIt.second.type)) {
+            finalize_resource_info(info, ShaderResourceClass::sampler);
+            shaderInterface.samplers.push_back(info);
+            continue;
+        }
+
+        if (is_image_gl_type(uniformIt.second.type)) {
+            finalize_resource_info(info, ShaderResourceClass::image);
+            shaderInterface.images.push_back(info);
+            continue;
+        }
+
+        if (is_system_uniform_name(uniformIt.first)) {
+            finalize_resource_info(info, ShaderResourceClass::system_uniform);
+            shaderInterface.systemUniforms.push_back(info);
+        } else {
+            finalize_resource_info(info, ShaderResourceClass::uniform_numeric);
+            shaderInterface.uniforms.push_back(info);
         }
     }
 
     for (const auto& outputIt : program->getOutputs()) {
-        shaderInterface.outputs.push_back(make_resource_info(outputIt.first, outputIt.second));
+        ShaderResourceInfo info = make_resource_info(outputIt.first, outputIt.second);
+        finalize_resource_info(info, ShaderResourceClass::output);
+        shaderInterface.outputs.push_back(info);
     }
 
     for (const auto& counterIt : program->getAtomicCounters()) {
-        shaderInterface.atomicCounters.push_back(make_resource_info(counterIt.first, *counterIt.second));
+        ShaderResourceInfo info = make_resource_info(counterIt.first, *counterIt.second);
+        finalize_resource_info(info, ShaderResourceClass::atomic_counter);
+        shaderInterface.atomicCounters.push_back(info);
     }
 
     for (const auto& bufferIt : program->getBufferVariables()) {
@@ -154,9 +421,9 @@ build_shader_interface(const std::shared_ptr<GLProgram>& program, const ShaderPr
 RawGLContextState::CachedShaderInterface
 load_cached_shader_interface(const RawGLContextState& contextState,
                              const ShaderProgramKind kind,
-                             const std::vector<std::string>& paths)
+                             const std::vector<ShaderModuleDefinition>& modules)
 {
-    const std::string cacheKey = build_shader_cache_key(kind, paths);
+    const std::string cacheKey = build_shader_cache_key(kind, modules);
 
     {
         std::shared_lock<std::shared_mutex> readLock(contextState.shaderCacheMutex);
@@ -167,7 +434,7 @@ load_cached_shader_interface(const RawGLContextState& contextState,
     }
 
     RawGLContextState::CachedShaderInterface cached;
-    cached.program         = load_program(kind, paths);
+    cached.program         = load_program(contextState, kind, modules);
     cached.shaderInterface = build_shader_interface(cached.program, kind);
 
     std::unique_lock<std::shared_mutex> writeLock(contextState.shaderCacheMutex);

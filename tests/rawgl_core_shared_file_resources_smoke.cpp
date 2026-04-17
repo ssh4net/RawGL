@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "rawgl/rawgl_core.h"
+#include "rawgl/rawgl.h"
 
 #include <OpenImageIO/imageio.h>
 
@@ -11,6 +11,17 @@
 #include <vector>
 
 namespace {
+
+rawgl::ShaderModuleDefinition
+make_file_module(const rawgl::ShaderProgramKind programKind, const char* path)
+{
+    rawgl::ShaderModuleDefinition module;
+    module.sourceKind = rawgl::ShaderModuleSourceKind::filePath;
+    module.path       = path;
+    module.role       = programKind == rawgl::ShaderProgramKind::compute ? rawgl::ShaderModuleRole::compute
+                                                                         : rawgl::ShaderModuleRole::automatic;
+    return module;
+}
 
 bool
 read_image_rgba32f(const std::filesystem::path& path, std::vector<float>& pixels, int& width, int& height)
@@ -66,88 +77,96 @@ compare_images(const std::filesystem::path& pathA, const std::filesystem::path& 
     return true;
 }
 
-rawgl::GraphBuildRequest
-make_texture_graph_request(const std::filesystem::path& outputPath)
+rawgl::Workflow
+make_texture_workflow(const std::filesystem::path& outputPath)
 {
-    rawgl::GraphPassDefinition pass;
+    rawgl::Pass pass;
     pass.programKind = rawgl::ShaderProgramKind::vertfrag;
-    pass.shaderPaths = { "tests/shaders/empty.vert", "tests/shaders/pass1.frag" };
+    rawgl::ShaderModuleDefinition vertexModule;
+    vertexModule.role       = rawgl::ShaderModuleRole::vertex;
+    vertexModule.sourceKind = rawgl::ShaderModuleSourceKind::filePath;
+    vertexModule.path       = "tests/shaders/empty.vert";
+    pass.shaderModules.push_back(std::move(vertexModule));
+    rawgl::ShaderModuleDefinition fragmentModule;
+    fragmentModule.role       = rawgl::ShaderModuleRole::fragment;
+    fragmentModule.sourceKind = rawgl::ShaderModuleSourceKind::filePath;
+    fragmentModule.path       = "tests/shaders/pass1.frag";
+    pass.shaderModules.push_back(std::move(fragmentModule));
     pass.sizeX       = 8;
     pass.sizeY       = 8;
-    pass.inputs.push_back(rawgl::GraphInputDefinition {
-        "InSample",
-        rawgl::GraphInputSourceKind::textureFile,
-        {},
-        {},
-        {},
-        {},
-        "tests/inputs/EmptyPresetLUT.png",
-        "",
-        0,
-        "",
-        {},
-    });
-    pass.outputs.push_back(rawgl::GraphOutputDefinition {
-        "OutSample",
-        outputPath.string(),
-        "rgba32f",
-        4,
-        3,
-        16,
-        "",
-        {},
-    });
+    rawgl::InputBinding input;
+    input.name        = "InSample";
+    input.sourceKind  = rawgl::InputSourceKind::textureFile;
+    input.texturePath = "tests/inputs/EmptyPresetLUT.png";
+    pass.inputs.push_back(std::move(input));
 
-    rawgl::GraphBuildRequest request;
-    request.definition.verbosity = 0;
-    request.definition.passes.push_back(std::move(pass));
-    return request;
+    rawgl::OutputBinding output;
+    output.name         = "OutSample";
+    output.path         = outputPath.string();
+    output.format       = "rgba32f";
+    output.channels     = 4;
+    output.alphaChannel = 3;
+    output.bits         = 16;
+    pass.outputs.push_back(std::move(output));
+
+    rawgl::Workflow workflow;
+    workflow.verbosity = 0;
+    workflow.passes.push_back(std::move(pass));
+    return workflow;
 }
 
-rawgl::GraphBuildRequest
-make_mesh_graph_request(const std::filesystem::path& outputPath)
+rawgl::Workflow
+make_mesh_workflow(const std::filesystem::path& outputPath)
 {
-    rawgl::GraphPassDefinition pass;
+    rawgl::Pass pass;
     pass.programKind = rawgl::ShaderProgramKind::vertfrag;
-    pass.shaderPaths = { "tests/shaders/mesh_ao.vert", "tests/shaders/mesh_ao.frag" };
+    rawgl::ShaderModuleDefinition vertexModule;
+    vertexModule.role       = rawgl::ShaderModuleRole::vertex;
+    vertexModule.sourceKind = rawgl::ShaderModuleSourceKind::filePath;
+    vertexModule.path       = "tests/shaders/mesh_ao.vert";
+    pass.shaderModules.push_back(std::move(vertexModule));
+    rawgl::ShaderModuleDefinition fragmentModule;
+    fragmentModule.role       = rawgl::ShaderModuleRole::fragment;
+    fragmentModule.sourceKind = rawgl::ShaderModuleSourceKind::filePath;
+    fragmentModule.path       = "tests/shaders/mesh_ao.frag";
+    pass.shaderModules.push_back(std::move(fragmentModule));
     pass.sizeX       = 64;
     pass.sizeY       = 64;
-    pass.meshes.push_back(rawgl::GraphMeshDefinition {
-        rawgl::GraphMeshSourceKind::file,
-        "tests/inputs/sponge.ply",
-        { { "tris", "true" }, { "rend", "tr" } },
-    });
-    pass.outputs.push_back(rawgl::GraphOutputDefinition {
-        "OutSample",
-        outputPath.string(),
-        "rgba32f",
-        4,
-        3,
-        16,
-        "",
-        {},
-    });
+    rawgl::MeshBinding mesh;
+    mesh.sourceKind = rawgl::MeshSourceKind::file;
+    mesh.path       = "tests/inputs/sponge.ply";
+    mesh.parameters = { { "tris", "true" }, { "rend", "tr" } };
+    pass.meshes.push_back(std::move(mesh));
 
-    rawgl::GraphBuildRequest request;
-    request.definition.verbosity = 0;
-    request.definition.passes.push_back(std::move(pass));
-    return request;
+    rawgl::OutputBinding output;
+    output.name         = "OutSample";
+    output.path         = outputPath.string();
+    output.format       = "rgba32f";
+    output.channels     = 4;
+    output.alphaChannel = 3;
+    output.bits         = 16;
+    pass.outputs.push_back(std::move(output));
+
+    rawgl::Workflow workflow;
+    workflow.verbosity = 0;
+    workflow.passes.push_back(std::move(pass));
+    return workflow;
 }
 
 bool
-build_and_run(rawgl::RawGLContext& context,
-              const rawgl::GraphBuildRequest& request,
+build_and_run(rawgl::Session& session,
+              const rawgl::Workflow& workflow,
               const std::filesystem::path& outputPath)
 {
-    rawgl::GraphBuildResult buildResult = context.buildGraph(request);
-    if (!buildResult.success || !buildResult.graph) {
-        std::cerr << "Graph build failed: " << buildResult.errorMessage << std::endl;
+    rawgl::PrepareResult prepareResult = session.prepare(workflow);
+    if (!prepareResult.success || !prepareResult.workflow) {
+        std::cerr << "Workflow preparation failed: " << prepareResult.errorMessage << std::endl;
         return false;
     }
 
-    const rawgl::GraphExecutionResult executionResult = buildResult.graph->execute(rawgl::GraphExecutionRequest {});
+    const rawgl::RunResult executionResult = prepareResult.workflow->run(rawgl::RunSettings {});
     if (!executionResult.success) {
-        std::cerr << "Graph execution failed: " << executionResult.errorMessage << std::endl;
+        std::cerr << "Workflow execution failed: " << executionResult.errorMessage << std::endl;
         return false;
     }
 
@@ -175,12 +194,12 @@ main()
     std::filesystem::remove(meshOutA, removeError);
     std::filesystem::remove(meshOutB, removeError);
 
-    rawgl::RawGLContext context;
+    rawgl::Session session;
 
-    if (!build_and_run(context, make_texture_graph_request(texOutA), texOutA)) {
+    if (!build_and_run(session, make_texture_workflow(texOutA), texOutA)) {
         return 1;
     }
-    if (!build_and_run(context, make_texture_graph_request(texOutB), texOutB)) {
+    if (!build_and_run(session, make_texture_workflow(texOutB), texOutB)) {
         return 1;
     }
     if (!compare_images(texOutA, texOutB)) {
@@ -188,16 +207,16 @@ main()
         return 1;
     }
 
-    const rawgl::ContextCacheStats textureStats = context.cacheStats();
+    const rawgl::SessionStats textureStats = session.stats();
     if (textureStats.textures != 1) {
         std::cerr << "Expected one shared texture resource, got " << textureStats.textures << std::endl;
         return 1;
     }
 
-    if (!build_and_run(context, make_mesh_graph_request(meshOutA), meshOutA)) {
+    if (!build_and_run(session, make_mesh_workflow(meshOutA), meshOutA)) {
         return 1;
     }
-    if (!build_and_run(context, make_mesh_graph_request(meshOutB), meshOutB)) {
+    if (!build_and_run(session, make_mesh_workflow(meshOutB), meshOutB)) {
         return 1;
     }
     if (!compare_images(meshOutA, meshOutB)) {
@@ -205,7 +224,7 @@ main()
         return 1;
     }
 
-    const rawgl::ContextCacheStats meshStats = context.cacheStats();
+    const rawgl::SessionStats meshStats = session.stats();
     if (meshStats.meshesHost != 1) {
         std::cerr << "Expected one shared host mesh resource, got " << meshStats.meshesHost << std::endl;
         return 1;

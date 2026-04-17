@@ -3,6 +3,7 @@
 
 
 #include "sequence.h"
+#include "runtime_help_text.h"
 #include "timer.h"
 
 // String to unsigned int
@@ -200,7 +201,7 @@ const std::vector<MeshInput::MeshParm> MeshInput::MESH_PARM_ARR = {
     },
 };
 
-const std::vector<Pass::CullModeAttr> Pass::CULL_PARM_ARR = {
+const std::vector<SequencePass::CullModeAttr> SequencePass::CULL_PARM_ARR = {
     {
         "wind",
         &_pass_input_set_wind_order,
@@ -261,10 +262,10 @@ MeshInput::eval_mesh_parm(hres& hr, const std::string& name, const std::string& 
 }
 
 const void
-Pass::eval_cull_parm(hres& hr, const std::string& name, const std::string& attr_val_name)
+SequencePass::eval_cull_parm(hres& hr, const std::string& name, const std::string& attr_val_name)
 {
     if (hres::OK == hr) {
-        for (const auto& cull_attr : Pass::CULL_PARM_ARR) {
+        for (const auto& cull_attr : SequencePass::CULL_PARM_ARR) {
             if (name == cull_attr.name) {
                 for (const auto& possible_val : cull_attr.possible_values) {
                     if (attr_val_name == possible_val.key) {
@@ -279,22 +280,22 @@ Pass::eval_cull_parm(hres& hr, const std::string& name, const std::string& attr_
 }
 
 std::string
-Pass::get_possible_culling_fmt()
+GetCullingHelpText()
 {
     std::string ret;
 
-    for (const auto& tex_attr : MeshInput::MESH_PARM_ARR) {
-        ret += tex_attr.name + " - " + tex_attr.desc + ": [";
+    for (const auto& cull_attr : SequencePass::CULL_PARM_ARR) {
+        ret += cull_attr.name + " - " + cull_attr.desc + ": [";
 
-        for (size_t i = 0; i < tex_attr.possible_values.size(); ++i) {
-            auto& possible_val = tex_attr.possible_values[i];
+        for (size_t i = 0; i < cull_attr.possible_values.size(); ++i) {
+            const auto& possible_val = cull_attr.possible_values[i];
             ret += possible_val.key + " (";
             if (i == 0) {
                 ret += "default, ";
             }
             ret += possible_val.desc + ")";
 
-            if (i < tex_attr.possible_values.size() - 1) {
+            if (i < cull_attr.possible_values.size() - 1) {
                 ret += ", ";
             }
         }
@@ -305,7 +306,7 @@ Pass::get_possible_culling_fmt()
 }
 
 std::string
-MeshInput::get_possible_mesh_parm_fmt()
+GetMeshParameterHelpText()
 {
     std::string ret;
 
@@ -373,19 +374,19 @@ _pass_input_set_tex_t(PassInput& pi, const GLint& val)
 }
 
 const void
-_pass_input_set_cull_face(Pass::CullMode& mm, const GLuint& val)
+_pass_input_set_cull_face(SequencePass::CullMode& mm, const GLuint& val)
 {
     mm.cullFace = val;
 }
 
 const void
-_pass_input_set_wind_order(Pass::CullMode& mm, const GLuint& val)
+_pass_input_set_wind_order(SequencePass::CullMode& mm, const GLuint& val)
 {
     mm.windOrder = val;
 }
 
 const void
-_pass_input_set_cull_enable(Pass::CullMode& mm, const GLuint& val)
+_pass_input_set_cull_enable(SequencePass::CullMode& mm, const GLuint& val)
 {
     mm.cullFaceEnable = val;
 }
@@ -410,7 +411,7 @@ PassInput::eval_tex_attr(hres& hr, const std::string& name, const std::string& a
 }
 
 std::string
-PassInput::get_possible_tex_attr_fmt()
+GetTextureAttributeHelpText()
 {
     std::string ret;
 

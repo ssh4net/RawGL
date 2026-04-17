@@ -480,6 +480,7 @@ GLProgram::compileUniformList()
             // atomic counters
             continue;
         }
+        trim_glsl_array_suffix(name, length);
         m_uniforms.insert({ name, GLProgramUniform(type, type_name, location, size) });
         LOG(trace) << type_name << ": " << name << " location = " << location;
     }
@@ -752,7 +753,7 @@ GLProgram::compileOutputList()
         }
 
         trim_glsl_array_suffix(name, length);
-        m_outputs.insert({ name, GLProgramOutput(propData[0], propData[1]) });
+        m_outputs.insert({ name, GLProgramOutput(propData[0], propData[1], propData[2]) });
         LOG(trace) << "Output: " << name << " location = " << propData[1] << " type = " << glsl_type_name(propData[0])
                    << std::endl;
     }

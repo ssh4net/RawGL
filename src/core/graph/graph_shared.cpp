@@ -55,6 +55,22 @@ extract_numeric_layout(const GLenum uniformType, GraphInputSourceKind& sourceKin
     return false;
 }
 
+std::string
+build_addressed_resource_name(const std::string& name, const bool usesArrayElement, const size_t arrayElement)
+{
+    if (!usesArrayElement) {
+        return name;
+    }
+
+    return name + "[" + std::to_string(arrayElement) + "]";
+}
+
+std::string
+build_pass_resource_key(const std::string& name, const size_t passIndex)
+{
+    return name + "::" + std::to_string(passIndex);
+}
+
 const ShaderResourceInfo*
 find_resource_by_name(const std::vector<ShaderResourceInfo>& resources, const std::string& name)
 {
@@ -112,16 +128,16 @@ apply_mesh_parameters(MeshInput& meshInput, const std::vector<GraphAttribute>& p
 }
 
 void
-apply_cull_parameters(Pass::CullMode& cullMode, const std::vector<GraphAttribute>& parameters)
+apply_cull_parameters(SequencePass::CullMode& cullMode, const std::vector<GraphAttribute>& parameters)
 {
     for (const GraphAttribute& parameter : parameters) {
         hres result = hres::ERR;
-        for (const Pass::CullModeAttr& cullAttr : Pass::CULL_PARM_ARR) {
+        for (const SequencePass::CullModeAttr& cullAttr : SequencePass::CULL_PARM_ARR) {
             if (cullAttr.name != parameter.name) {
                 continue;
             }
 
-            for (const Pass::CullModeVal& possibleValue : cullAttr.possible_values) {
+            for (const SequencePass::CullModeVal& possibleValue : cullAttr.possible_values) {
                 if (possibleValue.key != parameter.value) {
                     continue;
                 }

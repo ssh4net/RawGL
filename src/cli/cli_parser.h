@@ -6,23 +6,23 @@
 #include <string>
 #include <vector>
 
-struct SequenceParsedOption {
+struct CommandLineParsedOption {
     std::string string_key;
     std::vector<std::string> value;
 };
 
-struct SequenceParsedArguments {
+struct CommandLineParsedArguments {
     bool showHelp    = false;
     bool showVersion = false;
     int verbosity    = 3;
-    std::vector<SequenceParsedOption> options;
+    std::vector<CommandLineParsedOption> options;
 };
 
-SequenceParsedArguments
-Sequence_ParseArguments(int argc, const char* argv[]);
+CommandLineParsedArguments
+ParseCommandLineArguments(int argc, const char* argv[]);
 
 bool
-Sequence_HandleImmediateParsedArguments(const SequenceParsedArguments& parsedArguments, int argc, int& exitCode);
+HandleImmediateParsedArguments(const CommandLineParsedArguments& parsedArguments, int argc, int& exitCode);
 
 bool
-Sequence_HandleImmediateCommandLine(int argc, const char* argv[], int& exitCode);
+HandleImmediateCommandLine(int argc, const char* argv[], int& exitCode);

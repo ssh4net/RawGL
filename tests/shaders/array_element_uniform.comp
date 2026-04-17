@@ -1,0 +1,12 @@
+#version 450 core
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+uniform float weights[4];
+layout(rgba32f, binding = 0) uniform writeonly image2D o_out0;
+
+void main()
+{
+    const float value = weights[3];
+    imageStore(o_out0, ivec2(0, 0), vec4(value, value, value, 1.0));
+}

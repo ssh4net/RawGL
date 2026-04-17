@@ -1,0 +1,347 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "linux-debug",
+      "displayName": "Linux Debug",
+      "description": "Debug build using Unix Makefiles in build_linux_debug",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build_linux_debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Linux Release",
+      "description": "Release build using Unix Makefiles in build_linux_release",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build_linux_release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-release-python",
+      "displayName": "Linux Release + Python",
+      "description": "Release build with nanobind bindings in build_linux_release_python",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build_linux_release_python",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "RAWGL_BUILD_PYTHON": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-release-python-core",
+      "displayName": "Linux Release + Python Core",
+      "description": "Release build with real nanobind facade bindings using clang + lld in build_linux_release_python_core. Match RAWGL_LINUX_USE_LIBCXX to the dependency prefix ABI.",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build_linux_release_python_core",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "clang++-20",
+        "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fuse-ld=lld",
+        "CMAKE_MODULE_LINKER_FLAGS": "-fuse-ld=lld",
+        "RAWGL_BUILD_PYTHON": "ON",
+        "RAWGL_PYTHON_BIND_CORE": "ON",
+        "RAWGL_USE_PACKAGED_MINIPLY": "OFF",
+        "RAWGL_LINUX_PREFIX": "$penv{RAWGL_LINUX_PREFIX}"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-release-python-core-libcxx",
+      "displayName": "Linux Release + Python Core (libc++)",
+      "description": "Release build with real nanobind facade bindings using clang + lld and libc++. Use only with a libc++-built dependency prefix.",
+      "inherits": "linux-release-python-core",
+      "binaryDir": "${sourceDir}/build_linux_release_python_core_libcxx",
+      "cacheVariables": {
+        "RAWGL_LINUX_USE_LIBCXX": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-release-python-wheel",
+      "displayName": "Linux Release + Python Wheel",
+      "description": "Release wheel build with real nanobind facade bindings using clang + lld in build_linux_release_python_wheel. Match RAWGL_LINUX_USE_LIBCXX to the dependency prefix ABI.",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build_linux_release_python_wheel",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "clang++-20",
+        "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fuse-ld=lld",
+        "CMAKE_MODULE_LINKER_FLAGS": "-fuse-ld=lld",
+        "RAWGL_BUILD_APP": "OFF",
+        "RAWGL_BUILD_PYTHON": "ON",
+        "RAWGL_BUILD_WHEEL": "ON",
+        "RAWGL_INSTALL_DEV_ARTIFACTS": "OFF",
+        "RAWGL_PYTHON_BIND_CORE": "ON",
+        "RAWGL_USE_PACKAGED_MINIPLY": "OFF",
+        "RAWGL_LINUX_PREFIX": "$penv{RAWGL_LINUX_PREFIX}"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-release-python-wheel-libcxx",
+      "displayName": "Linux Release + Python Wheel (libc++)",
+      "description": "Release wheel build with real nanobind facade bindings using clang + lld and libc++. Use only with a libc++-built dependency prefix.",
+      "inherits": "linux-release-python-wheel",
+      "binaryDir": "${sourceDir}/build_linux_release_python_wheel_libcxx",
+      "cacheVariables": {
+        "RAWGL_LINUX_USE_LIBCXX": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "vs2022",
+      "displayName": "Visual Studio 2022 x64",
+      "description": "Canonical Windows multi-config build in build_vs2022",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/build_vs2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "vs2022-python",
+      "displayName": "Visual Studio 2022 x64 + Python",
+      "description": "Canonical Windows multi-config build with nanobind bindings in build_vs2022_python",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/build_vs2022_python",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "RAWGL_BUILD_PYTHON": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "linux-debug",
+      "configurePreset": "linux-debug"
+    },
+    {
+      "name": "linux-release",
+      "configurePreset": "linux-release"
+    },
+    {
+      "name": "linux-release-python",
+      "configurePreset": "linux-release-python"
+    },
+    {
+      "name": "linux-release-python-core",
+      "configurePreset": "linux-release-python-core"
+    },
+    {
+      "name": "linux-release-python-core-libcxx",
+      "configurePreset": "linux-release-python-core-libcxx"
+    },
+    {
+      "name": "linux-release-python-wheel",
+      "configurePreset": "linux-release-python-wheel",
+      "targets": [
+        "rawgl_wheel"
+      ]
+    },
+    {
+      "name": "linux-release-python-wheel-libcxx",
+      "configurePreset": "linux-release-python-wheel-libcxx",
+      "targets": [
+        "rawgl_wheel"
+      ]
+    },
+    {
+      "name": "vs2022-debug",
+      "configurePreset": "vs2022",
+      "configuration": "Debug"
+    },
+    {
+      "name": "vs2022-release",
+      "configurePreset": "vs2022",
+      "configuration": "Release"
+    },
+    {
+      "name": "vs2022-relwithdebinfo",
+      "configurePreset": "vs2022",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "vs2022-python-debug",
+      "configurePreset": "vs2022-python",
+      "configuration": "Debug"
+    },
+    {
+      "name": "vs2022-python-release",
+      "configurePreset": "vs2022-python",
+      "configuration": "Release"
+    },
+    {
+      "name": "vs2022-python-relwithdebinfo",
+      "configurePreset": "vs2022-python",
+      "configuration": "RelWithDebInfo"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "linux-debug",
+      "configurePreset": "linux-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-release",
+      "configurePreset": "linux-release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-release-python-core",
+      "configurePreset": "linux-release-python-core",
+      "output": {
+        "outputOnFailure": true
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-release-python-core-python",
+      "configurePreset": "linux-release-python-core",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "include": {
+          "name": "rawgl_python_.*"
+        }
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-release-python-core-libcxx-python",
+      "configurePreset": "linux-release-python-core-libcxx",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "include": {
+          "name": "rawgl_python_.*"
+        }
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "vs2022-debug",
+      "configurePreset": "vs2022",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "vs2022-release",
+      "configurePreset": "vs2022",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "vs2022-relwithdebinfo",
+      "configurePreset": "vs2022",
+      "configuration": "RelWithDebInfo",
+      "output": {
+        "outputOnFailure": true
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    }
+  ]
+}

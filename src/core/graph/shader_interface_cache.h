@@ -13,6 +13,9 @@ build_shader_interface(const std::shared_ptr<GLProgram>& program, ShaderProgramK
 RawGLContextState::CachedShaderInterface
 load_cached_shader_interface(const RawGLContextState& contextState,
                              ShaderProgramKind kind,
-                             const std::vector<std::string>& paths);
+                             const std::vector<ShaderModuleDefinition>& modules);
+
+std::vector<ShaderModuleDefinition>
+build_file_backed_shader_modules(ShaderProgramKind kind, const std::vector<std::string>& paths);
 
 }  // namespace rawgl

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "rawgl/rawgl_core.h"
+#include "rawgl/rawgl.h"
 
 #include <OpenImageIO/imageio.h>
 
@@ -15,15 +15,35 @@ main()
     std::error_code removeError;
     std::filesystem::remove(outputPath, removeError);
 
-    rawgl::GraphPassDefinition pass;
-    pass.programKind            = rawgl::ShaderProgramKind::compute;
-    pass.shaderPaths            = { "tests/shaders/system_uniforms.comp" };
-    pass.sizeX                  = 1;
-    pass.sizeY                  = 1;
-    pass.workGroupSizeX         = 1;
-    pass.workGroupSizeY         = 1;
+    rawgl::Pass pass;
+    pass.programKind              = rawgl::ShaderProgramKind::compute;
+    pass.shaderModules.push_back(rawgl::ShaderModuleDefinition {
+        rawgl::ShaderModuleRole::compute,
+        rawgl::ShaderModuleSourceKind::glslText,
+        "",
+        R"(#version 450 core
+
+uniform float iTime;
+uniform int iFrame;
+uniform int iPassIndex;
+layout(rgba32f) writeonly uniform image2D o_out0;
+
+layout(local_size_x = 1, local_size_y = 1) in;
+
+void main()
+{
+    imageStore(o_out0, ivec2(0, 0), vec4(iTime, float(iFrame), float(iPassIndex), 1.0));
+}
+)",
+        {},
+        "rawgl_core_graph_smoke_inline_system_uniforms",
+    });
+    pass.sizeX                    = 1;
+    pass.sizeY                    = 1;
+    pass.workGroupSizeX           = 1;
+    pass.workGroupSizeY           = 1;
     pass.hasExplicitWorkGroupSize = true;
-    pass.outputs.push_back(rawgl::GraphOutputDefinition {
+    pass.outputs.push_back(rawgl::OutputBinding {
         "o_out0",
         outputPath.string(),
         "rgba32f",
@@ -31,25 +51,28 @@ main()
         3,
         16,
         "",
+        false,
+        0,
         {},
+        false,
     });
 
-    rawgl::GraphBuildRequest graphRequest;
-    graphRequest.definition.verbosity = 0;
-    graphRequest.definition.passes.push_back(std::move(pass));
+    rawgl::Workflow workflow;
+    workflow.verbosity = 0;
+    workflow.passes.push_back(std::move(pass));
 
-    rawgl::RawGLContext context;
-    rawgl::GraphBuildResult buildResult = context.buildGraph(graphRequest);
-    if (!buildResult.success || !buildResult.graph) {
-        std::cerr << "Graph build failed: " << buildResult.errorMessage << std::endl;
+    rawgl::Session session;
+    rawgl::PrepareResult prepareResult = session.prepare(workflow);
+    if (!prepareResult.success || !prepareResult.workflow) {
+        std::cerr << "Workflow preparation failed: " << prepareResult.errorMessage << std::endl;
         return 1;
     }
 
-    rawgl::GraphExecutionResult executionResult = buildResult.graph->execute(rawgl::GraphExecutionRequest {
-        rawgl::SystemUniformState { 1.0, 1.0 / 24.0, 24, 0 },
-    });
+    rawgl::RunSettings runSettings;
+    runSettings.systemUniforms = rawgl::SystemUniformState { 1.0, 1.0 / 24.0, 24, 0 };
+    rawgl::RunResult executionResult = prepareResult.workflow->run(runSettings);
     if (!executionResult.success) {
-        std::cerr << "Graph execution failed: " << executionResult.errorMessage << std::endl;
+        std::cerr << "Workflow execution failed: " << executionResult.errorMessage << std::endl;
         return 1;
     }
 

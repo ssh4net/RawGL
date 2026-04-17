@@ -136,16 +136,19 @@ struct GLProgramOutput {
     GLenum type;
     std::string type_name;
     GLuint location;
+    GLsizei size = 1;
 
     GLProgramOutput(GLuint location)
         : type(0)
         , type_name("")
         , location(location)
+        , size(1)
     {
     }
-    GLProgramOutput(GLenum type, GLuint location)
+    GLProgramOutput(GLenum type, GLuint location, GLsizei size = 1)
         : type(type)
         , location(location)
+        , size(size)
     {
         type_name = static_cast<std::string>(glsl_type_name(type));
     }

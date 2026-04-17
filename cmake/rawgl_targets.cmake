@@ -23,11 +23,14 @@ list(APPEND RAWGL_CORE_SOURCES ${RAWGL_MINIPLY_SOURCES})
 
 add_library(rawgl_core STATIC ${RAWGL_CORE_SOURCES})
 add_library(RawGL::core ALIAS rawgl_core)
+rawgl_apply_windows_debug_suffix(rawgl_core)
 
-add_executable(rawgl src/app/main.cpp)
-add_executable(RawGL::rawgl ALIAS rawgl)
+if(RAWGL_BUILD_APP)
+    add_executable(rawgl src/app/main.cpp)
+    add_executable(RawGL::rawgl ALIAS rawgl)
+endif()
 
-if(WIN32)
+if(WIN32 AND RAWGL_BUILD_APP)
     enable_language(RC)
     target_sources(rawgl PRIVATE
         src/app/windows/RawGL.rc)
@@ -66,8 +69,10 @@ if(WIN32)
     target_compile_definitions(rawgl_core PRIVATE
         _MSVC
         OIIO_STATIC_DEFINE=1)
-    target_compile_definitions(rawgl PRIVATE _CONSOLE _MSVC)
-    if(RAWGL_WINDOWS_UTF8)
+    if(RAWGL_BUILD_APP)
+        target_compile_definitions(rawgl PRIVATE _CONSOLE _MSVC)
+    endif()
+    if(RAWGL_WINDOWS_UTF8 AND RAWGL_BUILD_APP)
         target_compile_options(rawgl_core PRIVATE /utf-8)
         target_compile_options(rawgl PRIVATE /utf-8)
     endif()
@@ -86,12 +91,6 @@ if(TARGET fmt::fmt)
 endif()
 
 if(NOT WIN32)
-    if(TARGET BZip2::BZip2)
-        target_link_libraries(rawgl_core PUBLIC
-            "-Wl,--whole-archive"
-            "$<TARGET_FILE:BZip2::BZip2>"
-            "-Wl,--no-whole-archive")
-    endif()
     if(TARGET pugixml::pugixml)
         target_link_libraries(rawgl_core PUBLIC pugixml::pugixml)
     elseif(TARGET pugixml)
@@ -108,26 +107,40 @@ if(NOT WIN32)
     endif()
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND RAWGL_LINUX_USE_LIBCXX)
     target_compile_options(rawgl_core PUBLIC -stdlib=libc++)
     target_link_options(rawgl_core PUBLIC -stdlib=libc++)
 endif()
 
-target_link_libraries(rawgl PRIVATE rawgl_core)
+if(RAWGL_BUILD_APP)
+    target_link_libraries(rawgl PRIVATE rawgl_core)
 
-set_target_properties(rawgl PROPERTIES
-    OUTPUT_NAME RawGL)
+    set_target_properties(rawgl PROPERTIES
+        OUTPUT_NAME RawGL)
+    rawgl_apply_windows_debug_suffix(rawgl)
+endif()
 
-install(TARGETS rawgl_core rawgl
-    EXPORT RawGLTargets
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+if(RAWGL_INSTALL_DEV_ARTIFACTS)
+    if(RAWGL_BUILD_APP)
+        install(TARGETS rawgl_core rawgl
+            EXPORT RawGLTargets
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    else()
+        install(TARGETS rawgl_core
+            EXPORT RawGLTargets
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    endif()
 
-install(FILES
-    include/rawgl/rawgl_core.h
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rawgl)
+    install(FILES
+        include/rawgl/rawgl.h
+        include/rawgl/rawgl_cli.h
+        include/rawgl/rawgl_core.h
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rawgl)
 
-install(EXPORT RawGLTargets
-    NAMESPACE RawGL::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/RawGL)
+    install(EXPORT RawGLTargets
+        NAMESPACE RawGL::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/RawGL)
+endif()

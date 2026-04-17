@@ -1,0 +1,42 @@
+message(STATUS "Building RawGL Python wheel")
+
+set(_rawgl_build_args
+    --build "@CMAKE_BINARY_DIR@"
+    --target rawgl_wheel)
+if(NOT "@CMAKE_INSTALL_CONFIG_NAME@" STREQUAL "")
+    list(APPEND _rawgl_build_args --config "@CMAKE_INSTALL_CONFIG_NAME@")
+endif()
+
+execute_process(
+    COMMAND "@CMAKE_COMMAND@" ${_rawgl_build_args}
+    RESULT_VARIABLE _rawgl_wheel_res
+)
+if(NOT _rawgl_wheel_res EQUAL 0)
+    message(FATAL_ERROR "Wheel build failed: exit=${_rawgl_wheel_res}")
+endif()
+
+set(_rawgl_wheel_version "@PROJECT_VERSION@")
+file(GLOB _rawgl_wheels LIST_DIRECTORIES false
+    "@CMAKE_BINARY_DIR@/dist/rawgl-${_rawgl_wheel_version}-*.whl")
+list(LENGTH _rawgl_wheels _rawgl_wheel_count)
+if(_rawgl_wheel_count EQUAL 0)
+    file(GLOB _rawgl_all_wheels LIST_DIRECTORIES false "@CMAKE_BINARY_DIR@/dist/rawgl-*.whl")
+    message(FATAL_ERROR
+        "Wheel build did not produce expected output for version ${_rawgl_wheel_version}: "
+        "@CMAKE_BINARY_DIR@/dist/rawgl-${_rawgl_wheel_version}-*.whl "
+        "(found: ${_rawgl_all_wheels})")
+endif()
+
+if(_rawgl_wheel_count GREATER 1)
+    message(WARNING "Multiple wheels found for version ${_rawgl_wheel_version}, installing the first one: ${_rawgl_wheels}")
+endif()
+
+list(GET _rawgl_wheels 0 _rawgl_wheel_file)
+
+set(_rawgl_wheel_install_dir "${CMAKE_INSTALL_PREFIX}/@CMAKE_INSTALL_DATADIR@/rawgl/wheels")
+message(STATUS "Installing wheel: ${_rawgl_wheel_file}")
+message(STATUS "  -> ${_rawgl_wheel_install_dir}")
+
+file(INSTALL
+    FILES "${_rawgl_wheel_file}"
+    DESTINATION "${_rawgl_wheel_install_dir}")

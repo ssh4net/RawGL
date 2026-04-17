@@ -111,6 +111,14 @@ find_library(RAWGL_WEBPMUX_LIBRARY_DEBUG
     NAMES webpmuxd libwebpmuxd webpmux_d
     HINTS
         "${RAWGL_LINUX_PREFIX}/lib")
+find_library(RAWGL_SHARPYUV_LIBRARY_RELEASE
+    NAMES sharpyuv libsharpyuv
+    HINTS
+        "${RAWGL_LINUX_PREFIX}/lib")
+find_library(RAWGL_SHARPYUV_LIBRARY_DEBUG
+    NAMES sharpyuvd libsharpyuvd sharpyuv_d
+    HINTS
+        "${RAWGL_LINUX_PREFIX}/lib")
 
 if(NOT TARGET WebP::webp AND (RAWGL_WEBP_LIBRARY_RELEASE OR RAWGL_WEBP_LIBRARY_DEBUG))
     rawgl_add_linux_imported_library(WebP::webp
@@ -129,6 +137,12 @@ if(NOT TARGET WebP::libwebpmux AND (RAWGL_WEBPMUX_LIBRARY_RELEASE OR RAWGL_WEBPM
         INCLUDE_DIR "${RAWGL_LINUX_PREFIX}/include"
         RELEASE "${RAWGL_WEBPMUX_LIBRARY_RELEASE}"
         DEBUG "${RAWGL_WEBPMUX_LIBRARY_DEBUG}")
+endif()
+if(NOT TARGET sharpyuv::sharpyuv AND (RAWGL_SHARPYUV_LIBRARY_RELEASE OR RAWGL_SHARPYUV_LIBRARY_DEBUG))
+    rawgl_add_linux_imported_library(sharpyuv::sharpyuv
+        INCLUDE_DIR "${RAWGL_LINUX_PREFIX}/include"
+        RELEASE "${RAWGL_SHARPYUV_LIBRARY_RELEASE}"
+        DEBUG "${RAWGL_SHARPYUV_LIBRARY_DEBUG}")
 endif()
 
 if(NOT TARGET fmt::fmt)

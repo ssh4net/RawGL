@@ -3,6 +3,7 @@
 
 #include "graph_runtime_plan.h"
 
+#include "graph_resources.h"
 #include "graph_shared.h"
 #include "shader_interface_cache.h"
 
@@ -14,11 +15,18 @@ namespace rawgl {
 namespace {
 
 static PassOutput&
-ensure_output_binding(SequenceRuntimePassConfig& passConfig, const ShaderInterface& shaderInterface, const std::string& name)
+ensure_output_binding(SequenceRuntimePassConfig& passConfig,
+                      const ShaderInterface& shaderInterface,
+                      const std::string& name,
+                      const bool usesArrayElement,
+                      const size_t arrayElement)
 {
-    auto [outputIt, inserted] = passConfig.outputs.insert({ name, PassOutput() });
+    const std::string addressedName = build_addressed_resource_name(name, usesArrayElement, arrayElement);
+    auto [outputIt, inserted]       = passConfig.outputs.insert({ addressedName, PassOutput() });
     (void)inserted;
     PassOutput& output = outputIt->second;
+    output.usesArrayElement = usesArrayElement;
+    output.arrayElement     = arrayElement;
 
     if (passConfig.isCompute) {
         if (!find_resource_by_name(shaderInterface.images, name)) {
@@ -48,7 +56,11 @@ apply_output_definition(SequenceRuntimePassConfig& passConfig,
                         const ShaderInterface& shaderInterface,
                         const GraphOutputDefinition& definition)
 {
-    PassOutput& output = ensure_output_binding(passConfig, shaderInterface, definition.name);
+    PassOutput& output = ensure_output_binding(passConfig,
+                                               shaderInterface,
+                                               definition.name,
+                                               definition.usesArrayElement,
+                                               definition.arrayElement);
     output.path               = definition.path;
     output.internalFormatText = definition.format;
     output.channels           = definition.channels;
@@ -61,7 +73,11 @@ apply_output_definition(SequenceRuntimePassConfig& passConfig,
 }
 
 static void
-ensure_referenced_output(SequenceRuntimeConfig& runtimeConfig, size_t referencedPassIndex, const std::string& outputName)
+ensure_referenced_output(SequenceRuntimeConfig& runtimeConfig,
+                         const size_t referencedPassIndex,
+                         const std::string& outputName,
+                         const bool usesArrayElement,
+                         const size_t arrayElement)
 {
     if (referencedPassIndex >= runtimeConfig.passes.size()) {
         throw std::runtime_error("invalid referenced pass index in " + outputName + "::" + std::to_string(referencedPassIndex));
@@ -71,7 +87,7 @@ ensure_referenced_output(SequenceRuntimeConfig& runtimeConfig, size_t referenced
     const ShaderInterface referencedInterface = build_shader_interface(
         referencedPass.program,
         referencedPass.isCompute ? ShaderProgramKind::compute : ShaderProgramKind::vertfrag);
-    ensure_output_binding(referencedPass, referencedInterface, outputName);
+    ensure_output_binding(referencedPass, referencedInterface, outputName, usesArrayElement, arrayElement);
 }
 
 static SequenceRuntimeConfig
@@ -112,21 +128,38 @@ build_sequence_runtime_config(const RawGLGraphState::ResourcePlan& resourcePlan)
         }
 
         for (const GraphInputDefinition& inputDefinition : resourcePass.inputs) {
+            const std::string addressedInputName =
+                build_addressed_resource_name(inputDefinition.name,
+                                              inputDefinition.usesArrayElement,
+                                              inputDefinition.arrayElement);
             GLProgramUniform* uniform = passConfig.program->findUniform(inputDefinition.name);
             PassInput input;
             input.uniform = uniform;
+            input.usesArrayElement = inputDefinition.usesArrayElement;
 
             if (inputDefinition.sourceKind == GraphInputSourceKind::textureFile
+                || inputDefinition.sourceKind == GraphInputSourceKind::hostTexture
                 || inputDefinition.sourceKind == GraphInputSourceKind::passOutput) {
                 apply_texture_attributes(input, inputDefinition.attributes);
 
                 if (inputDefinition.sourceKind == GraphInputSourceKind::textureFile) {
                     input.path = inputDefinition.texturePath;
+                } else if (inputDefinition.sourceKind == GraphInputSourceKind::hostTexture) {
+                    if (!inputDefinition.hostTexture) {
+                        throw std::runtime_error("in (" + inputDefinition.name + "): host texture payload is missing");
+                    }
+                    input.texture = create_host_texture_resource(*inputDefinition.hostTexture,
+                                                                 "in (" + inputDefinition.name + ")");
                 } else {
                     ensure_referenced_output(runtimeConfig,
                                              inputDefinition.referencedPassIndex,
-                                             inputDefinition.referencedOutputName);
-                    input.path = inputDefinition.referencedOutputName + "::"
+                                             inputDefinition.referencedOutputName,
+                                             inputDefinition.usesReferencedOutputArrayElement,
+                                             inputDefinition.referencedOutputArrayElement);
+                    input.path = build_addressed_resource_name(inputDefinition.referencedOutputName,
+                                                               inputDefinition.usesReferencedOutputArrayElement,
+                                                               inputDefinition.referencedOutputArrayElement)
+                                 + "::"
                                  + std::to_string(inputDefinition.referencedPassIndex);
                 }
             } else if (inputDefinition.sourceKind == GraphInputSourceKind::graphTexture) {
@@ -136,6 +169,14 @@ build_sequence_runtime_config(const RawGLGraphState::ResourcePlan& resourcePlan)
                 GraphInputSourceKind expectedKind = GraphInputSourceKind::intValues;
                 uint8_t fieldCount                = 0;
                 extract_numeric_layout(uniform->type, expectedKind, fieldCount);
+                if (inputDefinition.usesArrayElement) {
+                    const GLint addressedLocation =
+                        glGetUniformLocation(passConfig.program->getId(), addressedInputName.c_str());
+                    if (addressedLocation < 0) {
+                        throw std::runtime_error("in (" + addressedInputName + "): array element uniform not found");
+                    }
+                    input.addressedLocation = addressedLocation;
+                }
 
                 switch (inputDefinition.sourceKind) {
                 case GraphInputSourceKind::intValues:
@@ -156,16 +197,21 @@ build_sequence_runtime_config(const RawGLGraphState::ResourcePlan& resourcePlan)
                 }
             }
 
-            passConfig.inputs.insert({ inputDefinition.name, input });
+            passConfig.inputs.insert({ addressedInputName, input });
         }
 
         for (const GraphAtomicCounterDefinition& counterDefinition : resourcePass.atomicCounters) {
             std::shared_ptr<GLProgramBuffers> counter = passConfig.program->findCounter(counterDefinition.name);
-            Pass::inputCounter inputCounter;
-            inputCounter.size     = counter->size;
-            inputCounter.value.assign(counter->size, 0u);
-            inputCounter.value[0] = counterDefinition.initialValue;
-            passConfig.inputCounters.insert({ counterDefinition.name, inputCounter });
+            auto [counterIt, inserted] =
+                passConfig.inputCounters.insert({ counterDefinition.name, SequencePass::inputCounter() });
+            (void)inserted;
+            SequencePass::inputCounter& inputCounter = counterIt->second;
+            if (inputCounter.value.empty() || inputCounter.size != counter->size) {
+                inputCounter.size = counter->size;
+                inputCounter.value.assign(counter->size, 0u);
+            }
+            const size_t valueIndex = counterDefinition.usesArrayElement ? counterDefinition.arrayElement : 0u;
+            inputCounter.value[valueIndex] = counterDefinition.initialValue;
         }
 
         runtimeConfig.passes.push_back(std::move(passConfig));
@@ -204,24 +250,31 @@ build_execution_plan(const RawGLGraphState::ResourcePlan& resourcePlan)
         executionPass.outputNames.reserve(resourcePass.outputs.size());
 
         for (const GraphInputDefinition& inputDefinition : resourcePass.inputs) {
-            executionPass.inputNames.push_back(inputDefinition.name);
+            executionPass.inputNames.push_back(build_addressed_resource_name(inputDefinition.name,
+                                                                             inputDefinition.usesArrayElement,
+                                                                             inputDefinition.arrayElement));
             if (inputDefinition.sourceKind == GraphInputSourceKind::passOutput) {
                 append_unique_dependency(executionPass.dependencyPassIndices, inputDefinition.referencedPassIndex);
             } else if (inputDefinition.sourceKind == GraphInputSourceKind::graphTexture) {
                 executionPlan.persistentInputs.push_back(RawGLGraphState::PersistentInputBinding {
                     passIndex,
-                    inputDefinition.name,
+                    build_addressed_resource_name(inputDefinition.name,
+                                                  inputDefinition.usesArrayElement,
+                                                  inputDefinition.arrayElement),
                     inputDefinition.graphTextureName,
                 });
             }
         }
 
         for (const GraphOutputDefinition& outputDefinition : resourcePass.outputs) {
-            executionPass.outputNames.push_back(outputDefinition.name);
+            const std::string addressedOutputName = build_addressed_resource_name(outputDefinition.name,
+                                                                                  outputDefinition.usesArrayElement,
+                                                                                  outputDefinition.arrayElement);
+            executionPass.outputNames.push_back(addressedOutputName);
             if (!outputDefinition.persistentTextureName.empty()) {
                 executionPlan.persistentOutputs.push_back(RawGLGraphState::PersistentOutputBinding {
                     passIndex,
-                    outputDefinition.name,
+                    addressedOutputName,
                     outputDefinition.persistentTextureName,
                 });
             }

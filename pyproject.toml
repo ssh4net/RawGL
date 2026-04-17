@@ -1,0 +1,27 @@
+[build-system]
+requires = ["scikit-build-core>=0.5"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "rawgl"
+description = "Batch-oriented GLSL image processing workflows"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+dynamic = ["version"]
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.version = "CMakeLists.txt"
+
+[tool.scikit-build.metadata.version]
+provider = "scikit_build_core.metadata.regex"
+input = "VERSION"
+regex = '^\s*(?P<value>\d+\.\d+\.\d+)\s*$'
+
+[tool.scikit-build.cmake.define]
+RAWGL_BUILD_APP = "OFF"
+RAWGL_BUILD_PYTHON = "ON"
+RAWGL_BUILD_WHEEL = "OFF"
+RAWGL_INSTALL_DEV_ARTIFACTS = "OFF"
+BUILD_TESTING = "OFF"

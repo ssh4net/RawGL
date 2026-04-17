@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "rawgl/rawgl_core.h"
+#include "rawgl/rawgl.h"
+#include "rawgl/rawgl_cli.h"
 
 #include "cli_graph.h"
+#include "cli_parser.h"
 #include "common.h"
 #include "graph_build.h"
+#include "graph_shared.h"
 #include "log.h"
 #include "shader_interface_cache.h"
 #include "timer.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <map>
 #include <stdexcept>
@@ -49,6 +54,50 @@ infer_texture_type_from_internal_format(const GLenum internalFormat)
     }
 }
 
+static size_t
+byte_size_for_gl_type(const GLenum type)
+{
+    switch (type) {
+    case GL_UNSIGNED_BYTE: return 1u;
+    case GL_UNSIGNED_SHORT:
+    case GL_HALF_FLOAT: return 2u;
+    case GL_UNSIGNED_INT:
+    case GL_FLOAT: return 4u;
+    default: break;
+    }
+
+    return 0u;
+}
+
+static HostImageData
+capture_texture_to_host_image(const Texture& texture)
+{
+    HostImageData hostImage;
+    hostImage.width            = texture.getWidth();
+    hostImage.height           = texture.getHeight();
+    hostImage.channels         = texture.getChannels();
+    hostImage.alphaChannel     = texture.getAlphaChannel();
+    hostImage.glInternalFormat = texture.getInternalFormat();
+    hostImage.glType           = infer_texture_type_from_internal_format(texture.getInternalFormat());
+
+    const size_t bytesPerComponent = byte_size_for_gl_type(hostImage.glType);
+    if (bytesPerComponent == 0u) {
+        throw std::runtime_error("Unsupported texture readback type");
+    }
+
+    const size_t byteCount = static_cast<size_t>(hostImage.width) * static_cast<size_t>(hostImage.height)
+                             * static_cast<size_t>(hostImage.channels) * bytesPerComponent;
+    void* data             = texture.getData(hostImage.glType);
+    if (!data) {
+        throw std::runtime_error("Texture readback failed");
+    }
+
+    hostImage.bytes.resize(byteCount);
+    std::memcpy(hostImage.bytes.data(), data, byteCount);
+    std::free(data);
+    return hostImage;
+}
+
 static std::shared_ptr<Texture>
 clone_texture_resource(const std::shared_ptr<Texture>& sourceTexture)
 {
@@ -80,6 +129,15 @@ has_sequence_override(const std::vector<SequenceExecutionInputOverride>& inputOv
     return false;
 }
 
+static ShaderInterface
+inspect_shader_interface_from_session(const void* userData,
+                                      const ShaderProgramKind kind,
+                                      const std::vector<std::string>& paths)
+{
+    const Session* session = static_cast<const Session*>(userData);
+    return session->inspectShaderInterface(ShaderInspectionRequest { kind, paths });
+}
+
 }  // namespace
 
 RawGLContext::RawGLContext()
@@ -94,7 +152,9 @@ ShaderInterface
 RawGLContext::inspectShaderInterface(const ShaderInspectionRequest& request) const
 {
     try {
-        return load_cached_shader_interface(*m_state, request.kind, request.paths).shaderInterface;
+        const std::vector<ShaderModuleDefinition> modules =
+            request.modules.empty() ? build_file_backed_shader_modules(request.kind, request.paths) : request.modules;
+        return load_cached_shader_interface(*m_state, request.kind, modules).shaderInterface;
     } catch (const std::exception& exception) {
         ShaderInterface result;
         result.isCompute    = (request.kind == ShaderProgramKind::compute);
@@ -223,6 +283,50 @@ RawGLGraph::execute(const GraphExecutionRequest& request)
             }
             m_state->persistentAtomicCounters[persistentCounter.persistentCounterName] = counterValues;
         }
+        for (size_t passIndex = 0; passIndex < m_state->resourcePlan.passes.size(); ++passIndex) {
+            const RawGLGraphState::ResourcePass& resourcePass = m_state->resourcePlan.passes[passIndex];
+
+            for (const GraphOutputDefinition& outputDefinition : resourcePass.outputs) {
+                if (!outputDefinition.captureToHost) {
+                    continue;
+                }
+
+                const std::string addressedOutputName =
+                    build_addressed_resource_name(outputDefinition.name,
+                                                  outputDefinition.usesArrayElement,
+                                                  outputDefinition.arrayElement);
+                std::shared_ptr<Texture> outputTexture =
+                    m_state->sequence->getPassOutputTexture(passIndex, addressedOutputName);
+                if (!outputTexture) {
+                    throw std::runtime_error("host output capture failed for " + addressedOutputName);
+                }
+
+                result.capturedOutputs[build_pass_resource_key(addressedOutputName, passIndex)]
+                    = capture_texture_to_host_image(*outputTexture);
+            }
+
+            for (const GraphAtomicCounterDefinition& counterDefinition : resourcePass.atomicCounters) {
+                const std::vector<GLuint> counterValues =
+                    m_state->sequence->getPassAtomicCounterValues(passIndex, counterDefinition.name);
+                if (counterValues.empty()) {
+                    throw std::runtime_error("atomic counter capture failed for " + counterDefinition.name);
+                }
+
+                const std::string addressedCounterName =
+                    build_addressed_resource_name(counterDefinition.name,
+                                                  counterDefinition.usesArrayElement,
+                                                  counterDefinition.arrayElement);
+                const std::string counterKey = build_pass_resource_key(addressedCounterName, passIndex);
+                if (counterDefinition.usesArrayElement) {
+                    if (counterDefinition.arrayElement >= counterValues.size()) {
+                        throw std::runtime_error("atomic counter capture failed for " + addressedCounterName);
+                    }
+                    result.capturedAtomicCounters[counterKey] = { counterValues[counterDefinition.arrayElement] };
+                } else {
+                    result.capturedAtomicCounters[counterKey].assign(counterValues.begin(), counterValues.end());
+                }
+            }
+        }
         m_state->sequence->releaseRunOutputTextures();
         result.success = true;
     } catch (const std::exception& exception) {
@@ -270,24 +374,20 @@ Run(const CommandLineRequest& request)
     CommandLineResult result;
 
     int immediateExitCode = 0;
-    if (Sequence_HandleImmediateCommandLine(request.argc, request.argv, immediateExitCode)) {
+    if (HandleImmediateCommandLine(request.argc, request.argv, immediateExitCode)) {
         result.exitCode = immediateExitCode;
         result.immediateExit = true;
         return result;
     }
 
     try {
-        RawGLContext context;
-        const GraphBuildRequest graphRequest = BuildGraphRequestFromCommandLine(request);
-        GraphBuildResult buildResult = context.buildGraph(graphRequest);
-        if (!buildResult.success || !buildResult.graph) {
-            throw std::runtime_error(buildResult.errorMessage.empty() ? "Failed to build RawGL graph."
-                                                                      : buildResult.errorMessage);
-        }
-
-        GraphExecutionResult executionResult = buildResult.graph->execute(GraphExecutionRequest {});
+        Session session;
+        const Workflow workflow = BuildWorkflowFromCommandLine(
+            request,
+            ShaderInterfaceInspector { &session, inspect_shader_interface_from_session });
+        const RunResult executionResult = session.run(workflow);
         if (!executionResult.success) {
-            throw std::runtime_error(executionResult.errorMessage.empty() ? "Failed to execute RawGL graph."
+            throw std::runtime_error(executionResult.errorMessage.empty() ? "Failed to execute RawGL workflow."
                                                                           : executionResult.errorMessage);
         }
 

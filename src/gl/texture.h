@@ -16,11 +16,12 @@ public:
             int alphaChannel = -1);
     ~Texture();
 
-    int getId() { return m_id; }
-    GLsizei getWidth() { return m_width; }
-    GLsizei getHeight() { return m_height; }
-    int getChannels() { return m_channels; }
-    GLenum getInternalFormat() { return m_internalFormat; }
+    int getId() const { return m_id; }
+    GLsizei getWidth() const { return m_width; }
+    GLsizei getHeight() const { return m_height; }
+    int getChannels() const { return m_channels; }
+    int getAlphaChannel() const { return m_alphaChannel; }
+    GLenum getInternalFormat() const { return m_internalFormat; }
     void* getData(GLenum type) const;
 
 private:

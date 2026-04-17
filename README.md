@@ -32,7 +32,7 @@ https://openimageio.readthedocs.io/en/latest/oiiotool.html
 
 **For this moment support vertex, fragment and compute shaders in text and binary SPIR-V form**
 * two files: shader.vert shader.frag
-* single file: shader.vertfrag
+* single file: shader.vertfrag or shader.glsl with `RAWGL_VERTEX_SHADER` and `RAWGL_FRAGMENT_SHADER` stage guards
 * binary: shader.vert_spv shader.frag_spv\
 
 *For prototyping or in-house use text-based shaders are easier to manage, adapt and use without any loss of speed. But in case of possible distribution, some can prefer SPIR-V binary format shaders. They do not provide too much security and can be decompiled, but decompiling them can violate the license, and can be a useful choice if you have not planned to distribute your shaders as open source.*
@@ -65,25 +65,117 @@ Dependencies
 * If you want support for jpeg 2000 images:
   * openimageio openjpeg plugin
   
-Building and Downloads
-======================
-Please use **MS Visual Studio 2022**. For install dependencies easier to use **VCPKG**.
-Due to some bugs in some moments **vcpkg ports** can be broken, in that case, please use vcpkg reports.
+Building
+========
+`CMakeLists.txt`, `cmake/`, and `CMakePresets.json` are the canonical build entry points.
 
-Download Binaries
------------------
-Compiling RawGL in MS VisualStudio is dumb and simple, but for better controling users feedback and bug reports, binaries will be available only through my Patreon:
-https://www.patreon.com/3DScan and maybe later through Gumroad.
-Premium examples and advanced tutorials as well as tailored support are available from Patreon too.
-Feel free to follow me there.
+Typical Linux workflow:
+
+```sh
+cmake --preset linux-release
+cmake --build --preset linux-release
+ctest --preset linux-release
+```
+
+Linux Python wheel workflow:
+
+```sh
+export RAWGL_LINUX_PREFIX=/path/to/deps-prefix
+cmake --preset linux-release-python-wheel
+cmake --build --preset linux-release-python-wheel --target rawgl_wheel -j 1
+cmake --install build_linux_release_python_wheel --prefix /tmp/rawgl-install
+```
+
+That install step now mirrors OpenMeta's packaging flow: it builds the wheel during `cmake --install` if needed and places the resulting artifact under:
+
+```text
+/tmp/rawgl-install/share/rawgl/wheels/
+```
+
+If your Linux dependency prefix is built with libc++, use the explicit `linux-release-python-wheel-libcxx` preset instead of the generic wheel preset.
+
+Python API
+==========
+
+The default Python API is workflow-oriented, not OpenGL-oriented. For the common fullscreen image-processing path, use `rawgl.image(...)` or `session.prepare_image(...)`.
+
+Minimal one-shot example:
+
+```python
+import rawgl
+
+result = rawgl.image(
+    """#version 450 core
+layout(location = 0) in vec2 UV;
+layout(location = 0) out vec3 OutColor;
+void main()
+{
+    OutColor = vec3(UV, 0.0);
+}
+""",
+    size=512,
+    output="output.png",
+)
+
+if not result.success:
+    raise RuntimeError(result.error_message)
+```
+
+Repeated-run example:
+
+```python
+import rawgl
+
+session = rawgl.Session()
+prepared = session.prepare_image(
+    fragment_shader,
+    size=512,
+    output={"format": "rgba32f", "capture_to_host": True},
+)
+
+result = prepared.run(inputs={"gain": 1.0})
+image = result.output_array()
+```
+
+NumPy is optional. When installed, host image inputs can be passed as NumPy arrays and captured outputs can be read back as arrays through:
+
+```python
+result.output_array()
+result.output_arrays
+rawgl.make_host_image(array)
+rawgl.host_image_to_array(host_image)
+```
+
+For more explicit control, the lower-level nanobind façade remains available under:
+
+```python
+rawgl.advanced
+```
+
+That path exposes the direct bound classes and structs such as `Session`, `Workflow`, `Pass`, `InputBinding`, and `OutputBinding`. It is kept for advanced workflows and compatibility, but the default examples should prefer the higher-level helpers.
+
+Typical Windows workflow from a Visual Studio 2022 x64 developer shell:
+
+```bat
+cmake --preset vs2022
+cmake --build --preset vs2022-debug
+cmake --build --preset vs2022-release
+ctest --preset vs2022-debug
+```
+
+If you do not want presets, the equivalent manual configure step is:
+
+```bat
+cmake -S . -B build_vs2022 -G "Visual Studio 17 2022" -A x64
+```
+
+Legacy hand-written Visual Studio files remain only as reference material under `ide/msvc-legacy/`. CMake is the source of truth for targets, include paths, and libraries.
 
 Known bugs and limitations
 ==========================
-* Windows registry required to change Video Driver delays from default settings (30~60 sec). Without this RawGL can silently drop processing or just crashing
-Please use gpu_delays.reg from tools/registry folder to change the required registry values. And restart the system before using RawGL.
-* No support for atomic counters and buffers yet (highest in priority in TODO list)
-* Compute shaders are less tested and probably missed a lot of features
-* No support for uniform arrays
+* Long-running GPU work on Windows can still hit the default driver timeout. Use `tools/registry/gpu_delays.reg` and restart the system before relying on long compute or fragment workloads.
+* Compute shaders are still less exercised than the fragment path.
+* Uniform arrays are still not fully supported.
 
 Documentation
 =============
@@ -105,7 +197,7 @@ Documentation
 | -P [ --pass_vertfrag ] arg | New pass using vertex & fragment shaders (in GLSL or SPIR-V format): |
 | | --pass_vertfrag s.vert s.frag |
 | | --pass_vertfrag s.vertfrag |
-| | (sources separated with macros RAWGL_VERTEX_SHADER, RAWGL_FRAGMENT_SHADER) |
+| | (single-file shader with `RAWGL_VERTEX_SHADER` / `RAWGL_FRAGMENT_SHADER` guarded sections) |
 | | --pass_vertfrag s.vert_spv s.frag_spv |
 | |  (SPIR-V binary shaders) |
 | |

@@ -79,3 +79,20 @@ function(rawgl_windows_config_library_expr out_var release_path debug_path)
 
     set(${out_var} "${rawgl_expr}" PARENT_SCOPE)
 endfunction()
+
+function(rawgl_apply_windows_debug_suffix target_name)
+    if(NOT WIN32)
+        return()
+    endif()
+
+    if(NOT TARGET ${target_name})
+        return()
+    endif()
+
+    if(NOT RAWGL_WINDOWS_DEBUG_SUFFIX)
+        return()
+    endif()
+
+    set_target_properties(${target_name} PROPERTIES
+        DEBUG_POSTFIX "${RAWGL_WINDOWS_DEBUG_SUFFIX}")
+endfunction()

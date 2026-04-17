@@ -13,6 +13,139 @@ namespace rawgl {
 namespace {
 
 static void
+validate_array_element_access(const ShaderResourceInfo& resource,
+                              const bool usesArrayElement,
+                              const size_t arrayElement,
+                              const std::string& context)
+{
+    if (!resource.isArray || resource.arrayLength <= 1) {
+        if (usesArrayElement) {
+            throw std::runtime_error(context + ": array element was specified for a non-array resource");
+        }
+        return;
+    }
+
+    if (!usesArrayElement) {
+        throw std::runtime_error(context + ": array resource requires an explicit array element");
+    }
+
+    if (arrayElement >= resource.arrayLength) {
+        throw std::runtime_error(context + ": array element " + std::to_string(arrayElement)
+                                 + " exceeds reflected array length " + std::to_string(resource.arrayLength));
+    }
+}
+
+static size_t
+byte_size_for_gl_type(const GLenum type)
+{
+    switch (type) {
+    case GL_UNSIGNED_BYTE: return 1u;
+    case GL_UNSIGNED_SHORT:
+    case GL_HALF_FLOAT: return 2u;
+    case GL_UNSIGNED_INT:
+    case GL_FLOAT: return 4u;
+    default: break;
+    }
+
+    return 0u;
+}
+
+static int
+channel_count_for_internal_format(const GLenum internalFormat)
+{
+    switch (internalFormat) {
+    case GL_R8:
+    case GL_R8I:
+    case GL_R8UI:
+    case GL_R8_SNORM:
+    case GL_R16:
+    case GL_R16I:
+    case GL_R16UI:
+    case GL_R16_SNORM:
+    case GL_R16F:
+    case GL_R32I:
+    case GL_R32UI:
+    case GL_R32F: return 1;
+    case GL_RG8:
+    case GL_RG8I:
+    case GL_RG8UI:
+    case GL_RG8_SNORM:
+    case GL_RG16:
+    case GL_RG16I:
+    case GL_RG16UI:
+    case GL_RG16_SNORM:
+    case GL_RG16F:
+    case GL_RG32I:
+    case GL_RG32UI:
+    case GL_RG32F: return 2;
+    case GL_RGB8:
+    case GL_RGB8I:
+    case GL_RGB8UI:
+    case GL_RGB8_SNORM:
+    case GL_RGB10_A2:
+    case GL_R11F_G11F_B10F:
+    case GL_RGB16:
+    case GL_RGB16I:
+    case GL_RGB16UI:
+    case GL_RGB16_SNORM:
+    case GL_RGB16F:
+    case GL_RGB32I:
+    case GL_RGB32UI:
+    case GL_RGB32F:
+    case GL_SRGB8: return 3;
+    case GL_RGBA8:
+    case GL_RGBA8I:
+    case GL_RGBA8UI:
+    case GL_RGBA8_SNORM:
+    case GL_RGBA16:
+    case GL_RGBA16I:
+    case GL_RGBA16UI:
+    case GL_RGBA16_SNORM:
+    case GL_RGBA16F:
+    case GL_RGBA32I:
+    case GL_RGBA32UI:
+    case GL_RGBA32F:
+    case GL_SRGB8_ALPHA8: return 4;
+    default: break;
+    }
+
+    return 0;
+}
+
+static void
+validate_host_image_data(const HostImageData& hostImage, const std::string& context)
+{
+    if (hostImage.width <= 0 || hostImage.height <= 0) {
+        throw std::runtime_error(context + ": host texture dimensions must be > 0");
+    }
+    if (hostImage.channels <= 0 || hostImage.channels > 4) {
+        throw std::runtime_error(context + ": host texture channel count must be between 1 and 4");
+    }
+    if (hostImage.alphaChannel >= hostImage.channels) {
+        throw std::runtime_error(context + ": host texture alpha channel exceeds the channel count");
+    }
+
+    const int inferredChannels = channel_count_for_internal_format(hostImage.glInternalFormat);
+    if (inferredChannels == 0) {
+        throw std::runtime_error(context + ": unsupported OpenGL internal format");
+    }
+    if (inferredChannels != hostImage.channels) {
+        throw std::runtime_error(context + ": host texture channel count does not match the OpenGL internal format");
+    }
+
+    const size_t bytesPerComponent = byte_size_for_gl_type(hostImage.glType);
+    if (bytesPerComponent == 0u) {
+        throw std::runtime_error(context + ": unsupported OpenGL host texture element type");
+    }
+
+    const size_t expectedByteCount = static_cast<size_t>(hostImage.width) * static_cast<size_t>(hostImage.height)
+                                     * static_cast<size_t>(hostImage.channels) * bytesPerComponent;
+    if (hostImage.bytes.size() != expectedByteCount) {
+        throw std::runtime_error(context + ": host texture byte size does not match width, height, channels, and type");
+    }
+}
+
+static void
 validate_mesh_definition(const GraphMeshDefinition& definition)
 {
     if (definition.sourceKind == GraphMeshSourceKind::quad) {
@@ -43,13 +176,26 @@ validate_output_definition(const RawGLGraphState::ValidatedPass& pass, const Gra
     }
 
     if (pass.definition.programKind == ShaderProgramKind::compute) {
-        if (!find_resource_by_name(pass.shaderInterface.images, definition.name)) {
+        const ShaderResourceInfo* outputResource = find_resource_by_name(pass.shaderInterface.images, definition.name);
+        if (!outputResource) {
             throw std::runtime_error("out (" + definition.name + "): program output not found.");
         }
+        if (outputResource->isArray && outputResource->arrayLength > 1) {
+            throw std::runtime_error("out (" + definition.name + "): image array outputs are not supported yet");
+        }
+        validate_array_element_access(*outputResource,
+                                      definition.usesArrayElement,
+                                      definition.arrayElement,
+                                      "out (" + definition.name + ")");
     } else {
-        if (!find_resource_by_name(pass.shaderInterface.outputs, definition.name)) {
+        const ShaderResourceInfo* outputResource = find_resource_by_name(pass.shaderInterface.outputs, definition.name);
+        if (!outputResource) {
             throw std::runtime_error("out (" + definition.name + "): program output not found.");
         }
+        validate_array_element_access(*outputResource,
+                                      definition.usesArrayElement,
+                                      definition.arrayElement,
+                                      "out (" + definition.name + ")");
     }
 
     if (definition.channels <= 0) {
@@ -72,6 +218,11 @@ validate_input_definition(const RawGLGraphState::ValidatedGraph& graph,
         throw std::runtime_error("in: input name is empty.");
     }
 
+    if (definition.sourceKind != GraphInputSourceKind::passOutput && definition.usesReferencedOutputArrayElement) {
+        throw std::runtime_error("in (" + definition.name
+                                 + "): referenced output array element is only valid for pass-output inputs");
+    }
+
     if (find_resource_by_name(pass.shaderInterface.systemUniforms, definition.name)) {
         throw std::runtime_error("in (" + definition.name + "): system uniform is engine controlled.");
     }
@@ -82,12 +233,20 @@ validate_input_definition(const RawGLGraphState::ValidatedGraph& graph,
     }
 
     if (definition.sourceKind == GraphInputSourceKind::textureFile
+        || definition.sourceKind == GraphInputSourceKind::hostTexture
         || definition.sourceKind == GraphInputSourceKind::passOutput
         || definition.sourceKind == GraphInputSourceKind::graphTexture) {
-        const bool isSampler = find_resource_by_name(pass.shaderInterface.samplers, definition.name) != nullptr;
-        const bool isImage   = find_resource_by_name(pass.shaderInterface.images, definition.name) != nullptr;
-        if (!isSampler && !isImage) {
+        const ShaderResourceInfo* samplerResource = find_resource_by_name(pass.shaderInterface.samplers, definition.name);
+        const ShaderResourceInfo* imageResource   = find_resource_by_name(pass.shaderInterface.images, definition.name);
+        if (!samplerResource && !imageResource) {
             throw std::runtime_error("in (" + definition.name + "): program uniform is not a texture/image input");
+        }
+        if ((samplerResource && samplerResource->isArray && samplerResource->arrayLength > 1)
+            || (imageResource && imageResource->isArray && imageResource->arrayLength > 1)) {
+            throw std::runtime_error("in (" + definition.name + "): sampler/image arrays are not supported yet");
+        }
+        if (definition.usesArrayElement) {
+            throw std::runtime_error("in (" + definition.name + "): array-addressed texture/image inputs are not supported yet");
         }
 
         PassInput probeInput;
@@ -98,6 +257,11 @@ validate_input_definition(const RawGLGraphState::ValidatedGraph& graph,
             if (definition.texturePath.empty()) {
                 throw std::runtime_error("in (" + definition.name + "): texture path is empty");
             }
+        } else if (definition.sourceKind == GraphInputSourceKind::hostTexture) {
+            if (!definition.hostTexture) {
+                throw std::runtime_error("in (" + definition.name + "): host texture payload is missing");
+            }
+            validate_host_image_data(*definition.hostTexture, "in (" + definition.name + ")");
         } else if (definition.sourceKind == GraphInputSourceKind::passOutput) {
             if (definition.referencedOutputName.empty()) {
                 throw std::runtime_error("in (" + definition.name + "): empty referenced output name");
@@ -109,15 +273,29 @@ validate_input_definition(const RawGLGraphState::ValidatedGraph& graph,
 
             const RawGLGraphState::ValidatedPass& referencedPass = graph.passes[definition.referencedPassIndex];
             if (referencedPass.definition.programKind == ShaderProgramKind::compute) {
-                if (!find_resource_by_name(referencedPass.shaderInterface.images, definition.referencedOutputName)) {
+                const ShaderResourceInfo* referencedOutput =
+                    find_resource_by_name(referencedPass.shaderInterface.images, definition.referencedOutputName);
+                if (!referencedOutput) {
                     throw std::runtime_error("in (" + definition.name + "): referenced program output "
                                              + definition.referencedOutputName + "::"
                                              + std::to_string(definition.referencedPassIndex) + " not found");
                 }
-            } else if (!find_resource_by_name(referencedPass.shaderInterface.outputs, definition.referencedOutputName)) {
-                throw std::runtime_error("in (" + definition.name + "): referenced program output "
-                                         + definition.referencedOutputName + "::"
-                                         + std::to_string(definition.referencedPassIndex) + " not found");
+                validate_array_element_access(*referencedOutput,
+                                              definition.usesReferencedOutputArrayElement,
+                                              definition.referencedOutputArrayElement,
+                                              "in (" + definition.name + ")");
+            } else {
+                const ShaderResourceInfo* referencedOutput =
+                    find_resource_by_name(referencedPass.shaderInterface.outputs, definition.referencedOutputName);
+                if (!referencedOutput) {
+                    throw std::runtime_error("in (" + definition.name + "): referenced program output "
+                                             + definition.referencedOutputName + "::"
+                                             + std::to_string(definition.referencedPassIndex) + " not found");
+                }
+                validate_array_element_access(*referencedOutput,
+                                              definition.usesReferencedOutputArrayElement,
+                                              definition.referencedOutputArrayElement,
+                                              "in (" + definition.name + ")");
             }
         } else if (definition.graphTextureName.empty()) {
             throw std::runtime_error("in (" + definition.name + "): graph texture name is empty");
@@ -125,6 +303,15 @@ validate_input_definition(const RawGLGraphState::ValidatedGraph& graph,
 
         return;
     }
+
+    const ShaderResourceInfo* numericUniform = find_resource_by_name(pass.shaderInterface.uniforms, definition.name);
+    if (!numericUniform) {
+        throw std::runtime_error("in (" + definition.name + "): program uniform is not a numeric input");
+    }
+    validate_array_element_access(*numericUniform,
+                                  definition.usesArrayElement,
+                                  definition.arrayElement,
+                                  "in (" + definition.name + ")");
 
     GraphInputSourceKind expectedKind = GraphInputSourceKind::intValues;
     uint8_t fieldCount                = 0;
@@ -152,16 +339,25 @@ validate_input_definition(const RawGLGraphState::ValidatedGraph& graph,
 static void
 validate_atomic_counter_definition(const RawGLGraphState::ValidatedPass& pass, const GraphAtomicCounterDefinition& definition)
 {
-    if (!find_resource_by_name(pass.shaderInterface.atomicCounters, definition.name)) {
+    const ShaderResourceInfo* counterResource = find_resource_by_name(pass.shaderInterface.atomicCounters, definition.name);
+    if (!counterResource) {
         throw std::runtime_error("atomic (cntr): referenced counter " + definition.name + " not found.");
     }
+    validate_array_element_access(*counterResource,
+                                  definition.usesArrayElement,
+                                  definition.arrayElement,
+                                  "atomic (cntr)");
 }
 
 static const GraphInputDefinition*
-find_graph_input_definition(const RawGLGraphState::ValidatedPass& pass, const std::string& name)
+find_graph_input_definition(const RawGLGraphState::ValidatedPass& pass,
+                            const std::string& name,
+                            const bool usesArrayElement,
+                            const size_t arrayElement)
 {
     for (const GraphInputDefinition& inputDefinition : pass.definition.inputs) {
-        if (inputDefinition.name == name) {
+        if (inputDefinition.name == name && inputDefinition.usesArrayElement == usesArrayElement
+            && (!usesArrayElement || inputDefinition.arrayElement == arrayElement)) {
             return &inputDefinition;
         }
     }
@@ -195,8 +391,14 @@ validate_graph_definition(const RawGLContextState& contextState, const GraphDefi
     for (const GraphPassDefinition& passDefinition : definition.passes) {
         RawGLGraphState::ValidatedPass validatedPass;
         validatedPass.definition = passDefinition;
+        const std::vector<ShaderModuleDefinition> shaderModules = passDefinition.shaderModules.empty()
+                                                                      ? build_file_backed_shader_modules(
+                                                                            passDefinition.programKind,
+                                                                            passDefinition.shaderPaths)
+                                                                      : passDefinition.shaderModules;
+        validatedPass.definition.shaderModules = shaderModules;
         const RawGLContextState::CachedShaderInterface cached =
-            load_cached_shader_interface(contextState, passDefinition.programKind, passDefinition.shaderPaths);
+            load_cached_shader_interface(contextState, passDefinition.programKind, shaderModules);
         validatedPass.program         = cached.program;
         validatedPass.shaderInterface = cached.shaderInterface;
 
@@ -206,8 +408,11 @@ validate_graph_definition(const RawGLContextState& contextState, const GraphDefi
                                          : validatedPass.shaderInterface.errorMessage);
         }
 
-        Pass::CullMode cullMode;
+        SequencePass::CullMode cullMode;
         apply_cull_parameters(cullMode, passDefinition.cullParameters);
+        std::unordered_set<std::string> declaredInputs;
+        std::unordered_set<std::string> declaredOutputs;
+        std::unordered_set<std::string> declaredCounters;
 
         for (const GraphMeshDefinition& meshDefinition : passDefinition.meshes) {
             validate_mesh_definition(meshDefinition);
@@ -215,6 +420,13 @@ validate_graph_definition(const RawGLContextState& contextState, const GraphDefi
 
         for (const GraphOutputDefinition& outputDefinition : passDefinition.outputs) {
             validate_output_definition(validatedPass, outputDefinition);
+            const std::string addressedOutputName =
+                build_addressed_resource_name(outputDefinition.name,
+                                              outputDefinition.usesArrayElement,
+                                              outputDefinition.arrayElement);
+            if (!declaredOutputs.insert(addressedOutputName).second) {
+                throw std::runtime_error("out (" + addressedOutputName + "): duplicate output definition");
+            }
             if (!outputDefinition.persistentTextureName.empty()
                 && !persistentOutputNames.insert(outputDefinition.persistentTextureName).second) {
                 throw std::runtime_error("out (" + outputDefinition.name + "): duplicate persistent texture name "
@@ -224,10 +436,24 @@ validate_graph_definition(const RawGLContextState& contextState, const GraphDefi
 
         for (const GraphInputDefinition& inputDefinition : passDefinition.inputs) {
             validate_input_definition(validatedGraph, validatedPass, inputDefinition);
+            const std::string addressedInputName =
+                build_addressed_resource_name(inputDefinition.name,
+                                              inputDefinition.usesArrayElement,
+                                              inputDefinition.arrayElement);
+            if (!declaredInputs.insert(addressedInputName).second) {
+                throw std::runtime_error("in (" + addressedInputName + "): duplicate input definition");
+            }
         }
 
         for (const GraphAtomicCounterDefinition& counterDefinition : passDefinition.atomicCounters) {
             validate_atomic_counter_definition(validatedPass, counterDefinition);
+            const std::string addressedCounterName =
+                build_addressed_resource_name(counterDefinition.name,
+                                              counterDefinition.usesArrayElement,
+                                              counterDefinition.arrayElement);
+            if (!declaredCounters.insert(addressedCounterName).second) {
+                throw std::runtime_error("atomic (cntr): duplicate counter definition for " + addressedCounterName);
+            }
             if (!counterDefinition.persistentCounterName.empty()
                 && !persistentCounterNames.insert(counterDefinition.persistentCounterName).second) {
                 throw std::runtime_error("atomic (cntr): duplicate persistent counter name "
@@ -249,7 +475,7 @@ validate_execution_input_override(const RawGLGraphState::ValidatedGraph& graph, 
     }
 
     const RawGLGraphState::ValidatedPass& pass = graph.passes[inputOverride.passIndex];
-    if (!find_graph_input_definition(pass, inputOverride.name)) {
+    if (!find_graph_input_definition(pass, inputOverride.name, inputOverride.usesArrayElement, inputOverride.arrayElement)) {
         throw std::runtime_error("input override (" + inputOverride.name + "): graph input is not declared");
     }
 
@@ -259,15 +485,26 @@ validate_execution_input_override(const RawGLGraphState::ValidatedGraph& graph, 
     }
 
     switch (inputOverride.sourceKind) {
-    case GraphInputSourceKind::textureFile: {
+    case GraphInputSourceKind::textureFile:
+    case GraphInputSourceKind::hostTexture: {
         const bool isSampler = find_resource_by_name(pass.shaderInterface.samplers, inputOverride.name) != nullptr;
         const bool isImage   = find_resource_by_name(pass.shaderInterface.images, inputOverride.name) != nullptr;
         if (!isSampler && !isImage) {
             throw std::runtime_error(
                 "input override (" + inputOverride.name + "): program uniform is not a texture/image input");
         }
-        if (inputOverride.texturePath.empty()) {
+        if (inputOverride.usesArrayElement) {
+            throw std::runtime_error("input override (" + inputOverride.name
+                                     + "): array-addressed texture/image inputs are not supported yet");
+        }
+        if (inputOverride.sourceKind == GraphInputSourceKind::textureFile && inputOverride.texturePath.empty()) {
             throw std::runtime_error("input override (" + inputOverride.name + "): texture path is empty");
+        }
+        if (inputOverride.sourceKind == GraphInputSourceKind::hostTexture) {
+            if (!inputOverride.hostTexture) {
+                throw std::runtime_error("input override (" + inputOverride.name + "): host texture payload is missing");
+            }
+            validate_host_image_data(*inputOverride.hostTexture, "input override (" + inputOverride.name + ")");
         }
 
         PassInput probeInput;
@@ -278,6 +515,16 @@ validate_execution_input_override(const RawGLGraphState::ValidatedGraph& graph, 
     case GraphInputSourceKind::passOutput:
         throw std::runtime_error("input override (" + inputOverride.name + "): pass-output overrides are not supported");
     default: break;
+    }
+
+    const ShaderResourceInfo* numericUniform = find_resource_by_name(pass.shaderInterface.uniforms, inputOverride.name);
+    if (numericUniform) {
+        validate_array_element_access(*numericUniform,
+                                      inputOverride.usesArrayElement,
+                                      inputOverride.arrayElement,
+                                      "input override (" + inputOverride.name + ")");
+    } else if (inputOverride.usesArrayElement) {
+        throw std::runtime_error("input override (" + inputOverride.name + "): array element was specified for a non-numeric resource");
     }
 
     GraphInputSourceKind expectedKind = GraphInputSourceKind::intValues;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "rawgl/rawgl_core.h"
+#include "rawgl/rawgl.h"
 
 #include <OpenImageIO/imageio.h>
 
@@ -11,6 +11,17 @@
 #include <vector>
 
 namespace {
+
+rawgl::ShaderModuleDefinition
+make_file_module(const rawgl::ShaderProgramKind programKind, const char* path)
+{
+    rawgl::ShaderModuleDefinition module;
+    module.sourceKind = rawgl::ShaderModuleSourceKind::filePath;
+    module.path       = path;
+    module.role       = programKind == rawgl::ShaderProgramKind::compute ? rawgl::ShaderModuleRole::compute
+                                                                         : rawgl::ShaderModuleRole::automatic;
+    return module;
+}
 
 bool
 read_first_channel_float(const std::filesystem::path& path, float& value)
@@ -67,78 +78,60 @@ verify_output(const std::filesystem::path& outputPath, float expectedValue)
     return true;
 }
 
-rawgl::GraphBuildRequest
-make_persistent_graph_request(const std::filesystem::path& outputPath)
+rawgl::Workflow
+make_persistent_workflow(const std::filesystem::path& outputPath)
 {
-    rawgl::GraphPassDefinition writePass;
+    rawgl::Pass writePass;
     writePass.programKind              = rawgl::ShaderProgramKind::compute;
-    writePass.shaderPaths              = { "tests/shaders/persistent_write.comp" };
+    writePass.shaderModules.push_back(make_file_module(rawgl::ShaderProgramKind::compute, "tests/shaders/persistent_write.comp"));
     writePass.sizeX                    = 1;
     writePass.sizeY                    = 1;
     writePass.workGroupSizeX           = 1;
     writePass.workGroupSizeY           = 1;
     writePass.hasExplicitWorkGroupSize = true;
-    writePass.inputs.push_back(rawgl::GraphInputDefinition {
-        "seed",
-        rawgl::GraphInputSourceKind::floatValues,
-        {},
-        {},
-        { 0.5f },
-        {},
-        "",
-        "",
-        0,
-        "",
-        {},
-    });
-    writePass.outputs.push_back(rawgl::GraphOutputDefinition {
-        "history_out",
-        "",
-        "rgba32f",
-        4,
-        3,
-        16,
-        "history",
-        {},
-    });
+    rawgl::InputBinding seed;
+    seed.name        = "seed";
+    seed.sourceKind  = rawgl::InputSourceKind::floatValues;
+    seed.floatValues = { 0.5f };
+    writePass.inputs.push_back(std::move(seed));
 
-    rawgl::GraphPassDefinition readPass;
+    rawgl::OutputBinding historyOutput;
+    historyOutput.name                  = "history_out";
+    historyOutput.format                = "rgba32f";
+    historyOutput.channels              = 4;
+    historyOutput.alphaChannel          = 3;
+    historyOutput.bits                  = 16;
+    historyOutput.persistentTextureName = "history";
+    writePass.outputs.push_back(std::move(historyOutput));
+
+    rawgl::Pass readPass;
     readPass.programKind              = rawgl::ShaderProgramKind::compute;
-    readPass.shaderPaths              = { "tests/shaders/persistent_read.comp" };
+    readPass.shaderModules.push_back(make_file_module(rawgl::ShaderProgramKind::compute, "tests/shaders/persistent_read.comp"));
     readPass.sizeX                    = 1;
     readPass.sizeY                    = 1;
     readPass.workGroupSizeX           = 1;
     readPass.workGroupSizeY           = 1;
     readPass.hasExplicitWorkGroupSize = true;
-    readPass.inputs.push_back(rawgl::GraphInputDefinition {
-        "history_in",
-        rawgl::GraphInputSourceKind::graphTexture,
-        {},
-        {},
-        {},
-        {},
-        "",
-        "",
-        0,
-        "history",
-        {},
-    });
-    readPass.outputs.push_back(rawgl::GraphOutputDefinition {
-        "o_out0",
-        outputPath.string(),
-        "rgba32f",
-        4,
-        3,
-        16,
-        "",
-        {},
-    });
+    rawgl::InputBinding historyInput;
+    historyInput.name             = "history_in";
+    historyInput.sourceKind       = rawgl::InputSourceKind::workflowTexture;
+    historyInput.workflowTextureName = "history";
+    readPass.inputs.push_back(std::move(historyInput));
 
-    rawgl::GraphBuildRequest request;
-    request.definition.verbosity = 0;
-    request.definition.passes.push_back(std::move(writePass));
-    request.definition.passes.push_back(std::move(readPass));
-    return request;
+    rawgl::OutputBinding finalOutput;
+    finalOutput.name         = "o_out0";
+    finalOutput.path         = outputPath.string();
+    finalOutput.format       = "rgba32f";
+    finalOutput.channels     = 4;
+    finalOutput.alphaChannel = 3;
+    finalOutput.bits         = 16;
+    readPass.outputs.push_back(std::move(finalOutput));
+
+    rawgl::Workflow workflow;
+    workflow.verbosity = 0;
+    workflow.passes.push_back(std::move(writePass));
+    workflow.passes.push_back(std::move(readPass));
+    return workflow;
 }
 
 }  // namespace
@@ -150,41 +143,32 @@ main()
     std::error_code removeError;
     std::filesystem::remove(outputPath, removeError);
 
-    rawgl::RawGLContext context;
+    rawgl::Session session;
 
-    rawgl::GraphBuildResult persistentBuild = context.buildGraph(make_persistent_graph_request(outputPath));
-    if (!persistentBuild.success || !persistentBuild.graph) {
-        std::cerr << "Persistent graph build failed: " << persistentBuild.errorMessage << std::endl;
+    rawgl::PrepareResult prepareResult = session.prepare(make_persistent_workflow(outputPath));
+    if (!prepareResult.success || !prepareResult.workflow) {
+        std::cerr << "Persistent workflow preparation failed: " << prepareResult.errorMessage << std::endl;
         return 1;
     }
 
-    rawgl::GraphExecutionRequest firstRun;
-    firstRun.inputOverrides.push_back(rawgl::GraphInputOverride {
-        1,
-        "history_in",
-        rawgl::GraphInputSourceKind::textureFile,
-        {},
-        {},
-        {},
-        {},
-        "tests/inputs/EmptyPresetLUT.png",
-        {},
-    });
-    firstRun.inputOverrides.push_back(rawgl::GraphInputOverride {
-        0,
-        "seed",
-        rawgl::GraphInputSourceKind::floatValues,
-        {},
-        {},
-        { 0.5f },
-        {},
-        "",
-        {},
-    });
+    rawgl::RunSettings firstRun;
+    rawgl::InputOverride historyOverride;
+    historyOverride.passIndex   = 1;
+    historyOverride.name        = "history_in";
+    historyOverride.sourceKind  = rawgl::InputSourceKind::textureFile;
+    historyOverride.texturePath = "tests/inputs/EmptyPresetLUT.png";
+    firstRun.overrides.push_back(std::move(historyOverride));
 
-    const rawgl::GraphExecutionResult firstResult = persistentBuild.graph->execute(firstRun);
+    rawgl::InputOverride seedOverride;
+    seedOverride.passIndex   = 0;
+    seedOverride.name        = "seed";
+    seedOverride.sourceKind  = rawgl::InputSourceKind::floatValues;
+    seedOverride.floatValues = { 0.5f };
+    firstRun.overrides.push_back(std::move(seedOverride));
+
+    const rawgl::RunResult firstResult = prepareResult.workflow->run(firstRun);
     if (!firstResult.success) {
-        std::cerr << "First persistent graph execution failed: " << firstResult.errorMessage << std::endl;
+        std::cerr << "First persistent workflow execution failed: " << firstResult.errorMessage << std::endl;
         return 1;
     }
     float seedValue = 0.0f;
@@ -196,22 +180,17 @@ main()
         return 1;
     }
 
-    rawgl::GraphExecutionRequest secondRun;
-    secondRun.inputOverrides.push_back(rawgl::GraphInputOverride {
-        0,
-        "seed",
-        rawgl::GraphInputSourceKind::floatValues,
-        {},
-        {},
-        { 0.75f },
-        {},
-        "",
-        {},
-    });
+    rawgl::RunSettings secondRun;
+    rawgl::InputOverride secondSeedOverride;
+    secondSeedOverride.passIndex   = 0;
+    secondSeedOverride.name        = "seed";
+    secondSeedOverride.sourceKind  = rawgl::InputSourceKind::floatValues;
+    secondSeedOverride.floatValues = { 0.75f };
+    secondRun.overrides.push_back(std::move(secondSeedOverride));
 
-    const rawgl::GraphExecutionResult secondResult = persistentBuild.graph->execute(secondRun);
+    const rawgl::RunResult secondResult = prepareResult.workflow->run(secondRun);
     if (!secondResult.success) {
-        std::cerr << "Second persistent graph execution failed: " << secondResult.errorMessage << std::endl;
+        std::cerr << "Second persistent workflow execution failed: " << secondResult.errorMessage << std::endl;
         return 1;
     }
     if (!verify_output(outputPath, 0.5f)) {

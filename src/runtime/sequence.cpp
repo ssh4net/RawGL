@@ -8,7 +8,6 @@
 #include "timer.h"
 #include "log.h"
 #include "image_io.h"
-#include "program_manager.h"
 
 #include <future>
 #include <sstream>
@@ -46,10 +45,6 @@ throw_sequence_error(const std::string& message)
 {
     throw std::runtime_error(message);
 }
-
-}  // namespace
-
-namespace {
 
 struct LoadedTextureData {
     bool valid            = false;
@@ -113,6 +108,82 @@ make_mesh_cache_key(const MeshInput::Mesh& mesh)
     std::ostringstream stream;
     stream << "file:" << mesh.FileName << '\x1F' << "tris=" << (mesh.Triangles ? 1 : 0);
     return stream.str();
+}
+
+static GLuint
+resolve_fragment_output_location(const PassOutput& output)
+{
+    return output.output->location + static_cast<GLuint>(output.usesArrayElement ? output.arrayElement : 0u);
+}
+
+static void
+set_addressed_int_uniform(const PassInput& input, const GLint* values)
+{
+    switch (input.uniform->type) {
+    case GL_BOOL:
+    case GL_INT: glUniform1iv(input.addressedLocation, 1, values); break;
+    case GL_BOOL_VEC2:
+    case GL_INT_VEC2: glUniform2iv(input.addressedLocation, 1, values); break;
+    case GL_BOOL_VEC3:
+    case GL_INT_VEC3: glUniform3iv(input.addressedLocation, 1, values); break;
+    case GL_BOOL_VEC4:
+    case GL_INT_VEC4: glUniform4iv(input.addressedLocation, 1, values); break;
+    default: throw_sequence_error("unsupported addressed integer uniform type");
+    }
+}
+
+static void
+set_addressed_uint_uniform(const PassInput& input, const GLuint* values)
+{
+    switch (input.uniform->type) {
+    case GL_UNSIGNED_INT: glUniform1uiv(input.addressedLocation, 1, values); break;
+    case GL_UNSIGNED_INT_VEC2: glUniform2uiv(input.addressedLocation, 1, values); break;
+    case GL_UNSIGNED_INT_VEC3: glUniform3uiv(input.addressedLocation, 1, values); break;
+    case GL_UNSIGNED_INT_VEC4: glUniform4uiv(input.addressedLocation, 1, values); break;
+    default: throw_sequence_error("unsupported addressed unsigned integer uniform type");
+    }
+}
+
+static void
+set_addressed_float_uniform(const PassInput& input, const GLfloat* values)
+{
+    switch (input.uniform->type) {
+    case GL_FLOAT: glUniform1fv(input.addressedLocation, 1, values); break;
+    case GL_FLOAT_VEC2: glUniform2fv(input.addressedLocation, 1, values); break;
+    case GL_FLOAT_VEC3: glUniform3fv(input.addressedLocation, 1, values); break;
+    case GL_FLOAT_VEC4: glUniform4fv(input.addressedLocation, 1, values); break;
+    case GL_FLOAT_MAT2: glUniformMatrix2fv(input.addressedLocation, 1, false, values); break;
+    case GL_FLOAT_MAT2x3: glUniformMatrix2x3fv(input.addressedLocation, 1, false, values); break;
+    case GL_FLOAT_MAT2x4: glUniformMatrix2x4fv(input.addressedLocation, 1, false, values); break;
+    case GL_FLOAT_MAT3: glUniformMatrix3fv(input.addressedLocation, 1, false, values); break;
+    case GL_FLOAT_MAT3x2: glUniformMatrix3x2fv(input.addressedLocation, 1, false, values); break;
+    case GL_FLOAT_MAT3x4: glUniformMatrix3x4fv(input.addressedLocation, 1, false, values); break;
+    case GL_FLOAT_MAT4: glUniformMatrix4fv(input.addressedLocation, 1, false, values); break;
+    case GL_FLOAT_MAT4x2: glUniformMatrix4x2fv(input.addressedLocation, 1, false, values); break;
+    case GL_FLOAT_MAT4x3: glUniformMatrix4x3fv(input.addressedLocation, 1, false, values); break;
+    default: throw_sequence_error("unsupported addressed float uniform type");
+    }
+}
+
+static void
+set_addressed_double_uniform(const PassInput& input, const GLdouble* values)
+{
+    switch (input.uniform->type) {
+    case GL_DOUBLE: glUniform1dv(input.addressedLocation, 1, values); break;
+    case GL_DOUBLE_VEC2: glUniform2dv(input.addressedLocation, 1, values); break;
+    case GL_DOUBLE_VEC3: glUniform3dv(input.addressedLocation, 1, values); break;
+    case GL_DOUBLE_VEC4: glUniform4dv(input.addressedLocation, 1, values); break;
+    case GL_DOUBLE_MAT2: glUniformMatrix2dv(input.addressedLocation, 1, false, values); break;
+    case GL_DOUBLE_MAT2x3: glUniformMatrix2x3dv(input.addressedLocation, 1, false, values); break;
+    case GL_DOUBLE_MAT2x4: glUniformMatrix2x4dv(input.addressedLocation, 1, false, values); break;
+    case GL_DOUBLE_MAT3: glUniformMatrix3dv(input.addressedLocation, 1, false, values); break;
+    case GL_DOUBLE_MAT3x2: glUniformMatrix3x2dv(input.addressedLocation, 1, false, values); break;
+    case GL_DOUBLE_MAT3x4: glUniformMatrix3x4dv(input.addressedLocation, 1, false, values); break;
+    case GL_DOUBLE_MAT4: glUniformMatrix4dv(input.addressedLocation, 1, false, values); break;
+    case GL_DOUBLE_MAT4x2: glUniformMatrix4x2dv(input.addressedLocation, 1, false, values); break;
+    case GL_DOUBLE_MAT4x3: glUniformMatrix4x3dv(input.addressedLocation, 1, false, values); break;
+    default: throw_sequence_error("unsupported addressed double uniform type");
+    }
 }
 
 static void
@@ -229,7 +300,7 @@ apply_shared_mesh_metadata(MeshInput::Mesh& mesh, const SequenceSharedMeshData& 
 }
 
 static MeshInput&
-ensure_primary_mesh(Pass& pass)
+ensure_primary_mesh(SequencePass& pass)
 {
     if (pass.meshes.empty()) {
         pass.meshes.insert({ "quad", MeshInput() });
@@ -239,7 +310,7 @@ ensure_primary_mesh(Pass& pass)
 }
 
 static const MeshInput&
-require_primary_mesh(const Pass& pass)
+require_primary_mesh(const SequencePass& pass)
 {
     if (pass.meshes.empty()) {
         throw std::runtime_error("Pass mesh was not initialized");
@@ -455,621 +526,13 @@ operator<<(std::ostream& os, const std::vector<std::string>& vec)
 }  // namespace std
 
 void
-Sequence::processPassDeclaration(const std::string& key, const std::vector<std::string>& value, ParseState& state)
-{
-    state.currentPassN = m_passConfigs.size();
-    LOG(debug) << "Loading pass " << state.currentPassN;
-
-    std::shared_ptr<GLProgram> program;
-
-    if (key == "pass_vertfrag") {
-        if (value.size() > 2) {
-            throw_sequence_error("pass_vertfrag: must have one combined shader file or two stage files.");
-        }
-        if (value.size() == 1) {
-            program = g_glslProgramManager.loadVertFrag(value[0]);
-        } else {
-            std::string paths[] { value[0], value[1] };
-            program = g_glslProgramManager.loadVertFrag(paths);
-        }
-    } else {
-        program = g_glslProgramManager.loadComp(value[0]);
-    }
-
-    if (!program || !program->isValid()) {
-        throw_sequence_error("Failed to load program for the pass.");
-    }
-
-    m_passConfigs.push_back(SequencePassConfig());
-
-    state.currentPass      = &m_passConfigs.back();
-    state.currentInput     = nullptr;
-    state.currentOutput    = nullptr;
-    state.currentMeshInput = nullptr;
-    state.currentPass->program = program;
-    state.currentPass->isCompute = (key == "pass_comp");
-
-    if (state.currentPassN > 0) {
-        state.currentPass->sizeText[0] = m_passConfigs[state.currentPassN - 1].sizeText[0];
-        state.currentPass->sizeText[1] = m_passConfigs[state.currentPassN - 1].sizeText[1];
-    }
-}
-
-void
-Sequence::processPassProperty(const std::string& key, const std::vector<std::string>& value, ParseState& state)
-{
-    if (key == "pass_size") {
-        if (!state.currentPass) {
-            throw_sequence_error("pass_size: no preceeding pass declaration.");
-        }
-        if (value.empty() || value.size() > 2) {
-            throw_sequence_error("pass_size: must have 1 or 2 parameters.");
-        }
-
-        state.currentPass->sizeText[0] = value[0];
-        state.currentPass->sizeText[1] = value.size() > 1 ? value[1] : state.currentPass->sizeText[0];
-        return;
-    }
-
-    if (key == "pass_workgroupsize") {
-        if (!state.currentPass) {
-            throw_sequence_error("pass_workgroupsize: no preceeding pass declaration.");
-        }
-        if (!state.currentPass->isCompute) {
-            throw_sequence_error("pass_workgroupsize: not a compute pass.");
-        }
-        if (value.empty() || value.size() > 2) {
-            throw_sequence_error("pass_workgroupsize: must have 1 or 2 parameters.");
-        }
-
-        state.currentPass->workGroupSizeText[0] = value[0];
-        state.currentPass->workGroupSizeText[1] = value.size() > 1 ? value[1] : "1";
-        return;
-    }
-
-    if (key == "bg_color") {
-        if (!state.currentPass) {
-            throw_sequence_error("bg_color: no preceeding pass declaration.");
-        }
-        if (value.empty() || value.size() > 4) {
-            throw_sequence_error("bg_color: must have at least 1 parameter.");
-        }
-
-        GLfloat tmp_floats[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-        for (size_t i = 0; i < value.size(); ++i) {
-            tmp_floats[i] = parse_checked_numeric<float_t>(value[i], "bg_color");
-        }
-
-        memcpy(&state.currentPass->clearColor, &tmp_floats, sizeof(GLfloat) * 4);
-        LOG(debug) << "Clear color (bg_color) set as RGBA [" << std::fixed << std::setprecision(4) << tmp_floats[0]
-                   << ", " << tmp_floats[1] << ", " << tmp_floats[2] << ", " << tmp_floats[3] << "]";
-        return;
-    }
-
-    if (key == "pass_mesh") {
-        if (!state.currentPass) {
-            throw_sequence_error("pass_mesh: no preceeding pass declaration.");
-        }
-        if (value.empty()) {
-            throw_sequence_error("pass_mesh: must have at least 1 parameter.");
-        }
-
-        std::string val_key = value[0];
-        std::string type_name = value[0];
-        const size_t split = value[0].find("::");
-        type_name = value[0].substr(0, split);
-
-        auto [meshesIt, success] = state.currentPass->meshes.insert({ value[0], MeshInput() });
-        state.currentMeshInput = &meshesIt->second;
-
-        if (type_name == "mesh") {
-            state.currentMeshInput->mesh.isQuad = false;
-
-            if (!success) {
-                throw_sequence_error("mesh (" + value[0] + "): duplicate id.");
-            }
-            if (split != std::string::npos) {
-                throw std::runtime_error("pass_mesh: mesh references are not supported");
-            }
-
-            std::vector<std::string> mesh_args;
-            mesh_args.reserve(value.size() - 1);
-            std::copy(value.begin() + 1, value.end(), std::back_inserter(mesh_args));
-
-            if (mesh_args.empty()) {
-                throw std::runtime_error("pass_mesh: mesh requires a file path");
-            }
-
-            std::string mesh_path;
-            std::vector<std::string> mesh_params;
-            mesh_params.reserve(mesh_args.size());
-
-            for (const std::string& arg : mesh_args) {
-                const std::string file_ext = get_file_ext(arg);
-                if (file_ext == "ply" || file_ext == "obj") {
-                    if (!mesh_path.empty()) {
-                        throw std::runtime_error("pass_mesh: multiple mesh paths are not supported");
-                    }
-                    mesh_path = arg;
-                    continue;
-                }
-                mesh_params.push_back(arg);
-            }
-
-            if (mesh_path.empty()) {
-                throw std::runtime_error("pass_mesh: mesh file path not found");
-            }
-            if ((mesh_params.size() % 2) != 0) {
-                throw std::runtime_error("pass_mesh: mesh attributes must be key/value pairs");
-            }
-
-            state.currentMeshInput->mesh.isQuad = false;
-            state.currentMeshInput->mesh.FileName = mesh_path;
-
-            for (size_t i = 0; i < mesh_params.size(); i += 2) {
-                val_key = mesh_params[i];
-                const std::string& val_data = mesh_params[i + 1];
-                hres hr_tex_attr = hres::OK;
-                state.currentMeshInput->eval_mesh_parm(hr_tex_attr, val_key, val_data);
-
-                if (hr_tex_attr != hres::OK) {
-                    throw std::runtime_error("pass_mesh: unknown mesh parameter");
-                }
-            }
-        } else if (type_name == "quad") {
-            state.currentMeshInput->mesh.isQuad = true;
-            LOG(info) << "pass_mesh: Default Quad";
-        } else {
-            throw_sequence_error("pass_mesh: unknown mesh type.");
-        }
-        return;
-    }
-
-    if (key == "cull") {
-        if (!state.currentPass) {
-            throw_sequence_error("cull: no preceeding pass declaration");
-        }
-        if (value.size() < 2 || (value.size() % 2) != 0) {
-            throw_sequence_error("cull: must have key/value pairs.");
-        }
-
-        for (size_t i = 0; i < value.size(); i += 2) {
-            hres hr_tex_attr = hres::ERR;
-            for (const auto& cull_attr : Pass::CULL_PARM_ARR) {
-                if (value[i] != cull_attr.name) {
-                    continue;
-                }
-
-                for (const auto& possible_val : cull_attr.possible_values) {
-                    if (value[i + 1] == possible_val.key) {
-                        cull_attr.func(state.currentPass->cullMode, possible_val.gl_value);
-                        hr_tex_attr = hres::OK;
-                        break;
-                    }
-                }
-
-                if (hr_tex_attr == hres::OK) {
-                    break;
-                }
-            }
-
-            if (hr_tex_attr != hres::OK) {
-                throw_sequence_error("cull: unknown cull parameter.");
-            }
-        }
-    }
-}
-
-void
-Sequence::processInputOption(const std::string& key, const std::vector<std::string>& value, ParseState& state)
-{
-    (void)key;
-    if (!state.currentPass) {
-        throw_sequence_error("in (" + value[0] + "): no preceeding pass declaration.");
-    }
-    if (value.size() < 2) {
-        throw_sequence_error("in (" + value[0] + "): must have at least 2 parameters - uniform, value(s).");
-    }
-
-    auto shaderUniform = state.currentPass->program->findUniform(value[0]);
-    if (!shaderUniform) {
-        throw std::runtime_error("in (" + value[0] + "): program uniform not found");
-    }
-
-    auto [inputIt, success] = state.currentPass->inputs.insert({ value[0], PassInput() });
-    if (!success) {
-        throw_sequence_error("in (" + value[0] + "): duplicate id.");
-    }
-
-    state.currentInput = &inputIt->second;
-    state.currentInput->uniform = shaderUniform;
-
-    hres hr = hres::OK;
-    std::vector<std::string> val_arr;
-    val_arr.reserve(value.size() - 1);
-    std::copy(value.begin() + 1, value.end(), std::back_inserter(val_arr));
-
-    const GLenum uniform_type = state.currentInput->uniform->type;
-    if (uniform_type == GL_SAMPLER_2D || uniform_type == GL_IMAGE_2D) {
-        for (size_t i = 0; i < val_arr.size(); ++i) {
-            std::string val_key = val_arr[i];
-
-            if (val_key.find("::") != std::string::npos) {
-                hres hr_convert          = hres::OK;
-                const size_t split       = val_key.find("::");
-                const auto val_name      = val_key.substr(0, split);
-                const int ref_pass_index = str_to_numeric<int32_t>(hr_convert, val_key.substr(split + 2));
-
-                if (val_name.empty()) {
-                    throw std::runtime_error("in (" + value[0] + "): empty referenced output name");
-                }
-                if (hres::OK != hr_convert || ref_pass_index < 0
-                    || ref_pass_index >= static_cast<int>(m_passConfigs.size())) {
-                    throw std::runtime_error("in (" + value[0] + "): invalid referenced pass index in " + val_key);
-                }
-
-                auto& ref_pass = m_passConfigs[ref_pass_index];
-                auto ref_output_it = ref_pass.outputs.find(val_name);
-                if (ref_output_it == ref_pass.outputs.end()) {
-                    ref_output_it = ref_pass.outputs.insert({ val_name, PassOutput() }).first;
-                }
-
-                auto& ref_output = ref_output_it->second;
-                hres hr_find_uniform = hres::OK;
-
-                if (ref_pass.isCompute) {
-                    ref_output.uniform = ref_pass.program->findUniform(val_name);
-                    if (!ref_output.uniform) {
-                        hr_find_uniform = hres::ERR;
-                    }
-                } else {
-                    ref_output.output = ref_pass.program->findOutput(val_name);
-                    if (!ref_output.output) {
-                        hr_find_uniform = hres::ERR;
-                    }
-                }
-
-                if (hres::OK != hr_find_uniform) {
-                    throw std::runtime_error("in (" + value[0] + "): referenced program output " + val_key
-                                             + " not found");
-                }
-
-                state.currentInput->path = val_key;
-                continue;
-            }
-
-            if (i == val_arr.size() - 1) {
-                state.currentInput->path = val_key;
-                break;
-            }
-
-            const std::string& val_data = val_arr[i + 1];
-            hres hr_tex_attr = hres::OK;
-            state.currentInput->eval_tex_attr(hr_tex_attr, val_key, val_data);
-
-            if (hres::OK == hr_tex_attr) {
-                i++;
-            } else {
-                state.currentInput->path = val_key;
-            }
-        }
-        return;
-    }
-
-    uint8_t num_fields = 1;
-    bool is_floats     = false;
-    bool is_double     = false;
-    bool is_uints      = false;
-
-    switch (state.currentInput->uniform->type) {
-    case GL_BOOL:
-    case GL_INT: num_fields = 1; break;
-    case GL_BOOL_VEC2:
-    case GL_INT_VEC2: num_fields = 2; break;
-    case GL_BOOL_VEC3:
-    case GL_INT_VEC3: num_fields = 3; break;
-    case GL_BOOL_VEC4:
-    case GL_INT_VEC4: num_fields = 4; break;
-    case GL_UNSIGNED_INT: is_uints = true; num_fields = 1; break;
-    case GL_UNSIGNED_INT_VEC2: is_uints = true; num_fields = 2; break;
-    case GL_UNSIGNED_INT_VEC3: is_uints = true; num_fields = 3; break;
-    case GL_UNSIGNED_INT_VEC4: is_uints = true; num_fields = 4; break;
-    case GL_FLOAT: is_floats = true; num_fields = 1; break;
-    case GL_FLOAT_VEC2: is_floats = true; num_fields = 2; break;
-    case GL_FLOAT_VEC3: is_floats = true; num_fields = 3; break;
-    case GL_FLOAT_VEC4:
-    case GL_FLOAT_MAT2: is_floats = true; num_fields = 4; break;
-    case GL_FLOAT_MAT2x3:
-    case GL_FLOAT_MAT3x2: is_floats = true; num_fields = 6; break;
-    case GL_FLOAT_MAT2x4:
-    case GL_FLOAT_MAT4x2: is_floats = true; num_fields = 8; break;
-    case GL_FLOAT_MAT3: is_floats = true; num_fields = 9; break;
-    case GL_FLOAT_MAT3x4:
-    case GL_FLOAT_MAT4x3: is_floats = true; num_fields = 12; break;
-    case GL_FLOAT_MAT4: is_floats = true; num_fields = 16; break;
-    case GL_DOUBLE: is_double = true; num_fields = 1; break;
-    case GL_DOUBLE_VEC2: is_double = true; num_fields = 2; break;
-    case GL_DOUBLE_VEC3: is_double = true; num_fields = 3; break;
-    case GL_DOUBLE_VEC4:
-    case GL_DOUBLE_MAT2: is_double = true; num_fields = 4; break;
-    case GL_DOUBLE_MAT2x3:
-    case GL_DOUBLE_MAT3x2: is_double = true; num_fields = 6; break;
-    case GL_DOUBLE_MAT2x4:
-    case GL_DOUBLE_MAT4x2: is_double = true; num_fields = 8; break;
-    case GL_DOUBLE_MAT3: is_double = true; num_fields = 9; break;
-    case GL_DOUBLE_MAT3x4:
-    case GL_DOUBLE_MAT4x3: is_double = true; num_fields = 12; break;
-    case GL_DOUBLE_MAT4: is_double = true; num_fields = 16; break;
-    default: hr = hres::ERR; break;
-    }
-
-    if (val_arr.size() < num_fields) {
-        throw std::runtime_error("in (" + value[0] + "): missing numeric values: " + std::to_string(val_arr.size())
-                                 + "/" + std::to_string(num_fields));
-    }
-
-    GLint tmp_ints[PassInput::NUM_INTS]          = { 0 };
-    GLuint tmp_uints[PassInput::NUM_INTS]        = { 0 };
-    GLfloat tmp_floats[PassInput::NUM_FLOATS]    = { 0.0f };
-    GLdouble tmp_doubles[PassInput::NUM_DOUBLES] = { 0.0 };
-
-    for (uint8_t i = 0; i < num_fields; ++i) {
-        const std::string& str_val = val_arr[i];
-        if (is_floats) {
-            tmp_floats[i] = str_to_numeric<float_t>(hr, str_val);
-        } else if (is_double) {
-            tmp_doubles[i] = str_to_numeric<double_t>(hr, str_val);
-        } else if (is_uints) {
-            tmp_uints[i] = str_to_numeric<uint32_t>(hr, str_val);
-        } else {
-            tmp_ints[i] = str_to_numeric<int32_t>(hr, str_val);
-        }
-    }
-
-    if (hres::OK != hr) {
-        throw std::runtime_error("in (" + value[0] + "): invalid numeric value");
-    }
-
-    if (is_floats) {
-        memcpy(&state.currentInput->floats, &tmp_floats, sizeof(GLfloat) * PassInput::NUM_FLOATS);
-    } else if (is_double) {
-        memcpy(&state.currentInput->doubles, &tmp_doubles, sizeof(GLdouble) * PassInput::NUM_DOUBLES);
-    } else if (is_uints) {
-        memcpy(&state.currentInput->uints, &tmp_uints, sizeof(GLuint) * PassInput::NUM_INTS);
-    } else {
-        memcpy(&state.currentInput->ints, &tmp_ints, sizeof(GLint) * PassInput::NUM_INTS);
-    }
-}
-
-void
-Sequence::processAtomicOption(const std::string& key, const std::vector<std::string>& value, ParseState& state)
-{
-    (void)key;
-    if (!state.currentPass) {
-        throw_sequence_error("atomic (" + value[0] + "): no preceeding input declaration.");
-    }
-    if (value.size() < 2) {
-        throw_sequence_error("atomic (" + value[0] + "): must have at least 2 parameters.");
-    }
-
-    if (value[0] == "cntr") {
-        hres hr = hres::OK;
-        std::vector<std::string> val_arr;
-        val_arr.reserve(value.size() - 1);
-        std::copy(value.begin() + 1, value.end(), std::back_inserter(val_arr));
-
-        if (val_arr.size() > 2) {
-            throw std::runtime_error("atomic (" + value[0] + "): can only have a single value");
-        }
-
-        const GLuint tmp_uint = static_cast<GLuint>(str_to_numeric<uint32_t>(hr, val_arr[1]));
-        if (hr == hres::ERR) {
-            throw_sequence_error("atomic (" + value[0] + "): -> " + value[1] + " <- is invalid parameters");
-        }
-
-        auto counterSh = state.currentPass->program->findCounter(val_arr[0]);
-        if (!counterSh) {
-            throw_sequence_error("atomic (" + value[0] + "): referenced counter " + val_arr[0] + " not found.");
-        }
-
-        auto [i_counterIt, success] = state.currentPass->inputCounters.insert({ val_arr[0], Pass::inputCounter() });
-        i_counterIt->second.size  = counterSh->size;
-        i_counterIt->second.value = { tmp_uint };
-
-        LOG(debug) << "atomic counter: " << val_arr[0].c_str() << " set to " << tmp_uint;
-
-        if (!success) {
-            throw_sequence_error("atomic counter: " + val_arr[0] + " already exists.");
-        }
-    } else if (value[0] != "buff") {
-        throw std::runtime_error("atomic (" + value[0] + "): unknown atomic buffer type");
-    }
-
-}
-
-void
-Sequence::processInputAttributeOption(const std::string& key, const std::vector<std::string>& value, ParseState& state)
-{
-    (void)key;
-    if (!state.currentInput) {
-        throw_sequence_error("in_attr (" + value[0] + "): no preceeding input declaration.");
-    }
-
-    switch (state.currentInput->uniform->type) {
-    case GL_SAMPLER_2D:
-    case GL_IMAGE_2D: break;
-    default:
-        throw_sequence_error("in_attr (" + value[0] + "): attributes can only be specified for a texture input.");
-    }
-
-    if (value.size() < 2) {
-        throw_sequence_error("in_attr (" + value[0] + "): must have 2 parameters.");
-    }
-
-    state.currentInput->attributes[value[0]] = value[1];
-}
-
-void
-Sequence::processOutputOption(const std::string& key, const std::vector<std::string>& value, ParseState& state)
-{
-    if (key == "out") {
-        if (!state.currentPass) {
-            throw_sequence_error("out (" + value[0] + "): no preceeding pass declaration.");
-        }
-        if (value.size() != 2) {
-            throw_sequence_error("out (" + value[0] + "): must have 2 parameters.");
-        }
-
-        auto [outputIt, success] = state.currentPass->outputs.insert({ value[0], PassOutput() });
-        if (!success) {
-            throw_sequence_error("out (" + value[0] + "): duplicate id.");
-        }
-
-        state.currentOutput = &outputIt->second;
-
-        if (state.currentPassN > 0) {
-            state.currentOutput->internalFormatText = state.previousInternalFormatText;
-            state.currentOutput->channels           = state.previousChannels;
-            state.currentOutput->alphaChannel       = state.previousAlphaChannel;
-            state.currentOutput->bits               = state.previousBits;
-        }
-
-        state.currentOutput->path = value[1];
-
-        bool fail = false;
-        if (state.currentPass->isCompute) {
-            state.currentOutput->uniform = state.currentPass->program->findUniform(value[0]);
-            if (!state.currentOutput->uniform) {
-                fail = true;
-            }
-        } else {
-            state.currentOutput->output = state.currentPass->program->findOutput(value[0]);
-            if (!state.currentOutput->output) {
-                fail = true;
-            }
-        }
-
-        if (fail) {
-            throw_sequence_error("out (" + value[0] + "): program output not found.");
-        }
-        return;
-    }
-
-    if (key == "out_channels") {
-        if (!state.currentOutput) {
-            throw_sequence_error("out_channels (" + value[0] + "): no preceeding output declaration.");
-        }
-        state.currentOutput->channels = parse_checked_positive_int(value[0], "out_channels");
-        state.previousChannels        = state.currentOutput->channels;
-        return;
-    }
-
-    if (key == "out_alpha_channel") {
-        if (!state.currentOutput) {
-            throw_sequence_error("out_alpha_channel (" + value[0] + "): no preceeding output declaration.");
-        }
-
-        state.currentOutput->alphaChannel = parse_checked_numeric<int32_t>(value[0], "out_alpha_channel");
-        if (state.currentOutput->alphaChannel > 3) {
-            throw_sequence_error("out_alpha_channel (" + value[0] + "): index > 3 is unsupported.");
-        }
-
-        state.previousAlphaChannel = state.currentOutput->alphaChannel;
-        return;
-    }
-
-    if (key == "out_bits") {
-        if (!state.currentOutput) {
-            throw_sequence_error("out_bits (" + value[0] + "): no preceeding output declaration.");
-        }
-        state.currentOutput->bits = parse_checked_positive_int(value[0], "out_bits");
-        state.previousBits        = state.currentOutput->bits;
-        return;
-    }
-
-    if (key == "out_format") {
-        if (!state.currentOutput) {
-            throw_sequence_error("out_format (" + value[0] + "): no preceeding output declaration.");
-        }
-        state.currentOutput->internalFormatText = value[0];
-        state.previousInternalFormatText        = value[0];
-        return;
-    }
-
-    if (key == "out_attr") {
-        if (!state.currentOutput) {
-            throw_sequence_error("out_attr (" + value[0] + "): no preceeding output declaration.");
-        }
-        if (value.size() < 2) {
-            throw_sequence_error("out_attr (" + value[0] + "): must have 2 parameters.");
-        }
-
-        state.currentOutput->attributes[value[0]] = value[1];
-    }
-}
-
-void
-Sequence::processParsedOption(const std::string& key, const std::vector<std::string>& value, ParseState& state)
-{
-    if (key == "pass_vertfrag" || key == "pass_comp") {
-        processPassDeclaration(key, value, state);
-        return;
-    }
-
-    if (key == "pass_size" || key == "pass_workgroupsize" || key == "bg_color" || key == "pass_mesh"
-        || key == "cull") {
-        processPassProperty(key, value, state);
-        return;
-    }
-
-    if (key == "in") {
-        processInputOption(key, value, state);
-        return;
-    }
-
-    if (key == "atomic") {
-        processAtomicOption(key, value, state);
-        return;
-    }
-
-    if (key == "in_attr") {
-        processInputAttributeOption(key, value, state);
-        return;
-    }
-
-    processOutputOption(key, value, state);
-}
-
-void
-Sequence::buildPassesFromConfig()
-{
-    m_passes.clear();
-    m_passes.reserve(m_passConfigs.size());
-
-    for (const SequencePassConfig& config : m_passConfigs) {
-        Pass pass(config.program, config.isCompute);
-        pass.inputs        = config.inputs;
-        pass.inputCounters = config.inputCounters;
-        pass.outputs       = config.outputs;
-        pass.meshes        = config.meshes;
-        pass.cullMode      = config.cullMode;
-        pass.sizeText[0]   = config.sizeText[0];
-        pass.sizeText[1]   = config.sizeText[1];
-        pass.workGroupSizeText[0] = config.workGroupSizeText[0];
-        pass.workGroupSizeText[1] = config.workGroupSizeText[1];
-        std::memcpy(pass.clearColor, config.clearColor, sizeof(pass.clearColor));
-        m_passes.push_back(std::move(pass));
-    }
-}
-
-void
 Sequence::buildPassesFromRuntimeConfig(const SequenceRuntimeConfig& runtimeConfig)
 {
     m_passes.clear();
     m_passes.reserve(runtimeConfig.passes.size());
 
     for (const SequenceRuntimePassConfig& config : runtimeConfig.passes) {
-        Pass pass(config.program, config.isCompute);
+        SequencePass pass(config.program, config.isCompute);
         pass.inputs        = config.inputs;
         pass.inputCounters = config.inputCounters;
         pass.outputs       = config.outputs;
@@ -1088,32 +551,7 @@ Sequence::buildPassesFromRuntimeConfig(const SequenceRuntimeConfig& runtimeConfi
     }
 }
 
-Sequence::Sequence(int argc, const char* argv[])
-    : Sequence()
-{
-    const SequenceParsedArguments parsedArguments = Sequence_ParseArguments(argc, argv);
-    int immediateExitCode = 0;
-    if (Sequence_HandleImmediateParsedArguments(parsedArguments, argc, immediateExitCode)) {
-        return;
-    }
-
-    initializeFromParsedArguments(parsedArguments);
-}
-
-Sequence::Sequence(const SequenceParsedArguments& parsedArguments)
-    : Sequence()
-{
-    initializeFromParsedArguments(parsedArguments);
-}
-
-Sequence::Sequence(const SequenceBuildConfig& buildConfig)
-    : Sequence()
-{
-    initializeFromBuildConfig(buildConfig);
-}
-
 Sequence::Sequence(const SequenceRuntimeConfig& runtimeConfig)
-    : Sequence()
 {
     initializeFromRuntimeConfig(runtimeConfig);
 }
@@ -1142,62 +580,11 @@ Sequence::~Sequence()
 }
 
 void
-Sequence::initializeFromParsedArguments(const SequenceParsedArguments& parsedArguments)
-{
-    Log_SetVerbosity(std::clamp(parsedArguments.verbosity, 0, 5));
-    LOG(debug) << "Starting RawGL sequence" << std::endl;
-
-    ParseState parseState;
-    for (const SequenceParsedOption& option : parsedArguments.options) {
-        processParsedOption(option.string_key, option.value, parseState);
-    }
-
-    buildPassesFromConfig();
-
-    int passIndex = 0;
-    for (auto& pass : m_passes) {
-        const size_t initializedCounters = pass.u_aCounters.size();
-        const size_t reflectedCounters   = pass.program->BuffersSize();
-        if (initializedCounters < reflectedCounters) {
-            LOG(debug) << "Pass #" << passIndex << ": " << initializedCounters << " from " << reflectedCounters
-                       << " atomic counters are initialized";
-        }
-        ++passIndex;
-    }
-
-    initCommon();
-}
-
-void
-Sequence::initializeFromBuildConfig(const SequenceBuildConfig& buildConfig)
-{
-    Log_SetVerbosity(std::clamp(buildConfig.verbosity, 0, 5));
-    LOG(debug) << "Starting RawGL sequence" << std::endl;
-
-    m_passConfigs = buildConfig.passes;
-    buildPassesFromConfig();
-
-    int passIndex = 0;
-    for (auto& pass : m_passes) {
-        const size_t initializedCounters = pass.u_aCounters.size();
-        const size_t reflectedCounters   = pass.program->BuffersSize();
-        if (initializedCounters < reflectedCounters) {
-            LOG(debug) << "Pass #" << passIndex << ": " << initializedCounters << " from " << reflectedCounters
-                       << " atomic counters are initialized";
-        }
-        ++passIndex;
-    }
-
-    initCommon();
-}
-
-void
 Sequence::initializeFromRuntimeConfig(const SequenceRuntimeConfig& runtimeConfig)
 {
     Log_SetVerbosity(std::clamp(runtimeConfig.verbosity, 0, 5));
     LOG(debug) << "Starting RawGL sequence" << std::endl;
 
-    m_passConfigs.clear();
     m_textures        = runtimeConfig.sharedTextures;
     m_sharedMeshes    = runtimeConfig.sharedMeshes;
     m_sharedGpuMeshes = runtimeConfig.sharedGpuMeshes;
@@ -1231,6 +618,10 @@ Sequence::preloadInputTextures()
             case GL_SAMPLER_2D:
             case GL_IMAGE_2D: break;
             default: continue;
+            }
+
+            if (input.texture && input.path.empty() && !input.runtimeTextureBindingRequired) {
+                continue;
             }
 
             if (input.runtimeTextureBindingRequired && input.path.empty()) {
@@ -1280,7 +671,7 @@ Sequence::preloadInputTextures()
 }
 
 void
-Sequence::ensurePassOutputTextures(Pass& pass, int passIndex)
+Sequence::ensurePassOutputTextures(SequencePass& pass, int passIndex)
 {
     for (auto& outputIt : pass.outputs) {
         PassOutput& output = outputIt.second;
@@ -1339,9 +730,10 @@ Sequence::ensurePassOutputTextures(Pass& pass, int passIndex)
 
         if (!pass.isCompute) {
             GLCall(glBindFramebuffer(GL_FRAMEBUFFER, pass.fboId));
-            LOG(debug) << "Pass " << passIndex << ": attaching output " << output.output->location << " "
+            const GLuint outputLocation = resolve_fragment_output_location(output);
+            LOG(debug) << "Pass " << passIndex << ": attaching output " << outputLocation << " "
                        << outputIt.first << " to FBO";
-            GLCall(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + output.output->location, GL_TEXTURE_2D,
+            GLCall(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + outputLocation, GL_TEXTURE_2D,
                                           textureIt->second->getId(), 0));
         }
     }
@@ -1357,7 +749,7 @@ Sequence::ensurePassOutputTextures(Pass& pass, int passIndex)
 }
 
 void
-Sequence::refreshPassTextureInputs(Pass& pass)
+Sequence::refreshPassTextureInputs(SequencePass& pass)
 {
     for (auto& inputIt : pass.inputs) {
         PassInput& input = inputIt.second;
@@ -1366,6 +758,10 @@ Sequence::refreshPassTextureInputs(Pass& pass)
         case GL_SAMPLER_2D:
         case GL_IMAGE_2D: break;
         default: continue;
+        }
+
+        if (input.texture && input.path.empty() && !input.runtimeTextureBindingRequired) {
+            continue;
         }
 
         if (input.runtimeTextureBindingRequired && input.path.empty()) {
@@ -1396,7 +792,7 @@ Sequence::prepareRunTextures()
         ensurePassOutputTextures(m_passes[passIndex], passIndex);
     }
 
-    for (Pass& pass : m_passes) {
+    for (SequencePass& pass : m_passes) {
         refreshPassTextureInputs(pass);
     }
 
@@ -1404,7 +800,7 @@ Sequence::prepareRunTextures()
 }
 
 void
-Sequence::initializePass(Pass& pass, int passIndex)
+Sequence::initializePass(SequencePass& pass, int passIndex)
 {
     MeshInput& meshInput = ensure_primary_mesh(pass);
 
@@ -1438,7 +834,7 @@ Sequence::initializePass(Pass& pass, int passIndex)
                                  + "): wrong referenced pass index " + std::to_string(refPassIndex));
         }
 
-        const Pass& refPass = m_passes[refPassIndex];
+        const SequencePass& refPass = m_passes[refPassIndex];
         auto refInputIt     = refPass.inputs.find(refInputName);
 
         if (refInputIt == refPass.inputs.end()) {
@@ -1467,7 +863,7 @@ Sequence::initializePass(Pass& pass, int passIndex)
     } else {
         GLCall(glGenFramebuffers(1, &pass.fboId));
         GLCall(glBindFramebuffer(GL_FRAMEBUFFER, pass.fboId));
-        pass.glbObject.FBO.push_back(Pass::FBOobject { pass.fboId });
+        pass.glbObject.FBO.push_back(SequencePass::FBOobject { pass.fboId });
     }
 
     ensurePassOutputTextures(pass, passIndex);
@@ -1514,7 +910,7 @@ Sequence::initCommon()
     validatePassSetup();
     buildExecutionPlan();
 
-    for (Pass& pass : m_passes) {
+    for (SequencePass& pass : m_passes) {
         initializePassAtomicCounters(pass);
     }
 
@@ -1524,7 +920,7 @@ Sequence::initCommon()
 void
 Sequence::validatePassSetup() const
 {
-    for (const Pass& pass : m_passes) {
+    for (const SequencePass& pass : m_passes) {
         const MeshInput& mesh = require_primary_mesh(pass);
         (void)mesh;
 
@@ -1565,7 +961,7 @@ Sequence::buildExecutionPlan()
     m_executionPlan.reserve(m_passes.size());
 
     for (int passIndex = 0; passIndex < static_cast<int>(m_passes.size()); ++passIndex) {
-        Pass& pass = m_passes[passIndex];
+        SequencePass& pass = m_passes[passIndex];
         PassExecutionPlan plan;
         plan.pass       = &pass;
         plan.primaryMesh = &require_primary_mesh(pass);
@@ -1589,7 +985,7 @@ int
 Sequence::bindPassInputs(const PassExecutionPlan& plan,
                          const std::vector<SequenceExecutionInputOverride>& inputOverrides)
 {
-    Pass& pass = *plan.pass;
+    SequencePass& pass = *plan.pass;
     int textureIndex = 0;
 
     for (const PlannedInputBinding& binding : plan.inputs) {
@@ -1644,9 +1040,17 @@ Sequence::bindPassInputs(const PassExecutionPlan& plan,
         case GL_INT_VEC3:
         case GL_INT_VEC4:
             if (inputOverride && inputOverride->kind == SequenceExecutionInputOverrideKind::intValues) {
-                input.uniform->set(inputOverride->intValues.data());
+                if (input.usesArrayElement) {
+                    set_addressed_int_uniform(input, inputOverride->intValues.data());
+                } else {
+                    input.uniform->set(inputOverride->intValues.data());
+                }
             } else {
-                input.uniform->set(&input.ints[0]);
+                if (input.usesArrayElement) {
+                    set_addressed_int_uniform(input, &input.ints[0]);
+                } else {
+                    input.uniform->set(&input.ints[0]);
+                }
             }
             break;
         case GL_UNSIGNED_INT:
@@ -1654,9 +1058,17 @@ Sequence::bindPassInputs(const PassExecutionPlan& plan,
         case GL_UNSIGNED_INT_VEC3:
         case GL_UNSIGNED_INT_VEC4:
             if (inputOverride && inputOverride->kind == SequenceExecutionInputOverrideKind::uintValues) {
-                input.uniform->set(inputOverride->uintValues.data());
+                if (input.usesArrayElement) {
+                    set_addressed_uint_uniform(input, inputOverride->uintValues.data());
+                } else {
+                    input.uniform->set(inputOverride->uintValues.data());
+                }
             } else {
-                input.uniform->set(&input.uints[0]);
+                if (input.usesArrayElement) {
+                    set_addressed_uint_uniform(input, &input.uints[0]);
+                } else {
+                    input.uniform->set(&input.uints[0]);
+                }
             }
             break;
         case GL_FLOAT:
@@ -1664,9 +1076,17 @@ Sequence::bindPassInputs(const PassExecutionPlan& plan,
         case GL_FLOAT_VEC3:
         case GL_FLOAT_VEC4:
             if (inputOverride && inputOverride->kind == SequenceExecutionInputOverrideKind::floatValues) {
-                input.uniform->set(inputOverride->floatValues.data());
+                if (input.usesArrayElement) {
+                    set_addressed_float_uniform(input, inputOverride->floatValues.data());
+                } else {
+                    input.uniform->set(inputOverride->floatValues.data());
+                }
             } else {
-                input.uniform->set(&input.floats[0]);
+                if (input.usesArrayElement) {
+                    set_addressed_float_uniform(input, &input.floats[0]);
+                } else {
+                    input.uniform->set(&input.floats[0]);
+                }
             }
             break;
         case GL_DOUBLE:
@@ -1674,9 +1094,17 @@ Sequence::bindPassInputs(const PassExecutionPlan& plan,
         case GL_DOUBLE_VEC3:
         case GL_DOUBLE_VEC4:
             if (inputOverride && inputOverride->kind == SequenceExecutionInputOverrideKind::doubleValues) {
-                input.uniform->set(inputOverride->doubleValues.data());
+                if (input.usesArrayElement) {
+                    set_addressed_double_uniform(input, inputOverride->doubleValues.data());
+                } else {
+                    input.uniform->set(inputOverride->doubleValues.data());
+                }
             } else {
-                input.uniform->set(&input.doubles[0]);
+                if (input.usesArrayElement) {
+                    set_addressed_double_uniform(input, &input.doubles[0]);
+                } else {
+                    input.uniform->set(&input.doubles[0]);
+                }
             }
             break;
         default: input.uniform->set(&input.floats[0]); break;
@@ -1689,7 +1117,7 @@ Sequence::bindPassInputs(const PassExecutionPlan& plan,
 void
 Sequence::bindInternalUniforms(const PassExecutionPlan& plan, const SequenceSystemUniformState& systemUniforms)
 {
-    Pass& pass = *plan.pass;
+    SequencePass& pass = *plan.pass;
     const GLuint framebufferSizeUint[2] = { static_cast<GLuint>(pass.size[0]), static_cast<GLuint>(pass.size[1]) };
     const GLint framebufferSizeInt[2]   = { pass.size[0], pass.size[1] };
     const GLfloat framebufferSizeFloat[2] = { static_cast<GLfloat>(pass.size[0]), static_cast<GLfloat>(pass.size[1]) };
@@ -1787,7 +1215,7 @@ Sequence::bindInternalUniforms(const PassExecutionPlan& plan, const SequenceSyst
 }
 
 void
-Sequence::initializePassAtomicCounters(Pass& pass)
+Sequence::initializePassAtomicCounters(SequencePass& pass)
 {
     pass.u_aCounters.clear();
     pass.capturedAtomicCounterValues.clear();
@@ -1857,7 +1285,7 @@ Sequence::initializePassAtomicCounters(Pass& pass)
 }
 
 void
-Sequence::preparePassAtomicCounters(Pass& pass)
+Sequence::preparePassAtomicCounters(SequencePass& pass)
 {
     pass.capturedAtomicCounterValues.clear();
 
@@ -1893,7 +1321,7 @@ Sequence::preparePassAtomicCounters(Pass& pass)
 }
 
 void
-Sequence::bindPassAtomicCounters(Pass& pass)
+Sequence::bindPassAtomicCounters(SequencePass& pass)
 {
     LOG(trace) << "Binding atomic counters" << std::endl;
 
@@ -1929,7 +1357,7 @@ Sequence::bindPassAtomicCounters(Pass& pass)
 }
 
 void
-Sequence::capturePassAtomicCounterResults(Pass& pass)
+Sequence::capturePassAtomicCounterResults(SequencePass& pass)
 {
     if (pass.u_aCounters.empty()) {
         return;
@@ -1955,7 +1383,7 @@ Sequence::capturePassAtomicCounterResults(Pass& pass)
 void
 Sequence::executeComputePass(const PassExecutionPlan& plan, int textureIndex)
 {
-    Pass& pass = *plan.pass;
+    SequencePass& pass = *plan.pass;
 
     for (const PlannedOutputBinding& binding : plan.outputs) {
         PassOutput& output = *binding.output;
@@ -1976,13 +1404,14 @@ Sequence::executeComputePass(const PassExecutionPlan& plan, int textureIndex)
 void
 Sequence::executeGraphicsPass(const PassExecutionPlan& plan)
 {
-    Pass& pass = *plan.pass;
+    SequencePass& pass = *plan.pass;
     GLCall(glBindFramebuffer(GL_FRAMEBUFFER, pass.fboId));
 
     std::vector<GLenum> buffers(8, GL_NONE);
     for (const PlannedOutputBinding& binding : plan.outputs) {
-        PassOutput& output               = *binding.output;
-        buffers[output.output->location] = GL_COLOR_ATTACHMENT0 + output.output->location;
+        PassOutput& output          = *binding.output;
+        const GLuint outputLocation = resolve_fragment_output_location(output);
+        buffers[outputLocation]     = GL_COLOR_ATTACHMENT0 + outputLocation;
     }
 
     GLuint depthBuffer = 0;
@@ -2079,7 +1508,7 @@ Sequence::run(const SequenceSystemUniformState& systemUniforms,
         prepareRunTextures();
 
         for (const PassExecutionPlan& plan : m_executionPlan) {
-            Pass& pass = *plan.pass;
+            SequencePass& pass = *plan.pass;
             GLCall(glUseProgram(pass.program->getId()));
 
             const int textureIndex = bindPassInputs(plan, inputOverrides);
@@ -2132,7 +1561,7 @@ Sequence::getPassAtomicCounterValues(size_t passIndex, const std::string& counte
         return {};
     }
 
-    const Pass& pass = m_passes[passIndex];
+    const SequencePass& pass = m_passes[passIndex];
     const auto capturedIt = pass.capturedAtomicCounterValues.find(counterName);
     if (capturedIt != pass.capturedAtomicCounterValues.end()) {
         return capturedIt->second;
@@ -2153,7 +1582,7 @@ Sequence::setPassAtomicCounterValues(size_t passIndex, const std::string& counte
         throw_sequence_error("invalid pass index for atomic counter override");
     }
 
-    Pass& pass = m_passes[passIndex];
+    SequencePass& pass = m_passes[passIndex];
     std::shared_ptr<GLProgramBuffers> counter = pass.program->findCounter(counterName);
     if (!counter) {
         throw_sequence_error("atomic counter " + counterName + " is not used in the shader");
@@ -2173,7 +1602,7 @@ void
 Sequence::releaseRunOutputTextures()
 {
     for (size_t passIndex = 0; passIndex < m_passes.size(); ++passIndex) {
-        Pass& pass = m_passes[passIndex];
+        SequencePass& pass = m_passes[passIndex];
         for (auto& outputIt : pass.outputs) {
             const std::string textureKey = outputIt.first + "::" + std::to_string(passIndex);
 

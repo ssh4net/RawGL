@@ -24,6 +24,9 @@ foreach(rawgl_oiio_target OpenImageIO::OpenImageIO OpenImageIO::OpenImageIO_Util
         if(TARGET Freetype::Freetype)
             set_property(TARGET ${rawgl_oiio_target} APPEND PROPERTY INTERFACE_LINK_LIBRARIES Freetype::Freetype)
         endif()
+        if(TARGET sharpyuv::sharpyuv)
+            set_property(TARGET ${rawgl_oiio_target} APPEND PROPERTY INTERFACE_LINK_LIBRARIES sharpyuv::sharpyuv)
+        endif()
 
         if(WIN32)
             get_target_property(rawgl_oiio_iface_links ${rawgl_oiio_target} INTERFACE_LINK_LIBRARIES)
@@ -52,7 +55,7 @@ if(NOT RAWGL_SPDLOG_INCLUDE_DIR)
     message(FATAL_ERROR "spdlog headers were not found. Set CMAKE_PREFIX_PATH or RAWGL_WINDOWS_DEPS_ROOT so spdlog/spdlog.h is available.")
 endif()
 
-if(TARGET miniply::miniply)
+if(RAWGL_USE_PACKAGED_MINIPLY AND TARGET miniply::miniply)
     set(RAWGL_MINIPLY_TARGET miniply::miniply)
     message(STATUS "RawGL miniply provider: package target miniply::miniply")
 elseif(EXISTS "${RAWGL_MINIPLY_INCLUDE_DIR}/miniply.h")

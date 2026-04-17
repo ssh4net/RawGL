@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "rawgl/rawgl_core.h"
+#include "rawgl/rawgl.h"
 
 #include <OpenImageIO/imageio.h>
 
@@ -11,6 +11,17 @@
 #include <vector>
 
 namespace {
+
+rawgl::ShaderModuleDefinition
+make_file_module(const rawgl::ShaderProgramKind programKind, const char* path)
+{
+    rawgl::ShaderModuleDefinition module;
+    module.sourceKind = rawgl::ShaderModuleSourceKind::filePath;
+    module.path       = path;
+    module.role       = programKind == rawgl::ShaderProgramKind::compute ? rawgl::ShaderModuleRole::compute
+                                                                         : rawgl::ShaderModuleRole::automatic;
+    return module;
+}
 
 bool
 read_pixel_rgba32f(const std::filesystem::path& path, float pixel[4])
@@ -55,65 +66,54 @@ verify_output(const std::filesystem::path& outputPath)
     return true;
 }
 
-rawgl::GraphBuildRequest
-make_transient_reuse_request(const std::filesystem::path& outputPath)
+rawgl::Workflow
+make_transient_reuse_workflow(const std::filesystem::path& outputPath)
 {
-    rawgl::GraphPassDefinition sourcePass;
+    rawgl::Pass sourcePass;
     sourcePass.programKind              = rawgl::ShaderProgramKind::compute;
-    sourcePass.shaderPaths              = { "tests/shaders/image_chain_source.comp" };
+    sourcePass.shaderModules.push_back(make_file_module(rawgl::ShaderProgramKind::compute, "tests/shaders/image_chain_source.comp"));
     sourcePass.sizeX                    = 1;
     sourcePass.sizeY                    = 1;
     sourcePass.workGroupSizeX           = 1;
     sourcePass.workGroupSizeY           = 1;
     sourcePass.hasExplicitWorkGroupSize = true;
-    sourcePass.outputs.push_back(rawgl::GraphOutputDefinition {
-        "o_mid0",
-        "",
-        "rgba32f",
-        4,
-        3,
-        16,
-        "",
-        {},
-    });
+    rawgl::OutputBinding sourceOutput;
+    sourceOutput.name         = "o_mid0";
+    sourceOutput.format       = "rgba32f";
+    sourceOutput.channels     = 4;
+    sourceOutput.alphaChannel = 3;
+    sourceOutput.bits         = 16;
+    sourcePass.outputs.push_back(std::move(sourceOutput));
 
-    rawgl::GraphPassDefinition consumePass;
+    rawgl::Pass consumePass;
     consumePass.programKind              = rawgl::ShaderProgramKind::compute;
-    consumePass.shaderPaths              = { "tests/shaders/image_chain_consume.comp" };
+    consumePass.shaderModules.push_back(make_file_module(rawgl::ShaderProgramKind::compute, "tests/shaders/image_chain_consume.comp"));
     consumePass.sizeX                    = 1;
     consumePass.sizeY                    = 1;
     consumePass.workGroupSizeX           = 1;
     consumePass.workGroupSizeY           = 1;
     consumePass.hasExplicitWorkGroupSize = true;
-    consumePass.inputs.push_back(rawgl::GraphInputDefinition {
-        "u_mid0",
-        rawgl::GraphInputSourceKind::passOutput,
-        {},
-        {},
-        {},
-        {},
-        "",
-        "o_mid0",
-        0,
-        "",
-        {},
-    });
-    consumePass.outputs.push_back(rawgl::GraphOutputDefinition {
-        "o_out0",
-        outputPath.string(),
-        "rgba32f",
-        4,
-        3,
-        16,
-        "",
-        {},
-    });
+    rawgl::InputBinding midInput;
+    midInput.name                 = "u_mid0";
+    midInput.sourceKind           = rawgl::InputSourceKind::passOutput;
+    midInput.referencedOutputName = "o_mid0";
+    midInput.referencedPassIndex  = 0;
+    consumePass.inputs.push_back(std::move(midInput));
 
-    rawgl::GraphBuildRequest request;
-    request.definition.verbosity = 0;
-    request.definition.passes.push_back(std::move(sourcePass));
-    request.definition.passes.push_back(std::move(consumePass));
-    return request;
+    rawgl::OutputBinding finalOutput;
+    finalOutput.name         = "o_out0";
+    finalOutput.path         = outputPath.string();
+    finalOutput.format       = "rgba32f";
+    finalOutput.channels     = 4;
+    finalOutput.alphaChannel = 3;
+    finalOutput.bits         = 16;
+    consumePass.outputs.push_back(std::move(finalOutput));
+
+    rawgl::Workflow workflow;
+    workflow.verbosity = 0;
+    workflow.passes.push_back(std::move(sourcePass));
+    workflow.passes.push_back(std::move(consumePass));
+    return workflow;
 }
 
 }  // namespace
@@ -125,25 +125,25 @@ main()
     std::error_code removeError;
     std::filesystem::remove(outputPath, removeError);
 
-    rawgl::RawGLContext context;
-    rawgl::GraphBuildResult buildResult = context.buildGraph(make_transient_reuse_request(outputPath));
-    if (!buildResult.success || !buildResult.graph) {
-        std::cerr << "Graph build failed: " << buildResult.errorMessage << std::endl;
+    rawgl::Session session;
+    rawgl::PrepareResult prepareResult = session.prepare(make_transient_reuse_workflow(outputPath));
+    if (!prepareResult.success || !prepareResult.workflow) {
+        std::cerr << "Workflow preparation failed: " << prepareResult.errorMessage << std::endl;
         return 1;
     }
 
-    const rawgl::GraphExecutionResult firstRun = buildResult.graph->execute(rawgl::GraphExecutionRequest {});
+    const rawgl::RunResult firstRun = prepareResult.workflow->run(rawgl::RunSettings {});
     if (!firstRun.success) {
-        std::cerr << "First graph execution failed: " << firstRun.errorMessage << std::endl;
+        std::cerr << "First workflow execution failed: " << firstRun.errorMessage << std::endl;
         return 1;
     }
     if (!verify_output(outputPath)) {
         return 1;
     }
 
-    const rawgl::GraphExecutionResult secondRun = buildResult.graph->execute(rawgl::GraphExecutionRequest {});
+    const rawgl::RunResult secondRun = prepareResult.workflow->run(rawgl::RunSettings {});
     if (!secondRun.success) {
-        std::cerr << "Second graph execution failed: " << secondRun.errorMessage << std::endl;
+        std::cerr << "Second workflow execution failed: " << secondRun.errorMessage << std::endl;
         return 1;
     }
     if (!verify_output(outputPath)) {

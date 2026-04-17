@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "cli_parser.h"
 #include "common.h"
 #include "texture.h"
 #include "image_io.h"
@@ -51,7 +50,7 @@ double_t
 str_to_numeric(const std::string& str_val);
 
 
-struct Pass;
+struct SequencePass;
 
 struct PassInput {
     PassInput();
@@ -83,14 +82,14 @@ struct PassInput {
 
     const void eval_tex_attr(hres& hr, const std::string& name, const std::string& attr_val_name);
 
-    static std::string get_possible_tex_attr_fmt();
-
     static const std::vector<TexAttr> TEX_ATTR_ARR;
 
     std::map<std::string, std::string> attributes;
     GLProgramUniform* uniform;
     std::shared_ptr<Texture> texture;
     bool runtimeTextureBindingRequired = false;
+    bool usesArrayElement = false;
+    GLint addressedLocation = -1;
     GLint tex_min;
     GLint tex_mag;
     GLint tex_s;
@@ -163,8 +162,6 @@ struct MeshInput {
 
     const void eval_mesh_parm(hres& hr, const std::string& name, const std::string& attr_val_name);
 
-    static std::string get_possible_mesh_parm_fmt();
-
     static const std::vector<MeshParm> MESH_PARM_ARR;
 
     MeshInput()
@@ -210,6 +207,8 @@ struct PassOutput {
     GLProgramOutput* output;
     GLProgramUniform* uniform;
     std::shared_ptr<Texture> texture;
+    bool usesArrayElement = false;
+    size_t arrayElement = 0;
 
     OIIO::TypeDesc format;
     bool formatDefaulted;
@@ -219,7 +218,7 @@ struct PassOutput {
     void saveTexture();
 };
 
-struct Pass {
+struct SequencePass {
     template<typename T> struct GenericObject {
         std::string typetext = "";
         GLenum type;
@@ -330,12 +329,11 @@ struct Pass {
     friend const void _pass_input_set_wind_order(CullMode& mm, const GLuint& val);
     friend const void _pass_input_set_cull_enable(CullMode& mm, const GLuint& val);
 
-    static std::string get_possible_culling_fmt();
-    static const std::vector<Pass::CullModeAttr> CULL_PARM_ARR;
+    static const std::vector<SequencePass::CullModeAttr> CULL_PARM_ARR;
 
     const void eval_cull_parm(hres& hr, const std::string& name, const std::string& attr_val_name);
 
-    Pass(const std::shared_ptr<GLProgram>& p, bool isCompute)
+    SequencePass(const std::shared_ptr<GLProgram>& p, bool isCompute)
         : program(p)
         , isCompute(isCompute)
         , glbObject()
@@ -349,38 +347,20 @@ struct Pass {
 };
 
 const void
-_pass_input_set_cull_face(Pass::CullMode& mm, const GLuint& val);
+_pass_input_set_cull_face(SequencePass::CullMode& mm, const GLuint& val);
 const void
-_pass_input_set_wind_order(Pass::CullMode& mm, const GLuint& val);
+_pass_input_set_wind_order(SequencePass::CullMode& mm, const GLuint& val);
 const void
-_pass_input_set_cull_enable(Pass::CullMode& mm, const GLuint& val);
-
-struct SequencePassConfig {
-    std::shared_ptr<GLProgram> program;
-    bool isCompute = false;
-    std::map<std::string, PassInput> inputs;
-    std::map<std::string, Pass::inputCounter> inputCounters;
-    std::map<std::string, PassOutput> outputs;
-    std::map<std::string, MeshInput> meshes;
-    Pass::CullMode cullMode { GL_CW, GL_BACK, true };
-    std::string sizeText[2] { "512", "512" };
-    std::string workGroupSizeText[2] { "16", "16" };
-    float clearColor[4] { 0.0f, 0.0f, 0.0f, 0.0f };
-};
-
-struct SequenceBuildConfig {
-    int verbosity = 3;
-    std::vector<SequencePassConfig> passes;
-};
+_pass_input_set_cull_enable(SequencePass::CullMode& mm, const GLuint& val);
 
 struct SequenceRuntimePassConfig {
     std::shared_ptr<GLProgram> program;
     bool isCompute = false;
     std::map<std::string, PassInput> inputs;
-    std::map<std::string, Pass::inputCounter> inputCounters;
+    std::map<std::string, SequencePass::inputCounter> inputCounters;
     std::map<std::string, PassOutput> outputs;
     std::map<std::string, MeshInput> meshes;
-    Pass::CullMode cullMode { GL_CW, GL_BACK, true };
+    SequencePass::CullMode cullMode { GL_CW, GL_BACK, true };
     int size[2] { 512, 512 };
     int workGroupSize[2] { 16, 16 };
     float clearColor[4] { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -442,13 +422,12 @@ struct SequenceExecutionInputOverride {
     std::vector<float> floatValues;
     std::vector<double> doubleValues;
     std::shared_ptr<Texture> texture;
+    bool usesArrayElement = false;
+    size_t arrayElement = 0;
 };
 
 class Sequence {
 public:
-    Sequence(int argc, const char* argv[]);
-    explicit Sequence(const SequenceParsedArguments& parsedArguments);
-    explicit Sequence(const SequenceBuildConfig& buildConfig);
     explicit Sequence(const SequenceRuntimeConfig& runtimeConfig);
     ~Sequence();
 
@@ -462,21 +441,6 @@ public:
     void releaseRunOutputTextures();
 
 private:
-    Sequence() {}
-
-    struct ParseState {
-        SequencePassConfig* currentPass = nullptr;
-        PassInput* currentInput     = nullptr;
-        PassOutput* currentOutput   = nullptr;
-        MeshInput* currentMeshInput = nullptr;
-        size_t currentPassN         = 0;
-
-        std::string previousInternalFormatText = "rgb32f";
-        int previousChannels                   = 3;
-        int previousAlphaChannel               = -1;
-        int previousBits                       = 16;
-    };
-
     struct PlannedInputBinding {
         const std::string* name = nullptr;
         PassInput* input        = nullptr;
@@ -487,7 +451,7 @@ private:
     };
 
     struct PassExecutionPlan {
-        Pass* pass                      = nullptr;
+        SequencePass* pass              = nullptr;
         const MeshInput* primaryMesh    = nullptr;
         int passIndex                   = -1;
         std::vector<PlannedInputBinding> inputs;
@@ -498,41 +462,30 @@ private:
     std::map<std::string, std::shared_ptr<SequenceSharedMeshData>> m_sharedMeshes;
     std::map<std::string, std::shared_ptr<SequenceSharedGpuMesh>> m_sharedGpuMeshes;
 
-    std::vector<SequencePassConfig> m_passConfigs;
-    std::vector<Pass> m_passes;
+    std::vector<SequencePass> m_passes;
     std::vector<PassExecutionPlan> m_executionPlan;
     bool m_runTexturesDirty = false;
 
-    void processParsedOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
-    void processPassDeclaration(const std::string& key, const std::vector<std::string>& value, ParseState& state);
-    void processPassProperty(const std::string& key, const std::vector<std::string>& value, ParseState& state);
-    void processInputOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
-    void processAtomicOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
-    void processInputAttributeOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
-    void processOutputOption(const std::string& key, const std::vector<std::string>& value, ParseState& state);
-    void buildPassesFromConfig();
     void buildPassesFromRuntimeConfig(const SequenceRuntimeConfig& runtimeConfig);
     void preloadInputTextures();
-    void ensurePassOutputTextures(Pass& pass, int passIndex);
-    void refreshPassTextureInputs(Pass& pass);
+    void ensurePassOutputTextures(SequencePass& pass, int passIndex);
+    void refreshPassTextureInputs(SequencePass& pass);
     void prepareRunTextures();
-    void initializePass(Pass& pass, int passIndex);
+    void initializePass(SequencePass& pass, int passIndex);
     void validatePassSetup() const;
     void buildExecutionPlan();
     int bindPassInputs(const PassExecutionPlan& plan,
                        const std::vector<SequenceExecutionInputOverride>& inputOverrides);
     void bindInternalUniforms(const PassExecutionPlan& plan, const SequenceSystemUniformState& systemUniforms);
-    void initializePassAtomicCounters(Pass& pass);
-    void preparePassAtomicCounters(Pass& pass);
-    void bindPassAtomicCounters(Pass& pass);
-    void capturePassAtomicCounterResults(Pass& pass);
+    void initializePassAtomicCounters(SequencePass& pass);
+    void preparePassAtomicCounters(SequencePass& pass);
+    void bindPassAtomicCounters(SequencePass& pass);
+    void capturePassAtomicCounterResults(SequencePass& pass);
     void executeComputePass(const PassExecutionPlan& plan, int textureIndex);
     void executeGraphicsPass(const PassExecutionPlan& plan);
     void savePassOutputs(const PassExecutionPlan& plan);
     void destroyAtomicCounterBuffers();
     void initCommon();
-    void initializeFromParsedArguments(const SequenceParsedArguments& parsedArguments);
-    void initializeFromBuildConfig(const SequenceBuildConfig& buildConfig);
     void initializeFromRuntimeConfig(const SequenceRuntimeConfig& runtimeConfig);
 };
 
