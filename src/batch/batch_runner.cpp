@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2022-2026 Erium Vladlen.
 
 #include "rawgl/rawgl_batch.h"
@@ -83,6 +83,54 @@ struct PrepareWaitState {
     bool ready = false;
     BatchPrepareResult result;
 };
+
+static InputBinding
+clone_batch_input_binding(const InputBinding& input)
+{
+    InputBinding result = input;
+    if (input.hostTexture) {
+        result.hostTexture = std::make_shared<HostImageData>(*input.hostTexture);
+    }
+    return result;
+}
+
+static InputOverride
+clone_batch_input_override(const InputOverride& inputOverride)
+{
+    InputOverride result = inputOverride;
+    if (inputOverride.hostTexture) {
+        result.hostTexture = std::make_shared<HostImageData>(*inputOverride.hostTexture);
+    }
+    return result;
+}
+
+static Workflow
+clone_batch_workflow(const Workflow& workflow)
+{
+    Workflow result = workflow;
+    for (Pass& pass : result.passes) {
+        for (InputBinding& input : pass.inputs) {
+            if (!input.hostTexture) {
+                continue;
+            }
+            input = clone_batch_input_binding(input);
+        }
+    }
+    return result;
+}
+
+static BatchSubmitRequest
+clone_batch_submit_request(const BatchSubmitRequest& request)
+{
+    BatchSubmitRequest result = request;
+    for (InputOverride& inputOverride : result.settings.overrides) {
+        if (!inputOverride.hostTexture) {
+            continue;
+        }
+        inputOverride = clone_batch_input_override(inputOverride);
+    }
+    return result;
+}
 
 }  // namespace
 
@@ -554,9 +602,7 @@ BatchRunner::BatchRunner(Session& session, const io::IoRuntime& ioRuntime, const
 
 BatchRunner::~BatchRunner()
 {
-    if (m_state) {
-        m_state->stop_workers();
-    }
+    close();
 }
 
 BatchPrepareResult
@@ -572,7 +618,7 @@ BatchRunner::prepare(const Workflow& workflow) const
     std::shared_ptr<PrepareWaitState> waitState = std::make_shared<PrepareWaitState>();
     State::GpuTask task;
     task.kind = State::GpuTask::Kind::prepare;
-    task.prepareTask.workflow = workflow;
+    task.prepareTask.workflow = clone_batch_workflow(workflow);
     task.prepareTask.waitState = waitState;
 
     if (!m_state->gpuQueue.push(std::move(task))) {
@@ -630,7 +676,7 @@ BatchRunner::submit(const BatchPreparedWorkflow& workflow,
     State::GpuTask task;
     task.kind = State::GpuTask::Kind::execute;
     task.executeTask.submitIndex = submitIndex;
-    task.executeTask.request = request;
+    task.executeTask.request = clone_batch_submit_request(request);
     task.executeTask.workflow = workflow.m_state;
     task.executeTask.handle = handleState;
     if (cancellation) {
@@ -669,6 +715,17 @@ BatchRunner::progress() const
 
     std::lock_guard<std::mutex> lock(m_state->progressMutex);
     return m_state->progress;
+}
+
+void
+BatchRunner::close()
+{
+    if (!m_state) {
+        return;
+    }
+
+    m_state->stop_workers();
+    m_state.reset();
 }
 
 }  // namespace rawgl::batch

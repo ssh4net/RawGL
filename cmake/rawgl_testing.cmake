@@ -178,6 +178,13 @@ if(BUILD_TESTING)
         set_tests_properties(rawgl_python_multipass_batch_smoke PROPERTIES
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+        add_test(NAME rawgl_python_batch_close_smoke
+            COMMAND ${CMAKE_COMMAND} -E env
+                "PYTHONPATH=${CMAKE_BINARY_DIR}/python"
+                "${RAWGL_PYTHON_EXECUTABLE_EFFECTIVE}" "${CMAKE_SOURCE_DIR}/tests/python/rawgl_python_batch_close_smoke.py")
+        set_tests_properties(rawgl_python_batch_close_smoke PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
         add_test(NAME rawgl_python_histogram_smoke
             COMMAND ${CMAKE_COMMAND} -E env
                 "PYTHONPATH=${CMAKE_BINARY_DIR}/python"

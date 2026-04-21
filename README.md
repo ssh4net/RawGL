@@ -410,7 +410,7 @@ More examples available in **Examples** folder. And some more examples can be fo
 License
 -------
 
-Copyright © 2022 Erium Vladlen.
+Copyright © 2022-2026 Erium Vladlen.
 
-RawGL is licensed under the GNU General Public License, Version 3.
-Individual files may have a different, but compatible license.
+RawGL first-party code is licensed under the Apache License Version 2.0.
+Bundled third-party components retain their own licenses.

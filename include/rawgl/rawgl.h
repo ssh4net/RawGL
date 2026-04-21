@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2022-2026 Erium Vladlen.
 
 #pragma once
@@ -276,6 +276,15 @@ to_graph(const std::vector<Attribute>& attributes)
     return result;
 }
 
+static inline std::shared_ptr<HostImageData>
+clone_host_texture_payload(const std::shared_ptr<HostImageData>& hostTexture)
+{
+    if (!hostTexture) {
+        return nullptr;
+    }
+    return std::make_shared<HostImageData>(*hostTexture);
+}
+
 static inline GraphInputDefinition
 to_graph(const InputBinding& input)
 {
@@ -295,7 +304,7 @@ to_graph(const InputBinding& input)
     result.usesReferencedOutputArrayElement = input.usesReferencedOutputArrayElement;
     result.referencedOutputArrayElement = input.referencedOutputArrayElement;
     result.attributes = to_graph(input.attributes);
-    result.hostTexture = input.hostTexture;
+    result.hostTexture = clone_host_texture_payload(input.hostTexture);
     return result;
 }
 
@@ -488,7 +497,7 @@ to_graph(const InputOverride& inputOverride)
     result.attributes = to_graph(inputOverride.attributes);
     result.usesArrayElement = inputOverride.usesArrayElement;
     result.arrayElement = inputOverride.arrayElement;
-    result.hostTexture = inputOverride.hostTexture;
+    result.hostTexture = clone_host_texture_payload(inputOverride.hostTexture);
     return result;
 }
 

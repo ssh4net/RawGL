@@ -665,6 +665,18 @@ def _coerce_outputs(session, program_kind, shader_modules, outputs, input_names=
     raise TypeError("outputs must be an OutputBinding, a path/bool, or a mapping")
 
 
+def _outputs_require_inspection(outputs) -> bool:
+    if outputs is None:
+        return False
+    if isinstance(outputs, OutputBinding):
+        return False
+    if isinstance(outputs, (str, Path)) or outputs is True:
+        return True
+    if isinstance(outputs, Mapping):
+        return bool(outputs) and set(outputs.keys()).issubset(_OUTPUT_SPEC_KEYS)
+    return False
+
+
 def _coerce_run_settings(settings):
     if settings is None:
         return RunSettings()
@@ -735,6 +747,24 @@ class PreparedJob:
     @property
     def io_runtime(self):
         return self._io_runtime
+
+    def close(self):
+        self._prepared_workflow = None
+        self._io_runtime = None
+        self._session = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
 
 
 class RunResultView:
@@ -836,13 +866,12 @@ def render_pass(
             raise TypeError("clear_color must be a 4-element sequence")
         pass0.clear_color = [float(value) for value in clear_color]
 
-    if session is None:
-        session = Session()
-
     output_spec = _resolve_output_arguments(outputs=outputs, output=output)
     pass0.inputs = [] if inputs is None else [
         _coerce_input_binding(name, spec) for name, spec in inputs.items()
     ]
+    if session is None and _outputs_require_inspection(output_spec):
+        session = Session()
     pass0.outputs = _coerce_outputs(session, ShaderProgramKind.vertfrag, shader_modules, output_spec)
     pass0.meshes = [] if meshes is None else [_coerce_mesh_binding(spec) for spec in meshes]
     pass0.cull_parameters = _coerce_attributes(cull_parameters)
@@ -892,9 +921,6 @@ def compute_pass(
     pass0.has_explicit_work_group_size = True
     pass0.shader_modules = [_coerce_shader_module(shader, ShaderModuleRole.compute)]
 
-    if session is None:
-        session = Session()
-
     pass0.inputs = [] if inputs is None else [
         _coerce_input_binding(name, spec) for name, spec in inputs.items()
     ]
@@ -905,6 +931,8 @@ def compute_pass(
     ]
     input_names = [] if inputs is None else list(inputs.keys())
     output_spec = _resolve_output_arguments(outputs=outputs, output=output)
+    if session is None and _outputs_require_inspection(output_spec):
+        session = Session()
     pass0.outputs = _coerce_outputs(
         session,
         ShaderProgramKind.compute,
@@ -1271,6 +1299,22 @@ class BatchJobHandleView:
     def wait(self):
         return BatchResultView(self._handle.wait())
 
+    def close(self):
+        self._handle = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
 
 class BatchPreparedJob:
     """High-level Python wrapper over rawgl.BatchPreparedWorkflow."""
@@ -1307,6 +1351,23 @@ class BatchPreparedJob:
             cancellation=cancellation,
         ).wait()
 
+    def close(self):
+        self._prepared_workflow = None
+        self._batch_runner = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
 
 class BatchRunnerView:
     """Python lifetime wrapper over rawgl.BatchRunner."""
@@ -1317,6 +1378,8 @@ class BatchRunnerView:
         self._io_runtime = io_runtime
 
     def __getattr__(self, name):
+        if self._runner is None:
+            raise AttributeError(f"BatchRunnerView is closed; no attribute '{name}'")
         return getattr(self._runner, name)
 
     @property
@@ -1330,6 +1393,27 @@ class BatchRunnerView:
     @property
     def io_runtime(self):
         return self._io_runtime
+
+    def close(self):
+        runner = self._runner
+        if runner is not None and hasattr(runner, "close"):
+            runner.close()
+        self._runner = None
+        self._io_runtime = None
+        self._session = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
 
 
 def prepare_batch_workflow(
@@ -1363,14 +1447,18 @@ def prepare_batch_render(
     vertex_shader=None,
     verbosity=3,
 ):
+    output_spec = _resolve_output_arguments(outputs=outputs, output=output)
+    if _outputs_require_inspection(output_spec):
+        raise RuntimeError("batch render preparation requires explicit output names; unnamed output inference is not supported")
+    session = getattr(batch_runner, "session", None)
     workflow = render_workflow(
         fragment_shader,
-        outputs=outputs,
-        output=output,
+        outputs=output_spec,
         size=size,
         inputs=inputs,
         vertex_shader=vertex_shader,
         verbosity=verbosity,
+        session=session,
     )
     return prepare_batch_workflow(batch_runner, workflow)
 
@@ -1385,13 +1473,17 @@ def prepare_batch_image(
     inputs=None,
     verbosity=3,
 ):
+    output_spec = _resolve_output_arguments(outputs=outputs, output=output)
+    if _outputs_require_inspection(output_spec):
+        raise RuntimeError("batch image preparation requires explicit output names; unnamed output inference is not supported")
+    session = getattr(batch_runner, "session", None)
     workflow = render_workflow(
         fragment_shader,
-        output=output,
-        outputs=outputs,
+        outputs=output_spec,
         size=size,
         inputs=inputs,
         verbosity=verbosity,
+        session=session,
     )
     return prepare_batch_workflow(batch_runner, workflow)
 
@@ -1408,15 +1500,19 @@ def prepare_batch_compute(
     workgroup_size=(16, 16),
     verbosity=3,
 ):
+    output_spec = _resolve_output_arguments(outputs=outputs, output=output)
+    if _outputs_require_inspection(output_spec):
+        raise RuntimeError("batch compute preparation requires explicit output names; unnamed output inference is not supported")
+    session = getattr(batch_runner, "session", None)
     workflow = compute_workflow(
         shader,
-        outputs=outputs,
-        output=output,
+        outputs=output_spec,
         size=size,
         inputs=inputs,
         counters=counters,
         workgroup_size=workgroup_size,
         verbosity=verbosity,
+        session=session,
     )
     return prepare_batch_workflow(batch_runner, workflow)
 

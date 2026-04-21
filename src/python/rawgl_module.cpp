@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2022-2026 Erium Vladlen.
 
 #include <nanobind/nanobind.h>
@@ -549,6 +549,7 @@ NB_MODULE(_rawgl, module)
              nb::arg("workflow"),
              nb::arg("request") = rawgl::batch::BatchSubmitRequest {},
              nb::arg("cancellation") = static_cast<const rawgl::batch::BatchCancellationToken*>(nullptr))
-        .def("progress", &rawgl::batch::BatchRunner::progress);
+        .def("progress", &rawgl::batch::BatchRunner::progress)
+        .def("close", &rawgl::batch::BatchRunner::close);
 #endif
 }
