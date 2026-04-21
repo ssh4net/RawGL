@@ -42,3 +42,4 @@ logs
 /bld
 *.aps
 *.vcxproj.user
+__pycache__
