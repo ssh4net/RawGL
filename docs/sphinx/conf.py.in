@@ -5,7 +5,13 @@ from __future__ import annotations
 import importlib.util
 import warnings
 
-from sphinx.deprecation import RemovedInSphinx80Warning
+try:
+    from sphinx.deprecation import RemovedInSphinx80Warning as _BreatheDeprecationWarning
+except ImportError:
+    try:
+        from sphinx.deprecation import RemovedInNextVersionWarning as _BreatheDeprecationWarning
+    except ImportError:
+        _BreatheDeprecationWarning = Warning
 
 project = "RawGL"
 author = "RawGL contributors"
@@ -29,7 +35,7 @@ if importlib.util.find_spec("furo") is not None:
 
 warnings.filterwarnings(
     "ignore",
-    category=RemovedInSphinx80Warning,
+    category=_BreatheDeprecationWarning,
     module=r"breathe\.project",
 )
 
