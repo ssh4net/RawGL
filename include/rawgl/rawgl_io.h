@@ -138,11 +138,11 @@ public:
     RunSettingsMaterializationResult
     materializeRunSettings(const RunSettings& settings) const;
 
-    /// Saves one captured workflow output described by \ref outputSave.
+    /// Saves one captured workflow output described by the provided save binding.
     ImageSaveResult
     saveCapturedOutput(const OutputSaveBinding& outputSave, const RunResult& result) const;
 
-    /// Saves all captured workflow outputs described by \ref outputSaves.
+    /// Saves all captured workflow outputs described by the provided save bindings.
     SaveOutputsResult
     saveCapturedOutputs(const std::vector<OutputSaveBinding>& outputSaves, const RunResult& result) const;
 

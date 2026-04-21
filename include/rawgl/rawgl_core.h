@@ -46,11 +46,11 @@ struct ShaderModuleDefinition {
     ShaderModuleRole role = ShaderModuleRole::automatic;
     /// Backing source type.
     ShaderModuleSourceKind sourceKind = ShaderModuleSourceKind::filePath;
-    /// Backing path when \ref sourceKind is \ref ShaderModuleSourceKind::filePath.
+    /// Backing path when `sourceKind` is `filePath`.
     std::string path;
-    /// UTF-8 GLSL source text when \ref sourceKind is \ref ShaderModuleSourceKind::glslText.
+    /// UTF-8 GLSL source text when `sourceKind` is `glslText`.
     std::string glslText;
-    /// Owned SPIR-V bytes when \ref sourceKind is \ref ShaderModuleSourceKind::spirvBinary.
+    /// Owned SPIR-V bytes when `sourceKind` is `spirvBinary`.
     std::vector<std::byte> spirvBytes;
     /// Optional debug label for diagnostics and cache identity.
     std::string debugLabel;
@@ -215,21 +215,21 @@ struct GraphInputDefinition {
     std::string name;
     /// Selects which payload fields are consumed.
     GraphInputSourceKind sourceKind = GraphInputSourceKind::intValues;
-    /// Integer payload for \ref GraphInputSourceKind::intValues.
+    /// Integer payload for `intValues` sources.
     std::vector<int32_t> intValues;
-    /// Unsigned integer payload for \ref GraphInputSourceKind::uintValues.
+    /// Unsigned integer payload for `uintValues` sources.
     std::vector<uint32_t> uintValues;
-    /// Float payload for \ref GraphInputSourceKind::floatValues.
+    /// Float payload for `floatValues` sources.
     std::vector<float> floatValues;
-    /// Double payload for \ref GraphInputSourceKind::doubleValues.
+    /// Double payload for `doubleValues` sources.
     std::vector<double> doubleValues;
-    /// Texture path for \ref GraphInputSourceKind::textureFile.
+    /// Texture path for `textureFile` sources.
     std::string texturePath;
-    /// Referenced output name for \ref GraphInputSourceKind::passOutput.
+    /// Referenced output name for `passOutput` sources.
     std::string referencedOutputName;
-    /// Referenced pass index for \ref GraphInputSourceKind::passOutput.
+    /// Referenced pass index for `passOutput` sources.
     size_t referencedPassIndex = 0;
-    /// Graph texture name for \ref GraphInputSourceKind::graphTexture.
+    /// Graph texture name for `graphTexture` sources.
     std::string graphTextureName;
     /// Selects one element of an array-valued target input.
     bool usesArrayElement = false;
@@ -241,7 +241,7 @@ struct GraphInputDefinition {
     size_t referencedOutputArrayElement = 0;
     /// Loader or interpretation attributes.
     std::vector<GraphAttribute> attributes;
-    /// Host-memory texture payload for \ref GraphInputSourceKind::hostTexture.
+    /// Host-memory texture payload for `hostTexture` sources.
     std::shared_ptr<HostImageData> hostTexture;
 };
 
@@ -339,7 +339,7 @@ struct GraphInputOverride {
     bool usesArrayElement = false;
     /// Zero-based array element selected when \ref usesArrayElement is true.
     size_t arrayElement = 0;
-    /// Host-memory texture payload for \ref GraphInputSourceKind::hostTexture.
+    /// Host-memory texture payload for `hostTexture` sources.
     std::shared_ptr<HostImageData> hostTexture;
 };
 
@@ -355,9 +355,9 @@ struct GraphExecutionResult {
     bool success = false;
     /// Failure details when \ref success is false.
     std::string errorMessage;
-    /// Host-captured outputs keyed by `name::passIndex` or `name[index]::passIndex`.
+    /// Host-captured outputs keyed by strings such as `name::0` or `name[index]::0`.
     std::map<std::string, HostImageData> capturedOutputs;
-    /// Captured atomic counter values keyed by `name::passIndex` or `name[index]::passIndex`.
+    /// Captured atomic counter values keyed by strings such as `name::0` or `name[index]::0`.
     std::map<std::string, std::vector<uint32_t>> capturedAtomicCounters;
 };
 

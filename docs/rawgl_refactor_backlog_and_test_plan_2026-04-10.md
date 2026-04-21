@@ -421,6 +421,10 @@ Rule:
 
 The public API and core architecture are now stable enough to start incremental API documentation instead of waiting for the final polish pass.
 
+Reference strategy note:
+
+- [rawgl_documentation_strategy_2026-04-21.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_documentation_strategy_2026-04-21.md)
+
 Immediate direction:
 
 1. Add Doxygen comments to the exported API first.

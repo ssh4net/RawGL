@@ -293,6 +293,37 @@ def captured_counter_values(result):
     return converted
 
 
+def save_image(image, path, *, bits=16, alpha_channel=None, attributes=None, io_runtime=None):
+    """Save one HostImageData or NumPy image to disk through rawgl.io."""
+
+    io_runtime_type = globals().get("IoRuntime")
+    image_save_request_type = globals().get("ImageSaveRequest")
+    if io_runtime_type is None or image_save_request_type is None:
+        raise RuntimeError("rawgl.save_image() requires the core Python bindings")
+
+    if _is_numpy_array(image):
+        host_image = make_host_image(image)
+    elif isinstance(image, HostImageData):
+        host_image = image
+    else:
+        raise TypeError("save_image() expects a HostImageData or NumPy array")
+
+    if io_runtime is None:
+        io_runtime = io_runtime_type()
+
+    request = image_save_request_type()
+    request.path = str(path)
+    request.bits = int(bits)
+    request.alpha_channel = -1 if alpha_channel is None else int(alpha_channel)
+    request.attributes = _coerce_attributes(attributes)
+    request.image = host_image
+
+    result = io_runtime.save_image_file(request)
+    if not result.success:
+        raise RuntimeError(result.error_message or f"failed to save image '{path}'")
+    return result
+
+
 def _apply_input_scalar_or_sequence(binding, name: str, value) -> InputBinding:
     if isinstance(value, bool):
         binding.source_kind = InputSourceKind.int_values

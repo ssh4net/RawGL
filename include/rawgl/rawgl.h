@@ -62,7 +62,7 @@ struct InputBinding {
     std::vector<uint32_t> uintValues;
     std::vector<float> floatValues;
     std::vector<double> doubleValues;
-    /// File path used only when \ref sourceKind is `textureFile`.
+    /// File path used only when `sourceKind` is `textureFile`.
     /// Prefer `hostTexture` or `rawgl::io::IoRuntime` materialization for new code.
     std::string texturePath;
     std::string referencedOutputName;
@@ -157,7 +157,7 @@ struct InputOverride {
     std::vector<uint32_t> uintValues;
     std::vector<float> floatValues;
     std::vector<double> doubleValues;
-    /// File path used only when \ref sourceKind is `textureFile`.
+    /// File path used only when `sourceKind` is `textureFile`.
     /// Prefer `hostTexture` or `rawgl::io::IoRuntime` materialization for new code.
     std::string texturePath;
     std::vector<Attribute> attributes;
@@ -188,9 +188,9 @@ struct RunResult {
     bool success = false;
     /// Failure details when \ref success is false.
     std::string errorMessage;
-    /// Host-captured outputs keyed by `name::passIndex` or `name[index]::passIndex`.
+    /// Host-captured outputs keyed by strings such as `name::0` or `name[index]::0`.
     std::map<std::string, HostImageData> capturedOutputs;
-    /// Captured counter values keyed by `name::passIndex` or `name[index]::passIndex`.
+    /// Captured counter values keyed by strings such as `name::0` or `name[index]::0`.
     std::map<std::string, std::vector<uint32_t>> capturedCounters;
 };
 

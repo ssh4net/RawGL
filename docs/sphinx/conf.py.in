@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+
+from __future__ import annotations
+
+import importlib.util
+import warnings
+
+from sphinx.deprecation import RemovedInSphinx80Warning
+
+project = "RawGL"
+author = "RawGL contributors"
+release = "@PROJECT_VERSION@"
+version = "@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@"
+
+master_doc = "index"
+default_role = "code"
+
+extensions = [
+    "breathe",
+]
+
+exclude_patterns: list[str] = []
+templates_path: list[str] = []
+html_static_path: list[str] = []
+
+html_theme = "alabaster"
+if importlib.util.find_spec("furo") is not None:
+    html_theme = "furo"
+
+warnings.filterwarnings(
+    "ignore",
+    category=RemovedInSphinx80Warning,
+    module=r"breathe\.project",
+)
+
+breathe_projects = {
+    "rawgl": r"@RAWGL_DOXYGEN_XML_DIR@",
+}
+breathe_default_project = "rawgl"
+breathe_domain_by_extension = {"h": "cpp"}
+primary_domain = "cpp"
+highlight_language = "none"

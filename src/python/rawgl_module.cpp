@@ -459,8 +459,34 @@ NB_MODULE(_rawgl, module)
         .def_rw("decode_worker_count", &rawgl::io::IoRuntimeOptions::decodeWorkerCount)
         .def_rw("encode_worker_count", &rawgl::io::IoRuntimeOptions::encodeWorkerCount);
 
+    nb::class_<rawgl::io::ImageLoadRequest>(module, "ImageLoadRequest")
+        .def(nb::init<>())
+        .def_rw("path", &rawgl::io::ImageLoadRequest::path)
+        .def_rw("attributes", &rawgl::io::ImageLoadRequest::attributes);
+
+    nb::class_<rawgl::io::ImageLoadResult>(module, "ImageLoadResult")
+        .def(nb::init<>())
+        .def_rw("success", &rawgl::io::ImageLoadResult::success)
+        .def_rw("error_message", &rawgl::io::ImageLoadResult::errorMessage)
+        .def_rw("image", &rawgl::io::ImageLoadResult::image);
+
+    nb::class_<rawgl::io::ImageSaveRequest>(module, "ImageSaveRequest")
+        .def(nb::init<>())
+        .def_rw("path", &rawgl::io::ImageSaveRequest::path)
+        .def_rw("attributes", &rawgl::io::ImageSaveRequest::attributes)
+        .def_rw("alpha_channel", &rawgl::io::ImageSaveRequest::alphaChannel)
+        .def_rw("bits", &rawgl::io::ImageSaveRequest::bits)
+        .def_rw("image", &rawgl::io::ImageSaveRequest::image);
+
+    nb::class_<rawgl::io::ImageSaveResult>(module, "ImageSaveResult")
+        .def(nb::init<>())
+        .def_rw("success", &rawgl::io::ImageSaveResult::success)
+        .def_rw("error_message", &rawgl::io::ImageSaveResult::errorMessage);
+
     nb::class_<rawgl::io::IoRuntime>(module, "IoRuntime")
         .def(nb::init<const rawgl::io::IoRuntimeOptions&>(), nb::arg("options") = rawgl::io::IoRuntimeOptions {})
+        .def("load_image_file", &rawgl::io::IoRuntime::loadImageFile, nb::arg("request"))
+        .def("save_image_file", &rawgl::io::IoRuntime::saveImageFile, nb::arg("request"))
         .def("prepare",
              [](const rawgl::io::IoRuntime& ioRuntime, const rawgl::Session& session, const rawgl::Workflow& workflow) {
                  rawgl::io::PrepareWorkflowResult prepareResult = ioRuntime.prepare(session, workflow);
@@ -479,6 +505,9 @@ NB_MODULE(_rawgl, module)
              nb::arg("session"),
              nb::arg("workflow"),
              nb::arg("settings") = rawgl::RunSettings {});
+
+    module.def("load_image_file", &rawgl::io::LoadImageFile, nb::arg("request"));
+    module.def("save_image_file", &rawgl::io::SaveImageFile, nb::arg("request"));
 
     nb::class_<rawgl::batch::BatchRunnerOptions>(module, "BatchRunnerOptions")
         .def(nb::init<>())

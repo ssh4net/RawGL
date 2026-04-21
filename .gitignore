@@ -43,3 +43,5 @@ logs
 *.aps
 *.vcxproj.user
 __pycache__
+/examples/Sequence/BitshiftSequence_frames
+*.png
