@@ -5,10 +5,15 @@
 
 #include "common.h"
 #include "texture.h"
-#include "image_io.h"
 #include "program.h"
 
+#include <cmath>
+#include <cstring>
 #include <functional>
+
+namespace rawgl::io {
+class IoRuntimeService;
+}
 
 enum class hres {
     OK  = 0,
@@ -198,11 +203,8 @@ struct passCounters {
 
 struct PassOutput {
     std::string internalFormatText;
-    std::string path;
-    std::map<std::string, std::string> attributes;
     int channels;
     int alphaChannel;
-    int bits;
 
     GLProgramOutput* output;
     GLProgramUniform* uniform;
@@ -210,12 +212,7 @@ struct PassOutput {
     bool usesArrayElement = false;
     size_t arrayElement = 0;
 
-    OIIO::TypeDesc format;
-    bool formatDefaulted;
-
     PassOutput();
-
-    void saveTexture();
 };
 
 struct SequencePass {
@@ -396,6 +393,7 @@ struct SequenceRuntimeConfig {
     std::map<std::string, std::shared_ptr<Texture>> sharedTextures;
     std::map<std::string, std::shared_ptr<SequenceSharedMeshData>> sharedMeshes;
     std::map<std::string, std::shared_ptr<SequenceSharedGpuMesh>> sharedGpuMeshes;
+    std::shared_ptr<rawgl::io::IoRuntimeService> ioRuntime;
 };
 
 struct SequenceSystemUniformState {
@@ -461,6 +459,7 @@ private:
     std::map<std::string, std::shared_ptr<Texture>> m_textures;
     std::map<std::string, std::shared_ptr<SequenceSharedMeshData>> m_sharedMeshes;
     std::map<std::string, std::shared_ptr<SequenceSharedGpuMesh>> m_sharedGpuMeshes;
+    std::shared_ptr<rawgl::io::IoRuntimeService> m_ioRuntime;
 
     std::vector<SequencePass> m_passes;
     std::vector<PassExecutionPlan> m_executionPlan;
@@ -483,7 +482,6 @@ private:
     void capturePassAtomicCounterResults(SequencePass& pass);
     void executeComputePass(const PassExecutionPlan& plan, int textureIndex);
     void executeGraphicsPass(const PassExecutionPlan& plan);
-    void savePassOutputs(const PassExecutionPlan& plan);
     void destroyAtomicCounterBuffers();
     void initCommon();
     void initializeFromRuntimeConfig(const SequenceRuntimeConfig& runtimeConfig);

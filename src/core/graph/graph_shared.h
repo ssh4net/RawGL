@@ -16,6 +16,9 @@ build_addressed_resource_name(const std::string& name, bool usesArrayElement, si
 std::string
 build_pass_resource_key(const std::string& name, size_t passIndex);
 
+std::string
+build_texture_resource_key(const std::string& path, const std::vector<GraphAttribute>& attributes);
+
 const ShaderResourceInfo*
 find_resource_by_name(const std::vector<ShaderResourceInfo>& resources, const std::string& name);
 

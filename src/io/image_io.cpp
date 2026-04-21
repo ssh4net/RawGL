@@ -4,24 +4,13 @@
 
 #include "image_io.h"
 #include "log.h"
+#include "path_utils.h"
 #include "timer.h"
 
 #include <OpenImageIO/filesystem.h>
 
 #include <libraw/libraw.h>
 #include <libraw/libraw_version.h>
-
-// TODO: Move function to File_IO
-extern std::string
-get_file_ext(const std::string& filepath)
-{
-    std::string::size_type idx = filepath.rfind('.');
-    std::string ext            = (idx == std::string::npos) ? "" : filepath.substr(idx + 1);
-    for (auto&& c : ext) {
-        c = ::tolower(c);
-    }
-    return ext;
-}
 
 static image_utils::ImageFileFormat
 get_file_format(const std::string& ext)

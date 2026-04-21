@@ -4,6 +4,12 @@ Date: 2026-04-16
 
 Purpose: define the public API boundary that CLI and Python should use, without exposing internal graph-runtime and execution-planning details as part of the long-term library contract.
 
+Related architectural notes:
+
+- [rawgl_type_support_and_python_binding_plan_2026-04-15.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_type_support_and_python_binding_plan_2026-04-15.md)
+- [rawgl_module_split_2026-04-17.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_module_split_2026-04-17.md)
+- [rawgl_batch_design_2026-04-18.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_batch_design_2026-04-18.md)
+
 ## 1. Current problem
 
 The current public header [rawgl_core.h](/mnt/w/VisualStudio/RawGL/include/rawgl/rawgl_core.h) is useful for refactor bring-up, but it is still too close to internal implementation structure.

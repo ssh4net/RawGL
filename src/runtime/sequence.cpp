@@ -5,9 +5,10 @@
 #include "sequence.h"
 
 #include "gl_utils.h"
+#include "io_runtime.h"
 #include "timer.h"
 #include "log.h"
-#include "image_io.h"
+#include "texture_loader.h"
 
 #include <future>
 #include <sstream>
@@ -46,21 +47,9 @@ throw_sequence_error(const std::string& message)
     throw std::runtime_error(message);
 }
 
-struct LoadedTextureData {
-    bool valid            = false;
-    int width             = 0;
-    int height            = 0;
-    int channels          = 0;
-    int alphaChannel      = -1;
-    GLenum internalFormat = 0;
-    GLenum type           = 0;
-    OIIO::TypeDesc format;
-    void* data = nullptr;
-};
-
 struct PendingTextureLoad {
     std::string key;
-    std::future<LoadedTextureData> future;
+    std::future<rawgl::io::LoadedTextureData> future;
 };
 
 static const float RAWGL_DEFAULT_VERTS[]
@@ -87,6 +76,13 @@ find_input_override(const std::vector<SequenceExecutionInputOverride>& inputOver
     }
 
     return nullptr;
+}
+
+static const rawgl::io::IoRuntimeService&
+resolve_io_runtime(const std::shared_ptr<rawgl::io::IoRuntimeService>& ioRuntime)
+{
+    static const rawgl::io::IoRuntimeService defaultIoRuntime;
+    return ioRuntime ? *ioRuntime : defaultIoRuntime;
 }
 
 static std::string
@@ -183,70 +179,6 @@ set_addressed_double_uniform(const PassInput& input, const GLdouble* values)
     case GL_DOUBLE_MAT4x2: glUniformMatrix4x2dv(input.addressedLocation, 1, false, values); break;
     case GL_DOUBLE_MAT4x3: glUniformMatrix4x3dv(input.addressedLocation, 1, false, values); break;
     default: throw_sequence_error("unsupported addressed double uniform type");
-    }
-}
-
-static void
-resolve_texture_storage(LoadedTextureData& texture)
-{
-    const GLenum formats[5][4] = {
-        { GL_R8, GL_RG8, GL_RGB8, GL_RGBA8 },
-        { GL_R16, GL_RG16, GL_RGB16, GL_RGBA16 },
-        { GL_R32UI, GL_RG32UI, GL_RGB32UI, GL_RGBA32UI },
-        { GL_R16F, GL_RG16F, GL_RGB16F, GL_RGBA16F },
-        { GL_R32F, GL_RG32F, GL_RGB32F, GL_RGBA32F },
-    };
-
-    if (texture.channels < 1 || texture.channels > 4) {
-        throw std::runtime_error("Unsupported image channel count");
-    }
-
-    switch (texture.format.basetype) {
-    case OIIO::TypeDesc::UINT8:
-        texture.internalFormat = formats[0][texture.channels - 1];
-        texture.type           = GL_UNSIGNED_BYTE;
-        break;
-    case OIIO::TypeDesc::UINT16:
-        texture.internalFormat = formats[1][texture.channels - 1];
-        texture.type           = GL_UNSIGNED_SHORT;
-        break;
-    case OIIO::TypeDesc::UINT32:
-        texture.internalFormat = formats[2][texture.channels - 1];
-        texture.type           = GL_UNSIGNED_INT;
-        break;
-    case OIIO::TypeDesc::HALF:
-        texture.internalFormat = formats[3][texture.channels - 1];
-        texture.type           = GL_HALF_FLOAT;
-        break;
-    case OIIO::TypeDesc::FLOAT:
-        texture.internalFormat = formats[4][texture.channels - 1];
-        texture.type           = GL_FLOAT;
-        break;
-    default: throw std::runtime_error("Unsupported image type");
-    }
-}
-
-static LoadedTextureData
-load_texture_file(const std::string& path, const std::map<std::string, std::string>& attributes)
-{
-    LoadedTextureData texture;
-
-    if (!image_utils::load_image(path, attributes, texture.width, texture.height, texture.data, texture.channels,
-                                 texture.alphaChannel, texture.format)) {
-        return texture;
-    }
-
-    resolve_texture_storage(texture);
-    texture.valid = true;
-    return texture;
-}
-
-static void
-release_loaded_texture_data(LoadedTextureData& texture)
-{
-    if (texture.data != nullptr) {
-        free(texture.data);
-        texture.data = nullptr;
     }
 }
 
@@ -588,6 +520,7 @@ Sequence::initializeFromRuntimeConfig(const SequenceRuntimeConfig& runtimeConfig
     m_textures        = runtimeConfig.sharedTextures;
     m_sharedMeshes    = runtimeConfig.sharedMeshes;
     m_sharedGpuMeshes = runtimeConfig.sharedGpuMeshes;
+    m_ioRuntime       = runtimeConfig.ioRuntime;
     buildPassesFromRuntimeConfig(runtimeConfig);
 
     int passIndex = 0;
@@ -643,14 +576,19 @@ Sequence::preloadInputTextures()
 
             PendingTextureLoad pendingLoad;
             pendingLoad.key    = textureKey;
-            pendingLoad.future = std::async(std::launch::async, &load_texture_file, input.path, input.attributes);
+            pendingLoad.future = std::async(std::launch::async,
+                                            [this](std::string path, std::map<std::string, std::string> attributes) {
+                                                return resolve_io_runtime(m_ioRuntime).loadTextureFileData(path, attributes);
+                                            },
+                                            input.path,
+                                            input.attributes);
             pendingTextureIndex.insert({ textureKey, pendingTextureLoads.size() });
             pendingTextureLoads.push_back(std::move(pendingLoad));
         }
     }
 
     for (auto& pendingLoad : pendingTextureLoads) {
-        LoadedTextureData textureData;
+        rawgl::io::LoadedTextureData textureData;
 
         try {
             textureData = pendingLoad.future.get();
@@ -664,9 +602,9 @@ Sequence::preloadInputTextures()
 
         m_textures.insert({ pendingLoad.key,
                             std::make_shared<Texture>(textureData.width, textureData.height, textureData.internalFormat,
-                                                      textureData.type, textureData.data, textureData.alphaChannel) });
-
-        release_loaded_texture_data(textureData);
+                                                      textureData.type,
+                                                      textureData.bytes.empty() ? nullptr : textureData.bytes.data(),
+                                                      textureData.alphaChannel) });
     }
 }
 
@@ -683,10 +621,6 @@ Sequence::ensurePassOutputTextures(SequencePass& pass, int passIndex)
         if (output.alphaChannel >= output.channels) {
             throw_sequence_error("out_alpha_channel (" + outputIt.first
                                  + "): index exceeds max channel index for this image.");
-        }
-
-        if (!output.path.empty()) {
-            output.format = image_utils::get_output_format(output.path, output.bits, output.formatDefaulted);
         }
 
         const std::string textureName                  = outputIt.first + "::" + std::to_string(passIndex);
@@ -1451,14 +1385,6 @@ Sequence::executeGraphicsPass(const PassExecutionPlan& plan)
 }
 
 void
-Sequence::savePassOutputs(const PassExecutionPlan& plan)
-{
-    for (const PlannedOutputBinding& binding : plan.outputs) {
-        binding.output->saveTexture();
-    }
-}
-
-void
 Sequence::destroyAtomicCounterBuffers()
 {
     for (auto& pass : m_passes) {
@@ -1523,7 +1449,6 @@ Sequence::run(const SequenceSystemUniformState& systemUniforms,
             }
 
             capturePassAtomicCounterResults(pass);
-            savePassOutputs(plan);
         }
     } catch (...) {
         glBindVertexArray(0);
@@ -1627,5 +1552,3 @@ Sequence::releaseRunOutputTextures()
     m_runTexturesDirty = true;
 }
 
-#define STRING_USED_DEFAULTS "(used default)"
-#define STRING_CHANGED_TO_SUPPORTED "(changed to highest supported value for file format)"

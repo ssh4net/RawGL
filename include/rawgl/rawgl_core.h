@@ -396,6 +396,10 @@ public:
     GraphBuildResult buildGraph(const GraphBuildRequest& request) const;
     /// Returns current cache statistics for this context.
     ContextCacheStats cacheStats() const;
+    /// Makes the owned OpenGL context current on the calling thread.
+    void makeContextCurrent() const;
+    /// Releases the owned OpenGL context from the calling thread.
+    void releaseContext() const;
 
 private:
     std::shared_ptr<RawGLContextState> m_state;

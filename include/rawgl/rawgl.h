@@ -16,10 +16,21 @@
 
 namespace rawgl {
 
+namespace batch {
+class BatchRunner;
+}
+
 /// Transitional artist-facing façade over the current graph-oriented core API.
 ///
 /// This header gives CLI and Python a workflow-oriented public surface while
 /// the lower-level `rawgl_core.h` types remain available for compatibility.
+///
+/// Long-term direction:
+/// - `rawgl_core` should prefer host-memory resources and prepared workflows.
+/// - file-backed inputs and outputs should be materialized through
+///   `rawgl::io::IoRuntime` before execution reaches `Session`.
+/// - `textureFile` and output `path` fields remain here for compatibility while
+///   the IO-backed path becomes the normal frontend entry point.
 
 /// Name/value metadata attached to workflow resources.
 struct Attribute {
@@ -28,6 +39,10 @@ struct Attribute {
 };
 
 /// Source variant for one input binding.
+///
+/// `textureFile` is a transitional compatibility mode. New frontend code should
+/// usually prefer `hostTexture` or let `rawgl::io::IoRuntime` rewrite file
+/// paths into host-memory images before workflow preparation or execution.
 enum class InputSourceKind {
     intValues,
     uintValues,
@@ -47,6 +62,8 @@ struct InputBinding {
     std::vector<uint32_t> uintValues;
     std::vector<float> floatValues;
     std::vector<double> doubleValues;
+    /// File path used only when \ref sourceKind is `textureFile`.
+    /// Prefer `hostTexture` or `rawgl::io::IoRuntime` materialization for new code.
     std::string texturePath;
     std::string referencedOutputName;
     size_t referencedPassIndex = 0;
@@ -71,6 +88,9 @@ struct CounterBinding {
 /// Declared output binding for one pass.
 struct OutputBinding {
     std::string name;
+    /// Optional file path compatibility field.
+    /// New frontend code should usually keep execution host-memory oriented and
+    /// route file saves through `rawgl::io::IoRuntime`.
     std::string path;
     std::string format = "rgb32f";
     int channels = 3;
@@ -120,6 +140,10 @@ struct Pass {
 struct Workflow {
     /// Verbosity forwarded to the core compiler/executor.
     int verbosity = 3;
+    /// Transitional note:
+    /// file-backed inputs and outputs are still representable here, but the
+    /// long-term default path is `rawgl::io::IoRuntime + Session`, not direct
+    /// file-path translation inside core execution.
     /// Ordered pass list.
     std::vector<Pass> passes;
 };
@@ -133,6 +157,8 @@ struct InputOverride {
     std::vector<uint32_t> uintValues;
     std::vector<float> floatValues;
     std::vector<double> doubleValues;
+    /// File path used only when \ref sourceKind is `textureFile`.
+    /// Prefer `hostTexture` or `rawgl::io::IoRuntime` materialization for new code.
     std::string texturePath;
     std::vector<Attribute> attributes;
     bool usesArrayElement = false;
@@ -598,6 +624,11 @@ public:
     }
 
 private:
+    friend class batch::BatchRunner;
+
+    void makeExecutionContextCurrent() const { m_context.makeContextCurrent(); }
+    void releaseExecutionContext() const { m_context.releaseContext(); }
+
     RawGLContext m_context;
 };
 

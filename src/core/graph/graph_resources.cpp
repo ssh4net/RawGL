@@ -3,40 +3,15 @@
 
 #include "graph_resources.h"
 
-#include "image_io.h"
 #include "mesh_io.h"
 #include "graph_shared.h"
 
-#include <cstdlib>
 #include <cstring>
 #include <sstream>
 #include <stdexcept>
 
 namespace rawgl {
 namespace {
-
-struct LoadedTextureData {
-    bool valid            = false;
-    int width             = 0;
-    int height            = 0;
-    int channels          = 0;
-    int alphaChannel      = -1;
-    GLenum internalFormat = 0;
-    GLenum type           = 0;
-    OIIO::TypeDesc format;
-    void* data = nullptr;
-};
-
-static std::string
-build_texture_cache_key(const std::string& path, const std::vector<GraphAttribute>& attributes)
-{
-    std::ostringstream stream;
-    stream << "file:" << path;
-    for (const GraphAttribute& attribute : attributes) {
-        stream << '\x1F' << attribute.name << '=' << attribute.value;
-    }
-    return stream.str();
-}
 
 static std::string
 build_mesh_cache_key(const GraphMeshDefinition& mesh)
@@ -164,106 +139,20 @@ validate_host_image_data(const HostImageData& hostImage, const std::string& cont
     }
 }
 
-static void
-resolve_texture_storage(LoadedTextureData& texture)
-{
-    const GLenum formats[5][4] = {
-        { GL_R8, GL_RG8, GL_RGB8, GL_RGBA8 },
-        { GL_R16, GL_RG16, GL_RGB16, GL_RGBA16 },
-        { GL_R32UI, GL_RG32UI, GL_RGB32UI, GL_RGBA32UI },
-        { GL_R16F, GL_RG16F, GL_RGB16F, GL_RGBA16F },
-        { GL_R32F, GL_RG32F, GL_RGB32F, GL_RGBA32F },
-    };
-
-    if (texture.channels < 1 || texture.channels > 4) {
-        throw std::runtime_error("Unsupported image channel count");
-    }
-
-    switch (texture.format.basetype) {
-    case OIIO::TypeDesc::UINT8:
-        texture.internalFormat = formats[0][texture.channels - 1];
-        texture.type           = GL_UNSIGNED_BYTE;
-        break;
-    case OIIO::TypeDesc::UINT16:
-        texture.internalFormat = formats[1][texture.channels - 1];
-        texture.type           = GL_UNSIGNED_SHORT;
-        break;
-    case OIIO::TypeDesc::UINT32:
-        texture.internalFormat = formats[2][texture.channels - 1];
-        texture.type           = GL_UNSIGNED_INT;
-        break;
-    case OIIO::TypeDesc::HALF:
-        texture.internalFormat = formats[3][texture.channels - 1];
-        texture.type           = GL_HALF_FLOAT;
-        break;
-    case OIIO::TypeDesc::FLOAT:
-        texture.internalFormat = formats[4][texture.channels - 1];
-        texture.type           = GL_FLOAT;
-        break;
-    default: throw std::runtime_error("Unsupported image type");
-    }
-}
-
-static LoadedTextureData
-load_texture_file(const std::string& path, const std::vector<GraphAttribute>& attributes)
-{
-    LoadedTextureData texture;
-    std::map<std::string, std::string> imageAttributes;
-    for (const GraphAttribute& attribute : attributes) {
-        imageAttributes.insert({ attribute.name, attribute.value });
-    }
-
-    if (!image_utils::load_image(path, imageAttributes, texture.width, texture.height, texture.data, texture.channels,
-                                 texture.alphaChannel, texture.format)) {
-        return texture;
-    }
-
-    resolve_texture_storage(texture);
-    texture.valid = true;
-    return texture;
-}
-
-static void
-release_loaded_texture_data(LoadedTextureData& texture)
-{
-    if (texture.data != nullptr) {
-        free(texture.data);
-        texture.data = nullptr;
-    }
-}
-
 static std::shared_ptr<Texture>
-load_cached_texture_resource(const RawGLContextState& contextState,
-                             const std::string& path,
-                             const std::vector<GraphAttribute>& attributes)
+require_cached_texture_resource(const RawGLContextState& contextState,
+                                const std::string& path,
+                                const std::vector<GraphAttribute>& attributes)
 {
-    const std::string cacheKey = build_texture_cache_key(path, attributes);
+    const std::string cacheKey = build_texture_resource_key(path, attributes);
 
-    {
-        std::shared_lock<std::shared_mutex> readLock(contextState.textureCacheMutex);
-        auto cacheIt = contextState.textureCache.find(cacheKey);
-        if (cacheIt != contextState.textureCache.end()) {
-            return cacheIt->second;
-        }
+    std::shared_lock<std::shared_mutex> readLock(contextState.textureCacheMutex);
+    auto cacheIt = contextState.textureCache.find(cacheKey);
+    if (cacheIt == contextState.textureCache.end() || !cacheIt->second) {
+        throw std::runtime_error("Prepared input texture is missing.");
     }
 
-    LoadedTextureData textureData = load_texture_file(path, attributes);
-    if (!textureData.valid) {
-        throw std::runtime_error("Failed to load an input texture.");
-    }
-
-    std::shared_ptr<Texture> texture =
-        std::make_shared<Texture>(textureData.width, textureData.height, textureData.internalFormat, textureData.type,
-                                  textureData.data, textureData.alphaChannel);
-    release_loaded_texture_data(textureData);
-
-    std::unique_lock<std::shared_mutex> writeLock(contextState.textureCacheMutex);
-    auto [cacheIt, inserted] = contextState.textureCache.insert({ cacheKey, texture });
-    if (!inserted) {
-        return cacheIt->second;
-    }
-
-    return texture;
+    return cacheIt->second;
 }
 
 static std::shared_ptr<SequenceSharedMeshData>
@@ -362,7 +251,7 @@ create_host_texture_resource(const HostImageData& hostImage, const std::string& 
 }
 
 SequenceExecutionInputOverride
-build_sequence_execution_input_override(const RawGLContextState& contextState, const GraphInputOverride& inputOverride)
+build_sequence_execution_input_override(const GraphInputOverride& inputOverride)
 {
     SequenceExecutionInputOverride sequenceOverride;
     sequenceOverride.passIndex = inputOverride.passIndex;
@@ -387,11 +276,6 @@ build_sequence_execution_input_override(const RawGLContextState& contextState, c
     case GraphInputSourceKind::doubleValues:
         sequenceOverride.kind         = SequenceExecutionInputOverrideKind::doubleValues;
         sequenceOverride.doubleValues = inputOverride.doubleValues;
-        break;
-    case GraphInputSourceKind::textureFile:
-        sequenceOverride.kind    = SequenceExecutionInputOverrideKind::texture;
-        sequenceOverride.texture =
-            load_cached_texture_resource(contextState, inputOverride.texturePath, inputOverride.attributes);
         break;
     case GraphInputSourceKind::hostTexture:
         if (!inputOverride.hostTexture) {
@@ -433,9 +317,10 @@ build_resource_plan(const RawGLContextState& contextState, const RawGLGraphState
 
         for (const GraphInputDefinition& inputDefinition : resourcePass.inputs) {
             if (inputDefinition.sourceKind == GraphInputSourceKind::textureFile) {
-                const std::string cacheKey = build_texture_cache_key(inputDefinition.texturePath, inputDefinition.attributes);
+                const std::string cacheKey = build_texture_resource_key(inputDefinition.texturePath,
+                                                                        inputDefinition.attributes);
                 resourcePlan.sharedTextures[cacheKey] =
-                    load_cached_texture_resource(contextState, inputDefinition.texturePath, inputDefinition.attributes);
+                    require_cached_texture_resource(contextState, inputDefinition.texturePath, inputDefinition.attributes);
             }
         }
 

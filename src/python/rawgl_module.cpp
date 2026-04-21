@@ -15,7 +15,9 @@
 #include <vector>
 
 #if RAWGL_PYTHON_BIND_CORE
+#    include <rawgl/rawgl_batch.h>
 #    include <rawgl/rawgl.h>
+#    include <rawgl/rawgl_io.h>
 #endif
 
 namespace nb = nanobind;
@@ -27,6 +29,18 @@ struct PythonPrepareResult {
     bool success = false;
     std::string errorMessage;
     std::shared_ptr<rawgl::PreparedWorkflow> workflow;
+};
+
+struct PythonIoPrepareResult {
+    bool success = false;
+    std::string errorMessage;
+    std::shared_ptr<rawgl::io::PreparedIoWorkflow> workflow;
+};
+
+struct PythonBatchPrepareResult {
+    bool success = false;
+    std::string errorMessage;
+    std::shared_ptr<rawgl::batch::BatchPreparedWorkflow> workflow;
 };
 #endif
 
@@ -381,6 +395,9 @@ NB_MODULE(_rawgl, module)
     nb::class_<rawgl::PreparedWorkflow>(module, "PreparedWorkflow")
         .def("run", &rawgl::PreparedWorkflow::run, nb::arg("settings") = rawgl::RunSettings {});
 
+    nb::class_<rawgl::io::PreparedIoWorkflow>(module, "PreparedIoWorkflow")
+        .def("run", &rawgl::io::PreparedIoWorkflow::run, nb::arg("settings") = rawgl::RunSettings {});
+
     nb::class_<PythonPrepareResult>(module, "PrepareResult")
         .def(nb::init<>())
         .def_rw("success", &PythonPrepareResult::success)
@@ -389,6 +406,24 @@ NB_MODULE(_rawgl, module)
         .def("take_workflow",
              [](PythonPrepareResult& result) { return std::move(result.workflow); },
              "Consume and return the prepared workflow, or None when preparation failed.");
+
+    nb::class_<PythonIoPrepareResult>(module, "IoPrepareResult")
+        .def(nb::init<>())
+        .def_rw("success", &PythonIoPrepareResult::success)
+        .def_rw("error_message", &PythonIoPrepareResult::errorMessage)
+        .def("has_workflow", [](const PythonIoPrepareResult& result) { return static_cast<bool>(result.workflow); })
+        .def("take_workflow",
+             [](PythonIoPrepareResult& result) { return std::move(result.workflow); },
+             "Consume and return the prepared IO workflow, or None when preparation failed.");
+
+    nb::class_<PythonBatchPrepareResult>(module, "BatchPrepareResult")
+        .def(nb::init<>())
+        .def_rw("success", &PythonBatchPrepareResult::success)
+        .def_rw("error_message", &PythonBatchPrepareResult::errorMessage)
+        .def("has_workflow", [](const PythonBatchPrepareResult& result) { return static_cast<bool>(result.workflow); })
+        .def("take_workflow",
+             [](PythonBatchPrepareResult& result) { return std::move(result.workflow); },
+             "Consume and return the prepared batch workflow, or None when preparation failed.");
 
     nb::class_<rawgl::SessionStats>(module, "SessionStats")
         .def(nb::init<>())
@@ -418,5 +453,102 @@ NB_MODULE(_rawgl, module)
              nb::arg("settings") = rawgl::RunSettings {},
              "Prepare and run one workflow in a single call.")
         .def("stats", &rawgl::Session::stats);
+
+    nb::class_<rawgl::io::IoRuntimeOptions>(module, "IoRuntimeOptions")
+        .def(nb::init<>())
+        .def_rw("decode_worker_count", &rawgl::io::IoRuntimeOptions::decodeWorkerCount)
+        .def_rw("encode_worker_count", &rawgl::io::IoRuntimeOptions::encodeWorkerCount);
+
+    nb::class_<rawgl::io::IoRuntime>(module, "IoRuntime")
+        .def(nb::init<const rawgl::io::IoRuntimeOptions&>(), nb::arg("options") = rawgl::io::IoRuntimeOptions {})
+        .def("prepare",
+             [](const rawgl::io::IoRuntime& ioRuntime, const rawgl::Session& session, const rawgl::Workflow& workflow) {
+                 rawgl::io::PrepareWorkflowResult prepareResult = ioRuntime.prepare(session, workflow);
+                 PythonIoPrepareResult result;
+                 result.success = prepareResult.success;
+                 result.errorMessage = std::move(prepareResult.errorMessage);
+                 if (prepareResult.workflow) {
+                     result.workflow.reset(prepareResult.workflow.release());
+                 }
+                 return result;
+             },
+             nb::arg("session"),
+             nb::arg("workflow"))
+        .def("run",
+             &rawgl::io::IoRuntime::run,
+             nb::arg("session"),
+             nb::arg("workflow"),
+             nb::arg("settings") = rawgl::RunSettings {});
+
+    nb::class_<rawgl::batch::BatchRunnerOptions>(module, "BatchRunnerOptions")
+        .def(nb::init<>())
+        .def_rw("max_in_flight_jobs", &rawgl::batch::BatchRunnerOptions::maxInFlightJobs)
+        .def_rw("prepare_queue_capacity", &rawgl::batch::BatchRunnerOptions::prepareQueueCapacity)
+        .def_rw("execute_queue_capacity", &rawgl::batch::BatchRunnerOptions::executeQueueCapacity)
+        .def_rw("save_queue_capacity", &rawgl::batch::BatchRunnerOptions::saveQueueCapacity)
+        .def_rw("prepare_worker_count", &rawgl::batch::BatchRunnerOptions::prepareWorkerCount)
+        .def_rw("save_worker_count", &rawgl::batch::BatchRunnerOptions::saveWorkerCount)
+        .def_rw("gpu_worker_count", &rawgl::batch::BatchRunnerOptions::gpuWorkerCount)
+        .def_rw("host_memory_budget_bytes", &rawgl::batch::BatchRunnerOptions::hostMemoryBudgetBytes)
+        .def_rw("gpu_memory_budget_bytes", &rawgl::batch::BatchRunnerOptions::gpuMemoryBudgetBytes)
+        .def_rw("preserve_submit_order", &rawgl::batch::BatchRunnerOptions::preserveSubmitOrder);
+
+    nb::class_<rawgl::batch::BatchProgress>(module, "BatchProgress")
+        .def(nb::init<>())
+        .def_rw("submitted_jobs", &rawgl::batch::BatchProgress::submittedJobs)
+        .def_rw("completed_jobs", &rawgl::batch::BatchProgress::completedJobs)
+        .def_rw("failed_jobs", &rawgl::batch::BatchProgress::failedJobs)
+        .def_rw("cancelled_jobs", &rawgl::batch::BatchProgress::cancelledJobs)
+        .def_rw("in_flight_jobs", &rawgl::batch::BatchProgress::inFlightJobs);
+
+    nb::class_<rawgl::batch::BatchSubmitRequest>(module, "BatchSubmitRequest")
+        .def(nb::init<>())
+        .def_rw("settings", &rawgl::batch::BatchSubmitRequest::settings);
+
+    nb::class_<rawgl::batch::BatchResult>(module, "BatchResult")
+        .def(nb::init<>())
+        .def_rw("submit_index", &rawgl::batch::BatchResult::submitIndex)
+        .def_rw("cancelled", &rawgl::batch::BatchResult::cancelled)
+        .def_rw("run_result", &rawgl::batch::BatchResult::runResult);
+
+    nb::class_<rawgl::batch::BatchCancellationToken>(module, "BatchCancellationToken")
+        .def(nb::init<>())
+        .def("cancel", &rawgl::batch::BatchCancellationToken::cancel)
+        .def("is_cancellation_requested", &rawgl::batch::BatchCancellationToken::isCancellationRequested);
+
+    nb::class_<rawgl::batch::BatchPreparedWorkflow>(module, "BatchPreparedWorkflow");
+
+    nb::class_<rawgl::batch::BatchJobHandle>(module, "BatchJobHandle")
+        .def("wait", &rawgl::batch::BatchJobHandle::wait);
+
+    nb::class_<rawgl::batch::BatchRunner>(module, "BatchRunner")
+        .def(nb::init<rawgl::Session&, const rawgl::batch::BatchRunnerOptions&>(),
+             nb::arg("session"),
+             nb::arg("options") = rawgl::batch::BatchRunnerOptions {},
+             nb::keep_alive<1, 2>())
+        .def(nb::init<rawgl::Session&, const rawgl::io::IoRuntime&, const rawgl::batch::BatchRunnerOptions&>(),
+             nb::arg("session"),
+             nb::arg("io_runtime"),
+             nb::arg("options") = rawgl::batch::BatchRunnerOptions {},
+             nb::keep_alive<1, 2>(),
+             nb::keep_alive<1, 3>())
+        .def("prepare",
+             [](const rawgl::batch::BatchRunner& runner, const rawgl::Workflow& workflow) {
+                 rawgl::batch::BatchPrepareResult prepareResult = runner.prepare(workflow);
+                 PythonBatchPrepareResult result;
+                 result.success = prepareResult.success;
+                 result.errorMessage = std::move(prepareResult.errorMessage);
+                 if (prepareResult.workflow) {
+                     result.workflow.reset(prepareResult.workflow.release());
+                 }
+                 return result;
+             },
+             nb::arg("workflow"))
+        .def("submit",
+             &rawgl::batch::BatchRunner::submit,
+             nb::arg("workflow"),
+             nb::arg("request") = rawgl::batch::BatchSubmitRequest {},
+             nb::arg("cancellation") = static_cast<const rawgl::batch::BatchCancellationToken*>(nullptr))
+        .def("progress", &rawgl::batch::BatchRunner::progress);
 #endif
 }

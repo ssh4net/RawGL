@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import sys
+from pathlib import Path
 
 import rawgl
 
@@ -182,6 +183,35 @@ def verify_system_uniform_mapping(session: rawgl.Session) -> int:
     return 0
 
 
+def verify_io_prepared_workflow(session: rawgl.Session) -> int:
+    output_path = Path("tests/outputs/rawgl_python_io_workflow_smoke.png")
+    output_path.unlink(missing_ok=True)
+
+    prepared = rawgl.prepare_image(
+        INLINE_LUT_FRAGMENT,
+        session=session,
+        size=8,
+        verbosity=0,
+        inputs={
+            "img_size": 8,
+            "lut_size": 4,
+        },
+        output=output_path,
+    )
+
+    if prepared.io_runtime is None:
+        return fail("prepare_image() did not keep an IoRuntime for a file-backed workflow")
+
+    result = prepared.run()
+    if not result.success:
+        return fail(f"IO-backed prepared workflow execution failed: {result.error_message}")
+
+    if not output_path.exists():
+        return fail("IO-backed prepared workflow did not write its output file")
+
+    return 0
+
+
 def main() -> int:
     session = rawgl.Session()
 
@@ -194,6 +224,10 @@ def main() -> int:
         return status
 
     status = verify_system_uniform_mapping(session)
+    if status != 0:
+        return status
+
+    status = verify_io_prepared_workflow(session)
     if status != 0:
         return status
 

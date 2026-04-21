@@ -241,6 +241,23 @@ Current weaknesses:
    - Low-level buffer-planning details are not required for standard CLI/Python workflows.
    - The Python binding is implemented against the façade API, not against transitional internal-style graph structs.
 
+15.3 Split the project into `rawgl_core`, `rawgl_io`, and `rawgl_batch`.
+
+   Design note:
+   - [rawgl_module_split_2026-04-17.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_module_split_2026-04-17.md)
+   - [rawgl_batch_design_2026-04-18.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_batch_design_2026-04-18.md)
+
+   Acceptance:
+   - `rawgl_core` owns synchronous workflow preparation and execution plus host-memory GPU transfer only.
+   - `rawgl_core` no longer links OpenImageIO or file-codec dependencies.
+   - `rawgl_io` owns file image decode/encode, codec-specific metadata handling, and async file-side worker/queue control.
+   - `rawgl_batch` owns orchestration of many jobs, overlap of IO/upload/execute/save, progress, cancellation, and backpressure.
+   - Dependency direction is explicit and one-way:
+     - `rawgl_core` independent
+     - `rawgl_io` may depend on `rawgl_core` public types
+     - `rawgl_batch` depends on `rawgl_core` and may integrate with `rawgl_io`
+   - CLI and Python keep compatibility through frontend-level shims during the migration.
+
 16. Add explicit built-in system uniform support.
 
    Acceptance:

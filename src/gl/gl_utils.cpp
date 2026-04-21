@@ -156,6 +156,20 @@ OpenGLHandle::~OpenGLHandle()
     glfwTerminate();
 }
 
+void
+OpenGLHandle::makeCurrent() const
+{
+    if (m_window != nullptr) {
+        glfwMakeContextCurrent(m_window);
+    }
+}
+
+void
+OpenGLHandle::releaseCurrent() const
+{
+    glfwMakeContextCurrent(nullptr);
+}
+
 extern const std::unordered_map<GLenum, const char*> glsl_type_map
     = { { GL_INVALID_ENUM, "invalid" },
         { GL_FLOAT, "float" },

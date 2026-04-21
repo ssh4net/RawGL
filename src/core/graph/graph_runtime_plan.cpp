@@ -61,15 +61,9 @@ apply_output_definition(SequenceRuntimePassConfig& passConfig,
                                                definition.name,
                                                definition.usesArrayElement,
                                                definition.arrayElement);
-    output.path               = definition.path;
     output.internalFormatText = definition.format;
     output.channels           = definition.channels;
     output.alphaChannel       = definition.alphaChannel;
-    output.bits               = definition.bits;
-    output.attributes.clear();
-    for (const GraphAttribute& attribute : definition.attributes) {
-        output.attributes[attribute.name] = attribute.value;
-    }
 }
 
 static void
@@ -143,7 +137,13 @@ build_sequence_runtime_config(const RawGLGraphState::ResourcePlan& resourcePlan)
                 apply_texture_attributes(input, inputDefinition.attributes);
 
                 if (inputDefinition.sourceKind == GraphInputSourceKind::textureFile) {
-                    input.path = inputDefinition.texturePath;
+                    const std::string cacheKey =
+                        build_texture_resource_key(inputDefinition.texturePath, inputDefinition.attributes);
+                    auto textureIt = resourcePlan.sharedTextures.find(cacheKey);
+                    if (textureIt == resourcePlan.sharedTextures.end() || !textureIt->second) {
+                        throw std::runtime_error("in (" + inputDefinition.name + "): prepared texture resource is missing");
+                    }
+                    input.texture = textureIt->second;
                 } else if (inputDefinition.sourceKind == GraphInputSourceKind::hostTexture) {
                     if (!inputDefinition.hostTexture) {
                         throw std::runtime_error("in (" + inputDefinition.name + "): host texture payload is missing");
@@ -277,6 +277,18 @@ build_execution_plan(const RawGLGraphState::ResourcePlan& resourcePlan)
                     addressedOutputName,
                     outputDefinition.persistentTextureName,
                 });
+            }
+            if (!outputDefinition.path.empty()) {
+                RawGLGraphState::FileOutputBinding fileOutput;
+                fileOutput.passIndex    = passIndex;
+                fileOutput.outputName   = addressedOutputName;
+                fileOutput.path         = outputDefinition.path;
+                fileOutput.alphaChannel = outputDefinition.alphaChannel;
+                fileOutput.bits         = outputDefinition.bits;
+                for (const GraphAttribute& attribute : outputDefinition.attributes) {
+                    fileOutput.attributes.insert({ attribute.name, attribute.value });
+                }
+                executionPlan.fileOutputs.push_back(std::move(fileOutput));
             }
         }
 

@@ -64,7 +64,3 @@ extern bool
 load_image(const std::string& filepath, const std::map<std::string, std::string>& attributes, int& width, int& height,
            void*& pixels, int& channels, int& alphaChannel, OIIO::TypeDesc& format);
 }  // namespace image_utils
-
-// TODO: Move function to File_IO
-extern std::string
-get_file_ext(const std::string& filepath);

@@ -14,6 +14,6 @@ std::shared_ptr<Texture>
 create_host_texture_resource(const HostImageData& hostImage, const std::string& context);
 
 SequenceExecutionInputOverride
-build_sequence_execution_input_override(const RawGLContextState& contextState, const GraphInputOverride& inputOverride);
+build_sequence_execution_input_override(const GraphInputOverride& inputOverride);
 
 }  // namespace rawgl

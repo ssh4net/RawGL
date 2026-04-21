@@ -9,6 +9,8 @@
 #include "common.h"
 #include "graph_build.h"
 #include "graph_shared.h"
+#include "graph_request_materializer.h"
+#include "io_runtime.h"
 #include "log.h"
 #include "shader_interface_cache.h"
 #include "timer.h"
@@ -98,6 +100,29 @@ capture_texture_to_host_image(const Texture& texture)
     return hostImage;
 }
 
+static const HostImageData&
+ensure_captured_output_image(Sequence& sequence,
+                             const size_t passIndex,
+                             const std::string& outputName,
+                             std::map<std::string, HostImageData>& capturedImages)
+{
+    const std::string outputKey = build_pass_resource_key(outputName, passIndex);
+    auto imageIt                = capturedImages.find(outputKey);
+    if (imageIt != capturedImages.end()) {
+        return imageIt->second;
+    }
+
+    std::shared_ptr<Texture> outputTexture = sequence.getPassOutputTexture(passIndex, outputName);
+    if (!outputTexture) {
+        throw std::runtime_error("output capture failed for " + outputName);
+    }
+
+    auto [insertedIt, inserted] =
+        capturedImages.insert({ outputKey, capture_texture_to_host_image(*outputTexture) });
+    (void)inserted;
+    return insertedIt->second;
+}
+
 static std::shared_ptr<Texture>
 clone_texture_resource(const std::shared_ptr<Texture>& sourceTexture)
 {
@@ -129,6 +154,13 @@ has_sequence_override(const std::vector<SequenceExecutionInputOverride>& inputOv
     return false;
 }
 
+static const rawgl::io::IoRuntimeService&
+resolve_io_runtime(const std::shared_ptr<rawgl::io::IoRuntimeService>& ioRuntime)
+{
+    static const rawgl::io::IoRuntimeService defaultIoRuntime;
+    return ioRuntime ? *ioRuntime : defaultIoRuntime;
+}
+
 static ShaderInterface
 inspect_shader_interface_from_session(const void* userData,
                                       const ShaderProgramKind kind,
@@ -143,6 +175,7 @@ inspect_shader_interface_from_session(const void* userData,
 RawGLContext::RawGLContext()
     : m_state(std::make_shared<RawGLContextState>())
 {
+    m_state->ioRuntime = std::make_shared<rawgl::io::IoRuntimeService>();
     Log_Init();
 }
 
@@ -169,6 +202,7 @@ RawGLContext::buildGraph(const GraphBuildRequest& request) const
     GraphBuildResult result;
 
     try {
+        rawgl::io::materialize_graph_build_request(*m_state, request);
         auto state = std::make_unique<RawGLGraphState>();
         build_graph_state(*m_state, request, *state);
         result.graph    = std::make_unique<RawGLGraph>(m_state, std::move(state));
@@ -205,6 +239,18 @@ RawGLContext::cacheStats() const
     return stats;
 }
 
+void
+RawGLContext::makeContextCurrent() const
+{
+    m_state->glHandle.makeCurrent();
+}
+
+void
+RawGLContext::releaseContext() const
+{
+    m_state->glHandle.releaseCurrent();
+}
+
 RawGLGraph::RawGLGraph(std::shared_ptr<RawGLContextState> contextState, std::unique_ptr<RawGLGraphState> state)
     : m_contextState(std::move(contextState))
     , m_state(std::move(state))
@@ -219,8 +265,10 @@ RawGLGraph::execute(const GraphExecutionRequest& request)
     GraphExecutionResult result;
 
     try {
+        const GraphExecutionRequest materializedRequest =
+            rawgl::io::materialize_graph_execution_request(m_contextState->ioRuntime, request);
         std::vector<SequenceExecutionInputOverride> inputOverrides =
-            build_sequence_input_overrides(*m_contextState, *m_state, request);
+            build_sequence_input_overrides(*m_state, materializedRequest);
         std::map<std::string, std::shared_ptr<Texture>> persistentTextureSnapshot;
         for (const auto& persistentTexture : m_state->persistentTextures) {
             persistentTextureSnapshot[persistentTexture.first] = clone_texture_resource(persistentTexture.second);
@@ -283,6 +331,22 @@ RawGLGraph::execute(const GraphExecutionRequest& request)
             }
             m_state->persistentAtomicCounters[persistentCounter.persistentCounterName] = counterValues;
         }
+        std::map<std::string, HostImageData> capturedOutputImages;
+        for (const RawGLGraphState::FileOutputBinding& fileOutput : m_state->executionPlan.fileOutputs) {
+            const HostImageData& outputImage =
+                ensure_captured_output_image(*m_state->sequence,
+                                             fileOutput.passIndex,
+                                             fileOutput.outputName,
+                                             capturedOutputImages);
+
+            rawgl::io::OutputWriteRequest request;
+            request.path         = fileOutput.path;
+            request.attributes   = fileOutput.attributes;
+            request.alphaChannel = fileOutput.alphaChannel;
+            request.bits         = fileOutput.bits;
+            request.image        = &outputImage;
+            resolve_io_runtime(m_contextState->ioRuntime).saveImageOutput(request);
+        }
         for (size_t passIndex = 0; passIndex < m_state->resourcePlan.passes.size(); ++passIndex) {
             const RawGLGraphState::ResourcePass& resourcePass = m_state->resourcePlan.passes[passIndex];
 
@@ -295,14 +359,11 @@ RawGLGraph::execute(const GraphExecutionRequest& request)
                     build_addressed_resource_name(outputDefinition.name,
                                                   outputDefinition.usesArrayElement,
                                                   outputDefinition.arrayElement);
-                std::shared_ptr<Texture> outputTexture =
-                    m_state->sequence->getPassOutputTexture(passIndex, addressedOutputName);
-                if (!outputTexture) {
-                    throw std::runtime_error("host output capture failed for " + addressedOutputName);
-                }
-
-                result.capturedOutputs[build_pass_resource_key(addressedOutputName, passIndex)]
-                    = capture_texture_to_host_image(*outputTexture);
+                result.capturedOutputs[build_pass_resource_key(addressedOutputName, passIndex)] =
+                    ensure_captured_output_image(*m_state->sequence,
+                                                 passIndex,
+                                                 addressedOutputName,
+                                                 capturedOutputImages);
             }
 
             for (const GraphAtomicCounterDefinition& counterDefinition : resourcePass.atomicCounters) {

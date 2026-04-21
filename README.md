@@ -98,6 +98,7 @@ Python API
 ==========
 
 The default Python API is workflow-oriented, not OpenGL-oriented. For the common fullscreen image-processing path, use `rawgl.image(...)` or `session.prepare_image(...)`.
+When a Python workflow uses file-backed inputs or outputs, the high-level helpers now route that path through the public IO layer (`rawgl::io::IoRuntime` on the C++ side) before execution reaches the core session.
 
 Minimal one-shot example:
 
@@ -153,6 +154,25 @@ rawgl.advanced
 ```
 
 That path exposes the direct bound classes and structs such as `Session`, `Workflow`, `Pass`, `InputBinding`, and `OutputBinding`. It is kept for advanced workflows and compatibility, but the default examples should prefer the higher-level helpers.
+
+C++ IO-facing API
+=================
+
+For file-backed C++ workflows, prefer the explicit IO/runtime split:
+
+```cpp
+#include <rawgl/rawgl.h>
+#include <rawgl/rawgl_io.h>
+
+rawgl::Session session;
+rawgl::io::IoRuntime io_runtime;
+
+rawgl::Workflow workflow = /* build workflow with file-backed inputs/outputs */;
+rawgl::io::PrepareWorkflowResult prepared = io_runtime.prepare(session, workflow);
+rawgl::RunResult result = prepared.workflow->run();
+```
+
+That keeps file decode/encode in `rawgl_io` and leaves `rawgl_core` focused on prepared workflow execution and host-memory transfer.
 
 Typical Windows workflow from a Visual Studio 2022 x64 developer shell:
 

@@ -26,6 +26,10 @@ def main() -> int:
     else:
         if not hasattr(rawgl, "Session"):
             return fail("core binding mode does not expose Session")
+        if not hasattr(rawgl, "IoRuntime"):
+            return fail("core binding mode does not expose IoRuntime")
+        if not hasattr(rawgl, "BatchRunner"):
+            return fail("core binding mode does not expose BatchRunner")
 
     return 0
 

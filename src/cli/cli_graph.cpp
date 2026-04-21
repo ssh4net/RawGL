@@ -7,6 +7,7 @@
 #include "common.h"
 #include "graph_shared.h"
 #include "sequence.h"
+#include "path_utils.h"
 
 #include <stdexcept>
 

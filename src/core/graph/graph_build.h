@@ -4,6 +4,7 @@
 #pragma once
 
 #include "gl_utils.h"
+#include "io_runtime.h"
 #include "program_manager.h"
 #include "rawgl/rawgl_core.h"
 #include "sequence.h"
@@ -34,6 +35,7 @@ struct RawGLContextState {
     mutable std::map<std::string, std::shared_ptr<SequenceSharedMeshData>> meshCache;
     mutable std::shared_mutex meshGpuCacheMutex;
     mutable std::map<std::string, std::shared_ptr<SequenceSharedGpuMesh>> meshGpuCache;
+    std::shared_ptr<rawgl::io::IoRuntimeService> ioRuntime;
 };
 
 struct RawGLGraphState {
@@ -96,12 +98,22 @@ struct RawGLGraphState {
         std::string persistentCounterName;
     };
 
+    struct FileOutputBinding {
+        size_t passIndex = 0;
+        std::string outputName;
+        std::string path;
+        std::map<std::string, std::string> attributes;
+        int alphaChannel = -1;
+        int bits = 16;
+    };
+
     struct ExecutionPlan {
         SequenceRuntimeConfig sequenceRuntimeConfig;
         std::vector<ExecutionPass> passes;
         std::vector<PersistentInputBinding> persistentInputs;
         std::vector<PersistentOutputBinding> persistentOutputs;
         std::vector<PersistentAtomicCounterBinding> persistentAtomicCounters;
+        std::vector<FileOutputBinding> fileOutputs;
     };
 
     ValidatedGraph validatedGraph;
@@ -118,8 +130,7 @@ build_graph_state(const RawGLContextState& contextState,
                   RawGLGraphState& graphState);
 
 std::vector<SequenceExecutionInputOverride>
-build_sequence_input_overrides(const RawGLContextState& contextState,
-                               const RawGLGraphState& graphState,
+build_sequence_input_overrides(const RawGLGraphState& graphState,
                                const GraphExecutionRequest& request);
 
 }  // namespace rawgl

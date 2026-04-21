@@ -3,6 +3,7 @@
 
 #include "graph_shared.h"
 
+#include <sstream>
 #include <stdexcept>
 
 namespace rawgl {
@@ -69,6 +70,17 @@ std::string
 build_pass_resource_key(const std::string& name, const size_t passIndex)
 {
     return name + "::" + std::to_string(passIndex);
+}
+
+std::string
+build_texture_resource_key(const std::string& path, const std::vector<GraphAttribute>& attributes)
+{
+    std::ostringstream stream;
+    stream << "file:" << path;
+    for (const GraphAttribute& attribute : attributes) {
+        stream << '\x1F' << attribute.name << '=' << attribute.value;
+    }
+    return stream.str();
 }
 
 const ShaderResourceInfo*

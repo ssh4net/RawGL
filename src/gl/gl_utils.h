@@ -53,6 +53,9 @@ struct OpenGLHandle {
     OpenGLHandle();
     ~OpenGLHandle();
 
+    void makeCurrent() const;
+    void releaseCurrent() const;
+
 private:
     GLFWwindow* m_window = nullptr;
 };

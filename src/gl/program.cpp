@@ -440,10 +440,7 @@ GLProgram::compileUniformList()
 {
     int count;
 
-    // returns the number of active attribute atomic counter buffers used by program.
-    GLCall(glGetProgramiv(m_id, GL_ACTIVE_UNIFORMS, &count));
-    // returns the number of active attribute atomic counter buffers used by program.
-    //GlCall(glGetProgramiv(m_id, GL_ACTIVE_ATOMIC_COUNTER_BUFFERS, &count));
+    GLCall(glGetProgramInterfaceiv(m_id, GL_UNIFORM, GL_ACTIVE_RESOURCES, &count));
 
     if (!count) {
         m_uniforms.clear();
@@ -451,38 +448,46 @@ GLProgram::compileUniformList()
     }
 
     for (int i = 0; i < count; i++) {
-        char name[256];
+        char name[256] = {};
         GLsizei length;
-        GLint size;
-        GLenum type;
+        const GLenum props[] = { GL_TYPE,
+                                 GL_LOCATION,
+                                 GL_ARRAY_SIZE,
+                                 GL_BLOCK_INDEX,
+                                 GL_REFERENCED_BY_VERTEX_SHADER,
+                                 GL_REFERENCED_BY_FRAGMENT_SHADER,
+                                 GL_REFERENCED_BY_COMPUTE_SHADER };
+        GLint propData[7];
 
-        GLCall(glGetActiveUniform(m_id, i, sizeof(name), &length, &size, &type, name));
+        GLCall(glGetProgramResourceName(m_id, GL_UNIFORM, i, sizeof(name), &length, name));
+        GLCall(glGetProgramResourceiv(m_id, GL_UNIFORM, i, 7, props, 7, NULL, propData));
 
         if (length > sizeof(name)) {
             throw_program_error("program: uniform name length exceeds 256");
         }
 
-        GLint location = glGetUniformLocation(m_id, name);
+        const GLenum type   = static_cast<GLenum>(propData[0]);
+        const GLint location = propData[1];
+        const GLint size     = propData[2];
+        const GLint block    = propData[3];
 
-        const char* type_name = nullptr;
-
-        //for (int j = 0; j < type_set_size; j++) {
-        //    if (type_set[j].type != type)
-        //        continue;
-        //    type_name = type_set[j].name;
-        //    break;
-        //}
-
-        type_name = glsl_type_name(type);
-
-        if (location == -1) {
+        if (location == -1 || block != -1) {
             // internal uniforms
             // atomic counters
             continue;
         }
-        trim_glsl_array_suffix(name, length);
-        m_uniforms.insert({ name, GLProgramUniform(type, type_name, location, size) });
-        LOG(trace) << type_name << ": " << name << " location = " << location;
+
+        std::string uniformName;
+        if (length <= 0 || name[0] == '\0') {
+            uniformName = "__uniform_" + std::to_string(location);
+        } else {
+            trim_glsl_array_suffix(name, length);
+            uniformName = name;
+        }
+
+        const char* type_name = glsl_type_name(type);
+        m_uniforms.insert({ uniformName, GLProgramUniform(type, type_name, location, size) });
+        LOG(trace) << type_name << ": " << uniformName << " location = " << location;
     }
 }
 
@@ -731,7 +736,7 @@ GLProgram::compileOutputList()
     }
 
     for (int i = 0; i < count; i++) {
-        char name[64];
+        char name[64] = {};
         GLsizei length;
 
         const GLenum props[] = { GL_TYPE,
@@ -752,9 +757,20 @@ GLProgram::compileOutputList()
             throw_program_error("program: output name length exceeds 64");
         }
 
-        trim_glsl_array_suffix(name, length);
-        m_outputs.insert({ name, GLProgramOutput(propData[0], propData[1], propData[2]) });
-        LOG(trace) << "Output: " << name << " location = " << propData[1] << " type = " << glsl_type_name(propData[0])
+        std::string outputName;
+        if (length <= 0 || name[0] == '\0') {
+            if (propData[1] >= 0) {
+                outputName = "__output_" + std::to_string(propData[1]);
+            } else {
+                outputName = "__output_index_" + std::to_string(i);
+            }
+        } else {
+            trim_glsl_array_suffix(name, length);
+            outputName = name;
+        }
+
+        m_outputs.insert({ outputName, GLProgramOutput(propData[0], propData[1], propData[2]) });
+        LOG(trace) << "Output: " << outputName << " location = " << propData[1] << " type = " << glsl_type_name(propData[0])
                    << std::endl;
     }
 }

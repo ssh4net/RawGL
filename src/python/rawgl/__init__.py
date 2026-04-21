@@ -125,6 +125,58 @@ def _coerce_size(size) -> tuple[int, int]:
     raise TypeError("size must be an int or a (width, height) pair")
 
 
+def _image_size_from_host_value(value):
+    if _is_numpy_array(value):
+        array = _require_numpy().asarray(value)
+        if array.ndim == 2:
+            return int(array.shape[1]), int(array.shape[0])
+        if array.ndim == 3:
+            return int(array.shape[1]), int(array.shape[0])
+        return None
+
+    if isinstance(value, HostImageData):
+        return int(value.width), int(value.height)
+
+    return None
+
+
+def _image_size_from_input_spec(spec):
+    size = _image_size_from_host_value(spec)
+    if size is not None:
+        return size
+
+    if isinstance(spec, Mapping):
+        if "host_texture" in spec:
+            return _image_size_from_host_value(spec["host_texture"])
+        if "value" in spec:
+            return _image_size_from_host_value(spec["value"])
+        if "values" in spec:
+            return _image_size_from_host_value(spec["values"])
+
+    return None
+
+
+def _infer_size_from_inputs(inputs):
+    if not inputs:
+        return None
+    for spec in inputs.values():
+        size = _image_size_from_input_spec(spec)
+        if size is not None:
+            return size
+    return None
+
+
+def _coerce_pass_size(size, inputs=None, *, fallback=None) -> tuple[int, int]:
+    if size is None:
+        inferred = _infer_size_from_inputs(inputs)
+        if inferred is not None:
+            return inferred
+        if fallback is not None:
+            return _coerce_size(fallback)
+        raise TypeError("size must be provided or inferable from a NumPy/HostImageData input")
+    return _coerce_size(size)
+
+
 def _coerce_attributes(attributes):
     if not attributes:
         return []
@@ -383,6 +435,41 @@ def _coerce_output_binding(name, spec):
     return binding
 
 
+def _coerce_mesh_binding(spec):
+    if isinstance(spec, MeshBinding):
+        return spec
+
+    binding = MeshBinding()
+    if isinstance(spec, (str, Path)):
+        binding.source_kind = MeshSourceKind.file
+        binding.path = str(spec)
+        return binding
+    if not isinstance(spec, Mapping):
+        raise TypeError("mesh bindings must be a MeshBinding, path, or mapping")
+
+    source_kind = spec.get("source_kind", spec.get("source", None))
+    if source_kind is None:
+        if "path" in spec:
+            binding.source_kind = MeshSourceKind.file
+        else:
+            binding.source_kind = MeshSourceKind.quad
+    elif isinstance(source_kind, MeshSourceKind):
+        binding.source_kind = source_kind
+    else:
+        source_name = str(source_kind).lower()
+        if source_name == "quad":
+            binding.source_kind = MeshSourceKind.quad
+        elif source_name == "file":
+            binding.source_kind = MeshSourceKind.file
+        else:
+            raise TypeError(f"unsupported mesh source kind '{source_kind}'")
+
+    if "path" in spec:
+        binding.path = str(spec["path"])
+    binding.parameters = _coerce_attributes(spec.get("parameters", spec.get("attrs")))
+    return binding
+
+
 def _coerce_input_override(pass_index: int, name, spec):
     binding = _coerce_input_binding(name, spec)
     if binding.source_kind in (InputSourceKind.pass_output, InputSourceKind.workflow_texture):
@@ -400,8 +487,40 @@ def _coerce_input_override(pass_index: int, name, spec):
     override.attributes = list(binding.attributes)
     override.uses_array_element = binding.uses_array_element
     override.array_element = binding.array_element
-    override.host_texture = binding.host_texture
+    if binding.host_texture is not None:
+        override.host_texture = binding.host_texture
     return override
+
+
+def _coerce_input_override_entry(key, spec, default_pass_index=0):
+    array_element = None
+    if isinstance(key, tuple):
+        if len(key) == 2:
+            pass_index, name = key
+        elif len(key) == 3:
+            pass_index, name, array_element = key
+        else:
+            raise TypeError("input override tuple keys must be (pass_index, name) or (pass_index, name, array_element)")
+    else:
+        if default_pass_index is None:
+            raise TypeError("multi-pass input overrides must use tuple keys like (pass_index, name)")
+        pass_index = default_pass_index
+        name = key
+
+    override = _coerce_input_override(int(pass_index), name, spec)
+    if array_element is not None:
+        override.uses_array_element = True
+        override.array_element = int(array_element)
+    return override
+
+
+def _coerce_input_overrides(inputs, *, default_pass_index=0):
+    if inputs is None:
+        return []
+    return [
+        _coerce_input_override_entry(key, spec, default_pass_index=default_pass_index)
+        for key, spec in inputs.items()
+    ]
 
 
 def _coerce_counter_binding(name, spec):
@@ -444,12 +563,57 @@ def _build_workflow(pass0, verbosity: int) -> Workflow:
     return workflow
 
 
-def _run_workflow(workflow, *, session=None, settings=None):
+def _default_io_runtime():
+    io_runtime_type = globals().get("IoRuntime")
+    if io_runtime_type is None:
+        return None
+    return io_runtime_type()
+
+
+def _run_workflow(workflow, *, session=None, settings=None, io_runtime=None):
     if session is None:
         session = Session()
     if settings is None:
         settings = RunSettings()
+    if io_runtime is None:
+        io_runtime = _default_io_runtime()
+    if io_runtime is not None:
+        return _wrap_run_result(io_runtime.run(session, workflow, settings))
     return _wrap_run_result(session.run(workflow, settings))
+
+
+def _prepare_workflow(workflow, *, session=None, io_runtime=None, error_label="workflow", default_pass_index=0):
+    if session is None:
+        session = Session()
+    if io_runtime is None:
+        io_runtime = _default_io_runtime()
+
+    if io_runtime is not None:
+        prepare = io_runtime.prepare(session, workflow)
+        if not prepare.success:
+            raise RuntimeError(prepare.error_message or f"{error_label} preparation failed")
+        prepared_workflow = prepare.take_workflow()
+        if prepared_workflow is None:
+            raise RuntimeError(f"{error_label} preparation returned no PreparedIoWorkflow")
+        return PreparedJob(
+            prepared_workflow,
+            session=session,
+            io_runtime=io_runtime,
+            default_pass_index=default_pass_index,
+        )
+
+    prepare = session.prepare(workflow)
+    if not prepare.success:
+        raise RuntimeError(prepare.error_message or f"{error_label} preparation failed")
+    prepared_workflow = prepare.take_workflow()
+    if prepared_workflow is None:
+        raise RuntimeError(f"{error_label} preparation returned no PreparedWorkflow")
+    return PreparedJob(
+        prepared_workflow,
+        session=session,
+        io_runtime=io_runtime,
+        default_pass_index=default_pass_index,
+    )
 
 
 def _shader_modules_for_inspection(program_kind, shader_modules):
@@ -548,17 +712,18 @@ def _resolve_output_arguments(outputs=None, output=None):
 class PreparedJob:
     """High-level prepared workflow wrapper for repeated runs."""
 
-    def __init__(self, prepared_workflow, session=None, default_pass_index: int = 0):
+    def __init__(self, prepared_workflow, session=None, io_runtime=None, default_pass_index: int | None = 0):
         self._prepared_workflow = prepared_workflow
         self._session = session
-        self._default_pass_index = int(default_pass_index)
+        self._io_runtime = io_runtime
+        self._default_pass_index = None if default_pass_index is None else int(default_pass_index)
 
     def run(self, *, inputs=None, settings=None, system_uniforms=None):
         run_settings = _merge_run_settings(settings=settings, system_uniforms=system_uniforms)
         overrides = list(run_settings.overrides)
         if inputs is not None:
             overrides.extend(
-                _coerce_input_override(self._default_pass_index, name, spec) for name, spec in inputs.items()
+                _coerce_input_overrides(inputs, default_pass_index=self._default_pass_index)
             )
         run_settings.overrides = overrides
         return _wrap_run_result(self._prepared_workflow.run(run_settings))
@@ -566,6 +731,10 @@ class PreparedJob:
     @property
     def session(self):
         return self._session
+
+    @property
+    def io_runtime(self):
+        return self._io_runtime
 
 
 class RunResultView:
@@ -622,39 +791,50 @@ class RunResultView:
         return [value for _, value in items]
 
 
-def _wrap_run_result(result):
-    if isinstance(result, RunResultView):
-        return result
-    return RunResultView(result)
+def pass_output(name: str, pass_index: int = 0, array_element=None):
+    """Build an input specification that references one earlier pass output."""
+
+    reference = [str(name), int(pass_index)]
+    if array_element is not None:
+        reference.append(int(array_element))
+    return {"pass_output": tuple(reference)}
 
 
-def render_workflow(
+def workflow_texture(name: str):
+    """Build an input specification that references one persistent workflow texture."""
+
+    return {"workflow_texture": str(name)}
+
+
+def render_pass(
     fragment_shader,
     *,
     outputs=None,
     output=None,
-    size=512,
+    size=None,
     inputs=None,
     vertex_shader=None,
-    verbosity=3,
+    clear_color=None,
+    meshes=None,
+    cull_parameters=None,
     session=None,
 ):
-    """
-    Build one fullscreen render workflow.
-
-    The common case is fragment-only: RawGL uses its built-in fullscreen quad
-    vertex shader automatically when `vertex_shader` is omitted.
-    """
+    """Build one render pass object for use in a multi-pass workflow."""
 
     pass0 = Pass()
     pass0.program_kind = ShaderProgramKind.vertfrag
-    pass0.size_x, pass0.size_y = _coerce_size(size)
+    pass0.size_x, pass0.size_y = _coerce_pass_size(size, inputs, fallback=512)
 
     shader_modules = []
     if vertex_shader is not None:
         shader_modules.append(_coerce_shader_module(vertex_shader, ShaderModuleRole.vertex))
     shader_modules.append(_coerce_shader_module(fragment_shader, ShaderModuleRole.fragment))
     pass0.shader_modules = shader_modules
+
+    if clear_color is not None:
+        if not isinstance(clear_color, Sequence) or len(clear_color) != 4:
+            raise TypeError("clear_color must be a 4-element sequence")
+        pass0.clear_color = [float(value) for value in clear_color]
 
     if session is None:
         session = Session()
@@ -664,27 +844,50 @@ def render_workflow(
         _coerce_input_binding(name, spec) for name, spec in inputs.items()
     ]
     pass0.outputs = _coerce_outputs(session, ShaderProgramKind.vertfrag, shader_modules, output_spec)
+    pass0.meshes = [] if meshes is None else [_coerce_mesh_binding(spec) for spec in meshes]
+    pass0.cull_parameters = _coerce_attributes(cull_parameters)
+    return pass0
 
-    return _build_workflow(pass0, verbosity)
+
+def image_pass(
+    fragment_shader,
+    *,
+    outputs=None,
+    output=None,
+    size=None,
+    inputs=None,
+    clear_color=None,
+    session=None,
+):
+    """Build one fullscreen image-processing pass for a multi-pass workflow."""
+
+    return render_pass(
+        fragment_shader,
+        outputs=outputs,
+        output=output,
+        size=size,
+        inputs=inputs,
+        clear_color=clear_color,
+        session=session,
+    )
 
 
-def compute_workflow(
+def compute_pass(
     shader,
     *,
     outputs=None,
     output=None,
-    size,
+    size=None,
     inputs=None,
     counters=None,
     workgroup_size=(16, 16),
-    verbosity=3,
     session=None,
 ):
-    """Build one compute workflow."""
+    """Build one compute pass object for use in a multi-pass workflow."""
 
     pass0 = Pass()
     pass0.program_kind = ShaderProgramKind.compute
-    pass0.size_x, pass0.size_y = _coerce_size(size)
+    pass0.size_x, pass0.size_y = _coerce_pass_size(size, inputs)
     pass0.work_group_size_x, pass0.work_group_size_y = _coerce_size(workgroup_size)
     pass0.has_explicit_work_group_size = True
     pass0.shader_modules = [_coerce_shader_module(shader, ShaderModuleRole.compute)]
@@ -709,8 +912,142 @@ def compute_workflow(
         output_spec,
         input_names=input_names,
     )
+    return pass0
 
+
+def build_workflow(*passes, verbosity=3):
+    """Build one workflow from already-built pass objects."""
+
+    if len(passes) == 1 and isinstance(passes[0], Workflow):
+        workflow = passes[0]
+        if verbosity is not None:
+            workflow.verbosity = int(verbosity)
+        return workflow
+
+    if len(passes) == 1 and isinstance(passes[0], Sequence) and not isinstance(passes[0], (str, bytes, bytearray)):
+        passes = tuple(passes[0])
+
+    workflow = Workflow()
+    workflow.verbosity = int(verbosity)
+    workflow.passes = list(passes)
+    return workflow
+
+
+def _coerce_workflow_definition(workflow=None, *, passes=None, verbosity=3):
+    if workflow is not None and passes is not None:
+        raise TypeError("use either 'workflow' or 'passes', not both")
+    if workflow is not None:
+        if not isinstance(workflow, Workflow):
+            raise TypeError("workflow must be a rawgl.Workflow instance")
+        return workflow
+    if passes is None:
+        raise TypeError("workflow preparation requires a workflow or pass list")
+    return build_workflow(passes, verbosity=verbosity)
+
+
+def _wrap_run_result(result):
+    if isinstance(result, RunResultView):
+        return result
+    return RunResultView(result)
+
+
+def render_workflow(
+    fragment_shader,
+    *,
+    outputs=None,
+    output=None,
+    size=512,
+    inputs=None,
+    vertex_shader=None,
+    verbosity=3,
+    session=None,
+):
+    """
+    Build one fullscreen render workflow.
+
+    The common case is fragment-only: RawGL uses its built-in fullscreen quad
+    vertex shader automatically when `vertex_shader` is omitted.
+    """
+    pass0 = render_pass(
+        fragment_shader,
+        outputs=outputs,
+        output=output,
+        size=size,
+        inputs=inputs,
+        vertex_shader=vertex_shader,
+        session=session,
+    )
     return _build_workflow(pass0, verbosity)
+
+
+def compute_workflow(
+    shader,
+    *,
+    outputs=None,
+    output=None,
+    size,
+    inputs=None,
+    counters=None,
+    workgroup_size=(16, 16),
+    verbosity=3,
+    session=None,
+):
+    """Build one compute workflow."""
+    pass0 = compute_pass(
+        shader,
+        outputs=outputs,
+        output=output,
+        size=size,
+        inputs=inputs,
+        counters=counters,
+        workgroup_size=workgroup_size,
+        session=session,
+    )
+    return _build_workflow(pass0, verbosity)
+
+
+def prepare_workflow(
+    workflow=None,
+    *,
+    passes=None,
+    verbosity=3,
+    session=None,
+    io_runtime=None,
+):
+    """Prepare one multi-pass workflow for repeated execution."""
+
+    workflow_definition = _coerce_workflow_definition(workflow, passes=passes, verbosity=verbosity)
+    default_pass_index = 0 if len(workflow_definition.passes) == 1 else None
+    return _prepare_workflow(
+        workflow_definition,
+        session=session,
+        io_runtime=io_runtime,
+        error_label="workflow",
+        default_pass_index=default_pass_index,
+    )
+
+
+def run_workflow(
+    workflow=None,
+    *,
+    passes=None,
+    verbosity=3,
+    session=None,
+    io_runtime=None,
+    settings=None,
+    system_uniforms=None,
+    inputs=None,
+):
+    """Run one workflow once, with optional multi-pass input overrides."""
+
+    workflow_definition = _coerce_workflow_definition(workflow, passes=passes, verbosity=verbosity)
+    run_settings = _merge_run_settings(settings=settings, system_uniforms=system_uniforms)
+    override_pass_index = 0 if len(workflow_definition.passes) == 1 else None
+    run_settings.overrides = list(run_settings.overrides) + _coerce_input_overrides(
+        inputs,
+        default_pass_index=override_pass_index,
+    )
+    return _run_workflow(workflow_definition, session=session, settings=run_settings, io_runtime=io_runtime)
 
 
 def prepare_render(
@@ -726,9 +1063,6 @@ def prepare_render(
 ):
     """Prepare one fullscreen render workflow for repeated execution."""
 
-    if session is None:
-        session = Session()
-
     workflow = render_workflow(
         fragment_shader,
         outputs=outputs,
@@ -739,13 +1073,7 @@ def prepare_render(
         verbosity=verbosity,
         session=session,
     )
-    prepare = session.prepare(workflow)
-    if not prepare.success:
-        raise RuntimeError(prepare.error_message or "render workflow preparation failed")
-    prepared_workflow = prepare.take_workflow()
-    if prepared_workflow is None:
-        raise RuntimeError("render workflow preparation returned no PreparedWorkflow")
-    return PreparedJob(prepared_workflow, session=session)
+    return _prepare_workflow(workflow, session=session, error_label="render workflow")
 
 
 def prepare_image(
@@ -785,9 +1113,6 @@ def prepare_compute(
 ):
     """Prepare one compute workflow for repeated execution."""
 
-    if session is None:
-        session = Session()
-
     workflow = compute_workflow(
         shader,
         outputs=outputs,
@@ -799,13 +1124,7 @@ def prepare_compute(
         verbosity=verbosity,
         session=session,
     )
-    prepare = session.prepare(workflow)
-    if not prepare.success:
-        raise RuntimeError(prepare.error_message or "compute workflow preparation failed")
-    prepared_workflow = prepare.take_workflow()
-    if prepared_workflow is None:
-        raise RuntimeError("compute workflow preparation returned no PreparedWorkflow")
-    return PreparedJob(prepared_workflow, session=session)
+    return _prepare_workflow(workflow, session=session, error_label="compute workflow")
 
 
 def render(
@@ -895,6 +1214,213 @@ def compute(
     return _run_workflow(workflow, session=session, settings=run_settings)
 
 
+class BatchResultView:
+    """High-level Python wrapper over rawgl.BatchResult."""
+
+    def __init__(self, result):
+        self._result = result
+        self._run_result = _wrap_run_result(result.run_result)
+
+    def __getattr__(self, name):
+        return getattr(self._result, name)
+
+    @property
+    def raw_result(self):
+        return self._result
+
+    @property
+    def run_result(self):
+        return self._run_result
+
+    @property
+    def success(self):
+        return self._run_result.success
+
+    @property
+    def error_message(self):
+        return self._run_result.error_message
+
+    @property
+    def output_arrays(self):
+        return self._run_result.output_arrays
+
+    def output_array(self, name=None):
+        return self._run_result.output_array(name)
+
+    @property
+    def counters(self):
+        return self._run_result.counters
+
+    def counter(self, name=None):
+        return self._run_result.counter(name)
+
+    def counter_array(self, base_name: str, pass_index: int = 0):
+        return self._run_result.counter_array(base_name, pass_index=pass_index)
+
+
+class BatchJobHandleView:
+    """High-level Python wrapper over rawgl.BatchJobHandle."""
+
+    def __init__(self, handle):
+        self._handle = handle
+
+    @property
+    def raw_handle(self):
+        return self._handle
+
+    def wait(self):
+        return BatchResultView(self._handle.wait())
+
+
+class BatchPreparedJob:
+    """High-level Python wrapper over rawgl.BatchPreparedWorkflow."""
+
+    def __init__(self, prepared_workflow, batch_runner, default_pass_index: int | None = 0):
+        self._prepared_workflow = prepared_workflow
+        self._batch_runner = batch_runner
+        self._default_pass_index = None if default_pass_index is None else int(default_pass_index)
+
+    @property
+    def raw_workflow(self):
+        return self._prepared_workflow
+
+    @property
+    def batch_runner(self):
+        return self._batch_runner
+
+    def submit(self, *, inputs=None, settings=None, system_uniforms=None, cancellation=None):
+        request = BatchSubmitRequest()
+        request.settings = _merge_run_settings(settings=settings, system_uniforms=system_uniforms)
+        request.settings.overrides = list(request.settings.overrides) + _coerce_input_overrides(
+            inputs,
+            default_pass_index=self._default_pass_index,
+        )
+        return BatchJobHandleView(
+            self._batch_runner.submit(self._prepared_workflow, request, cancellation)
+        )
+
+    def run(self, *, inputs=None, settings=None, system_uniforms=None, cancellation=None):
+        return self.submit(
+            inputs=inputs,
+            settings=settings,
+            system_uniforms=system_uniforms,
+            cancellation=cancellation,
+        ).wait()
+
+
+class BatchRunnerView:
+    """Python lifetime wrapper over rawgl.BatchRunner."""
+
+    def __init__(self, runner, *, session=None, io_runtime=None):
+        self._runner = runner
+        self._session = session
+        self._io_runtime = io_runtime
+
+    def __getattr__(self, name):
+        return getattr(self._runner, name)
+
+    @property
+    def raw_runner(self):
+        return self._runner
+
+    @property
+    def session(self):
+        return self._session
+
+    @property
+    def io_runtime(self):
+        return self._io_runtime
+
+
+def prepare_batch_workflow(
+    batch_runner,
+    workflow=None,
+    *,
+    passes=None,
+    verbosity=3,
+):
+    """Prepare one workflow for batch submission."""
+
+    workflow_definition = _coerce_workflow_definition(workflow, passes=passes, verbosity=verbosity)
+    prepare = batch_runner.prepare(workflow_definition)
+    if not prepare.success:
+        raise RuntimeError(prepare.error_message or "batch workflow preparation failed")
+    prepared_workflow = prepare.take_workflow()
+    if prepared_workflow is None:
+        raise RuntimeError("batch workflow preparation returned no BatchPreparedWorkflow")
+    default_pass_index = 0 if len(workflow_definition.passes) == 1 else None
+    return BatchPreparedJob(prepared_workflow, batch_runner, default_pass_index=default_pass_index)
+
+
+def prepare_batch_render(
+    batch_runner,
+    fragment_shader,
+    *,
+    outputs=None,
+    output=None,
+    size=512,
+    inputs=None,
+    vertex_shader=None,
+    verbosity=3,
+):
+    workflow = render_workflow(
+        fragment_shader,
+        outputs=outputs,
+        output=output,
+        size=size,
+        inputs=inputs,
+        vertex_shader=vertex_shader,
+        verbosity=verbosity,
+    )
+    return prepare_batch_workflow(batch_runner, workflow)
+
+
+def prepare_batch_image(
+    batch_runner,
+    fragment_shader,
+    *,
+    output=None,
+    outputs=None,
+    size=512,
+    inputs=None,
+    verbosity=3,
+):
+    workflow = render_workflow(
+        fragment_shader,
+        output=output,
+        outputs=outputs,
+        size=size,
+        inputs=inputs,
+        verbosity=verbosity,
+    )
+    return prepare_batch_workflow(batch_runner, workflow)
+
+
+def prepare_batch_compute(
+    batch_runner,
+    shader,
+    *,
+    outputs=None,
+    output=None,
+    size,
+    inputs=None,
+    counters=None,
+    workgroup_size=(16, 16),
+    verbosity=3,
+):
+    workflow = compute_workflow(
+        shader,
+        outputs=outputs,
+        output=output,
+        size=size,
+        inputs=inputs,
+        counters=counters,
+        workgroup_size=workgroup_size,
+        verbosity=verbosity,
+    )
+    return prepare_batch_workflow(batch_runner, workflow)
+
+
 def _session_prepare_render(self, *args, **kwargs):
     return prepare_render(*args, session=self, **kwargs)
 
@@ -907,9 +1433,60 @@ def _session_prepare_compute(self, *args, **kwargs):
     return prepare_compute(*args, session=self, **kwargs)
 
 
+def _session_prepare_workflow(self, workflow=None, *, passes=None, verbosity=3, io_runtime=None):
+    return prepare_workflow(
+        workflow,
+        passes=passes,
+        verbosity=verbosity,
+        session=self,
+        io_runtime=io_runtime,
+    )
+
+
+def _session_batch(self, options=None, io_runtime=None):
+    batch_runner_type = globals().get("BatchRunner")
+    if batch_runner_type is None:
+        raise RuntimeError("rawgl batch bindings are not available in this build")
+    if options is None:
+        options = BatchRunnerOptions()
+    if io_runtime is None:
+        io_runtime = _default_io_runtime()
+    if io_runtime is not None:
+        return BatchRunnerView(batch_runner_type(self, io_runtime, options), session=self, io_runtime=io_runtime)
+    return BatchRunnerView(batch_runner_type(self, options), session=self, io_runtime=None)
+
+
+def _batch_runner_prepare_workflow(self, workflow=None, *, passes=None, verbosity=3):
+    return prepare_batch_workflow(self, workflow, passes=passes, verbosity=verbosity)
+
+
+def _batch_runner_prepare_render(self, *args, **kwargs):
+    return prepare_batch_render(self, *args, **kwargs)
+
+
+def _batch_runner_prepare_image(self, *args, **kwargs):
+    return prepare_batch_image(self, *args, **kwargs)
+
+
+def _batch_runner_prepare_compute(self, *args, **kwargs):
+    return prepare_batch_compute(self, *args, **kwargs)
+
+
 Session.prepare_render = _session_prepare_render
 Session.prepare_image = _session_prepare_image
 Session.prepare_compute = _session_prepare_compute
+Session.prepare_workflow = _session_prepare_workflow
+Session.batch = _session_batch
+
+if "BatchRunner" in globals():
+    BatchRunner.prepare_workflow = _batch_runner_prepare_workflow
+    BatchRunner.prepare_render = _batch_runner_prepare_render
+    BatchRunner.prepare_image = _batch_runner_prepare_image
+    BatchRunner.prepare_compute = _batch_runner_prepare_compute
+    BatchRunnerView.prepare_workflow = _batch_runner_prepare_workflow
+    BatchRunnerView.prepare_render = _batch_runner_prepare_render
+    BatchRunnerView.prepare_image = _batch_runner_prepare_image
+    BatchRunnerView.prepare_compute = _batch_runner_prepare_compute
 
 
 __all__ = [name for name in globals() if not name.startswith("_")]

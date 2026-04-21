@@ -12,6 +12,28 @@ if(BUILD_TESTING)
             "${CMAKE_SOURCE_DIR}/${source_file}")
     endfunction()
 
+    function(rawgl_add_cpp_io_smoke_test target_name source_file)
+        add_executable(${target_name}
+            ${source_file})
+        target_link_libraries(${target_name} PRIVATE rawgl_io)
+        set_target_properties(${target_name} PROPERTIES
+            FOLDER "tests")
+        rawgl_apply_windows_debug_suffix(${target_name})
+        source_group(TREE "${CMAKE_SOURCE_DIR}/tests" PREFIX "tests" FILES
+            "${CMAKE_SOURCE_DIR}/${source_file}")
+    endfunction()
+
+    function(rawgl_add_cpp_batch_smoke_test target_name source_file)
+        add_executable(${target_name}
+            ${source_file})
+        target_link_libraries(${target_name} PRIVATE rawgl_batch)
+        set_target_properties(${target_name} PROPERTIES
+            FOLDER "tests")
+        rawgl_apply_windows_debug_suffix(${target_name})
+        source_group(TREE "${CMAKE_SOURCE_DIR}/tests" PREFIX "tests" FILES
+            "${CMAKE_SOURCE_DIR}/${source_file}")
+    endfunction()
+
     rawgl_add_cpp_smoke_test(rawgl_core_inspect_smoke tests/rawgl_core_inspect_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_core_graph_smoke tests/rawgl_core_graph_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_core_default_vertex_smoke tests/rawgl_core_default_vertex_smoke.cpp)
@@ -24,6 +46,9 @@ if(BUILD_TESTING)
     rawgl_add_cpp_smoke_test(rawgl_core_persistent_texture_smoke tests/rawgl_core_persistent_texture_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_core_persistent_atomic_counter_smoke tests/rawgl_core_persistent_atomic_counter_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_core_transient_output_reuse_smoke tests/rawgl_core_transient_output_reuse_smoke.cpp)
+    rawgl_add_cpp_smoke_test(rawgl_io_workflow_smoke tests/rawgl_io_workflow_smoke.cpp)
+    rawgl_add_cpp_io_smoke_test(rawgl_io_host_image_smoke tests/rawgl_io_host_image_smoke.cpp)
+    rawgl_add_cpp_batch_smoke_test(rawgl_batch_smoke tests/rawgl_batch_smoke.cpp)
 
     add_test(NAME rawgl_core_inspect_smoke
         COMMAND rawgl_core_inspect_smoke)
@@ -85,6 +110,21 @@ if(BUILD_TESTING)
     set_tests_properties(rawgl_core_transient_output_reuse_smoke PROPERTIES
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+    add_test(NAME rawgl_io_host_image_smoke
+        COMMAND rawgl_io_host_image_smoke)
+    set_tests_properties(rawgl_io_host_image_smoke PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+    add_test(NAME rawgl_io_workflow_smoke
+        COMMAND rawgl_io_workflow_smoke)
+    set_tests_properties(rawgl_io_workflow_smoke PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+    add_test(NAME rawgl_batch_smoke
+        COMMAND rawgl_batch_smoke)
+    set_tests_properties(rawgl_batch_smoke PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
     function(rawgl_add_script_test test_name base_name)
         if(WIN32)
             add_test(NAME ${test_name}
@@ -131,6 +171,13 @@ if(BUILD_TESTING)
     endif()
 
     if(RAWGL_BUILD_PYTHON AND TARGET rawgl_python AND RAWGL_PYTHON_BIND_CORE)
+        add_test(NAME rawgl_python_multipass_batch_smoke
+            COMMAND ${CMAKE_COMMAND} -E env
+                "PYTHONPATH=${CMAKE_BINARY_DIR}/python"
+                "${RAWGL_PYTHON_EXECUTABLE_EFFECTIVE}" "${CMAKE_SOURCE_DIR}/tests/python/rawgl_python_multipass_batch_smoke.py")
+        set_tests_properties(rawgl_python_multipass_batch_smoke PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
         add_test(NAME rawgl_python_histogram_smoke
             COMMAND ${CMAKE_COMMAND} -E env
                 "PYTHONPATH=${CMAKE_BINARY_DIR}/python"
