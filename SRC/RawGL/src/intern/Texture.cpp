@@ -134,7 +134,6 @@ Texture::Texture(GLsizei width, GLsizei height, GLenum internalFormat, GLenum ty
     {
     case GL_BYTE:
     case GL_UNSIGNED_BYTE:  //OIIO::TypeDesc::UINT8:
-        bytes = 1;
         break;
 	case GL_SHORT:
     case GL_UNSIGNED_SHORT: //OIIO::TypeDesc::UINT16:
@@ -196,7 +195,7 @@ void* Texture::getData(GLenum type) const
 
 	// malloc requred size_t (unsinged int) so we need to cast to that.
 	// othwise we have int overflow for large textures.
-    std::size_t mem_size = (std::size_t)m_width * (std::size_t)m_height * (std::size_t)(m_channels * bytes);
+    std::size_t mem_size = (std::size_t)m_width * (std::size_t)m_height * (std::size_t)(m_channels) * (std::size_t)(bytes);
     void* data = malloc(mem_size);
 
     //glGenerateTextureMipmap(m_id); // NOTE: OpenGL 4.5+
