@@ -69,7 +69,7 @@ for frame_index in range(frame_count):
         raise RuntimeError(f"frame {frame_index} failed: {result.error_message}")
 
     frame_path = output_dir / f"Bitshift_{frame_index:03d}.png"
-    rawgl.save_image(
+    rawgl.io.save_image(
         result.captured_outputs["Color::0"],
         frame_path,
         bits=16,

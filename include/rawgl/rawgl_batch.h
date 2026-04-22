@@ -42,6 +42,7 @@ struct BatchProgress {
 /// Per-submit run payload for a prepared batch workflow.
 struct BatchSubmitRequest {
     RunSettings settings;
+    std::vector<io::FileInputOverride> fileInputs;
 };
 
 /// Result of one submitted batch job.
@@ -143,7 +144,9 @@ public:
     BatchRunner(BatchRunner&&) = delete;
     BatchRunner& operator=(BatchRunner&&) = delete;
 
-    BatchPrepareResult prepare(const Workflow& workflow) const;
+    BatchPrepareResult prepare(const Workflow& workflow,
+                               const std::vector<io::FileInputBinding>& fileInputs = {},
+                               const std::vector<io::FileOutputBinding>& fileOutputs = {}) const;
 
     BatchJobHandle
     submit(const BatchPreparedWorkflow& workflow,

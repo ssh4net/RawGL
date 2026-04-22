@@ -20,17 +20,10 @@ namespace batch {
 class BatchRunner;
 }
 
-/// Transitional artist-facing façade over the current graph-oriented core API.
+/// Artist-facing workflow façade over the current graph-oriented core API.
 ///
-/// This header gives CLI and Python a workflow-oriented public surface while
-/// the lower-level `rawgl_core.h` types remain available for compatibility.
-///
-/// Long-term direction:
-/// - `rawgl_core` should prefer host-memory resources and prepared workflows.
-/// - file-backed inputs and outputs should be materialized through
-///   `rawgl::io::IoRuntime` before execution reaches `Session`.
-/// - `textureFile` and output `path` fields remain here for compatibility while
-///   the IO-backed path becomes the normal frontend entry point.
+/// `rawgl::Workflow` is the memory-first 2.0 surface. File-backed inputs and
+/// outputs belong to `rawgl::io`.
 
 /// Name/value metadata attached to workflow resources.
 struct Attribute {
@@ -39,16 +32,11 @@ struct Attribute {
 };
 
 /// Source variant for one input binding.
-///
-/// `textureFile` is a transitional compatibility mode. New frontend code should
-/// usually prefer `hostTexture` or let `rawgl::io::IoRuntime` rewrite file
-/// paths into host-memory images before workflow preparation or execution.
 enum class InputSourceKind {
     intValues,
     uintValues,
     floatValues,
     doubleValues,
-    textureFile,
     hostTexture,
     passOutput,
     workflowTexture,
@@ -62,9 +50,6 @@ struct InputBinding {
     std::vector<uint32_t> uintValues;
     std::vector<float> floatValues;
     std::vector<double> doubleValues;
-    /// File path used only when `sourceKind` is `textureFile`.
-    /// Prefer `hostTexture` or `rawgl::io::IoRuntime` materialization for new code.
-    std::string texturePath;
     std::string referencedOutputName;
     size_t referencedPassIndex = 0;
     std::string workflowTextureName;
@@ -88,10 +73,6 @@ struct CounterBinding {
 /// Declared output binding for one pass.
 struct OutputBinding {
     std::string name;
-    /// Optional file path compatibility field.
-    /// New frontend code should usually keep execution host-memory oriented and
-    /// route file saves through `rawgl::io::IoRuntime`.
-    std::string path;
     std::string format = "rgb32f";
     int channels = 3;
     int alphaChannel = -1;
@@ -140,10 +121,6 @@ struct Pass {
 struct Workflow {
     /// Verbosity forwarded to the core compiler/executor.
     int verbosity = 3;
-    /// Transitional note:
-    /// file-backed inputs and outputs are still representable here, but the
-    /// long-term default path is `rawgl::io::IoRuntime + Session`, not direct
-    /// file-path translation inside core execution.
     /// Ordered pass list.
     std::vector<Pass> passes;
 };
@@ -157,14 +134,59 @@ struct InputOverride {
     std::vector<uint32_t> uintValues;
     std::vector<float> floatValues;
     std::vector<double> doubleValues;
-    /// File path used only when `sourceKind` is `textureFile`.
-    /// Prefer `hostTexture` or `rawgl::io::IoRuntime` materialization for new code.
-    std::string texturePath;
     std::vector<Attribute> attributes;
     bool usesArrayElement = false;
     size_t arrayElement = 0;
     std::shared_ptr<HostImageData> hostTexture;
 };
+
+/// Builds one host-memory input binding for the in-memory core path.
+inline InputBinding
+HostTextureInput(std::string name, std::shared_ptr<HostImageData> hostTexture, std::vector<Attribute> attributes = {})
+{
+    InputBinding result;
+    result.name = std::move(name);
+    result.sourceKind = InputSourceKind::hostTexture;
+    result.attributes = std::move(attributes);
+    result.hostTexture = std::move(hostTexture);
+    return result;
+}
+
+/// Builds one host-memory per-run input override for the in-memory core path.
+inline InputOverride
+HostTextureOverride(size_t passIndex,
+                    std::string name,
+                    std::shared_ptr<HostImageData> hostTexture,
+                    std::vector<Attribute> attributes = {})
+{
+    InputOverride result;
+    result.passIndex = passIndex;
+    result.name = std::move(name);
+    result.sourceKind = InputSourceKind::hostTexture;
+    result.attributes = std::move(attributes);
+    result.hostTexture = std::move(hostTexture);
+    return result;
+}
+
+/// Builds one captured host-memory output binding for the in-memory core path.
+inline OutputBinding
+CapturedOutput(std::string name,
+               std::string format = "rgb32f",
+               int channels = 3,
+               int alphaChannel = -1,
+               int bits = 16,
+               std::vector<Attribute> attributes = {})
+{
+    OutputBinding result;
+    result.name = std::move(name);
+    result.format = std::move(format);
+    result.channels = channels;
+    result.alphaChannel = alphaChannel;
+    result.bits = bits;
+    result.attributes = std::move(attributes);
+    result.captureToHost = true;
+    return result;
+}
 
 /// Session cache and reuse statistics.
 struct SessionStats {
@@ -245,7 +267,6 @@ to_graph(const InputSourceKind sourceKind)
     case InputSourceKind::uintValues: return GraphInputSourceKind::uintValues;
     case InputSourceKind::floatValues: return GraphInputSourceKind::floatValues;
     case InputSourceKind::doubleValues: return GraphInputSourceKind::doubleValues;
-    case InputSourceKind::textureFile: return GraphInputSourceKind::textureFile;
     case InputSourceKind::hostTexture: return GraphInputSourceKind::hostTexture;
     case InputSourceKind::passOutput: return GraphInputSourceKind::passOutput;
     case InputSourceKind::workflowTexture: return GraphInputSourceKind::graphTexture;
@@ -295,7 +316,6 @@ to_graph(const InputBinding& input)
     result.uintValues = input.uintValues;
     result.floatValues = input.floatValues;
     result.doubleValues = input.doubleValues;
-    result.texturePath = input.texturePath;
     result.referencedOutputName = input.referencedOutputName;
     result.referencedPassIndex = input.referencedPassIndex;
     result.graphTextureName = input.workflowTextureName;
@@ -325,7 +345,6 @@ to_graph(const OutputBinding& output)
 {
     GraphOutputDefinition result;
     result.name = output.name;
-    result.path = output.path;
     result.format = output.format;
     result.channels = output.channels;
     result.alphaChannel = output.alphaChannel;
@@ -493,7 +512,6 @@ to_graph(const InputOverride& inputOverride)
     result.uintValues = inputOverride.uintValues;
     result.floatValues = inputOverride.floatValues;
     result.doubleValues = inputOverride.doubleValues;
-    result.texturePath = inputOverride.texturePath;
     result.attributes = to_graph(inputOverride.attributes);
     result.usesArrayElement = inputOverride.usesArrayElement;
     result.arrayElement = inputOverride.arrayElement;

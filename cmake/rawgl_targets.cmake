@@ -23,10 +23,10 @@ set(RAWGL_CORE_SOURCES
 list(APPEND RAWGL_CORE_SOURCES ${RAWGL_MINIPLY_SOURCES})
 
 set(RAWGL_IO_SOURCES
-    src/io/graph_request_materializer.cpp
     src/io/image_io.cpp
     src/io/io_facade.cpp
     src/io/io_runtime.cpp
+    src/io/metadata_reader.cpp
     src/io/texture_loader.cpp
     src/io/output_writer.cpp)
 
@@ -127,6 +127,10 @@ target_compile_definitions(rawgl_io PRIVATE
     RAWGL_USE_GLEW
     SPDLOG_FMT_EXTERNAL)
 
+if(RAWGL_HAS_OPENMETA)
+    target_compile_definitions(rawgl_io PRIVATE RAWGL_HAS_OPENMETA=1)
+endif()
+
 target_compile_definitions(rawgl_batch PRIVATE
     _CRT_SECURE_NO_WARNINGS
     _SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS)
@@ -171,6 +175,10 @@ target_link_libraries(rawgl_io PUBLIC
     rawgl_support
     ${RAWGL_OPENGL_LOADER_TARGET}
     ${RAWGL_OIIO_TARGETS})
+
+if(RAWGL_HAS_OPENMETA)
+    target_link_libraries(rawgl_io PUBLIC OpenMeta::openmeta)
+endif()
 
 target_link_libraries(rawgl_batch PUBLIC
     rawgl_core

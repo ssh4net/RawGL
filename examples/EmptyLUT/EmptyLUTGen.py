@@ -33,7 +33,7 @@ void main()
 }
 """
 
-result = rawgl.image(
+result = rawgl.io.image(
     fragment_shader,
     size=image_size,
     inputs={

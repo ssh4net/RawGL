@@ -234,6 +234,7 @@ Current weaknesses:
 
    Design note:
    - [rawgl_public_api_redesign_2026-04-16.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_public_api_redesign_2026-04-16.md)
+   - [rawgl_metadata_write_and_transfer_2026-04-22.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_metadata_write_and_transfer_2026-04-22.md)
 
    Acceptance:
    - The public header exposes workflow-facing engine concepts rather than internal graph/runtime planning types.

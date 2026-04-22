@@ -187,7 +187,7 @@ def verify_io_prepared_workflow(session: rawgl.Session) -> int:
     output_path = Path("tests/outputs/rawgl_python_io_workflow_smoke.png")
     output_path.unlink(missing_ok=True)
 
-    prepared = rawgl.prepare_image(
+    prepared = rawgl.io.prepare_image(
         INLINE_LUT_FRAGMENT,
         session=session,
         size=8,
@@ -208,6 +208,10 @@ def verify_io_prepared_workflow(session: rawgl.Session) -> int:
 
     if not output_path.exists():
         return fail("IO-backed prepared workflow did not write its output file")
+
+    loaded = rawgl.io.load_image(output_path)
+    if loaded.width != 8 or loaded.height != 8:
+        return fail(f"rawgl.io.load_image() returned unexpected size: {loaded.width}x{loaded.height}")
 
     return 0
 

@@ -293,7 +293,18 @@ def captured_counter_values(result):
     return converted
 
 
-def save_image(image, path, *, bits=16, alpha_channel=None, attributes=None, io_runtime=None):
+def save_image(
+    image,
+    path,
+    *,
+    bits=16,
+    alpha_channel=None,
+    attributes=None,
+    metadata_mode=None,
+    source_metadata=None,
+    explicit_metadata=None,
+    io_runtime=None,
+):
     """Save one HostImageData or NumPy image to disk through rawgl.io."""
 
     io_runtime_type = globals().get("IoRuntime")
@@ -316,12 +327,107 @@ def save_image(image, path, *, bits=16, alpha_channel=None, attributes=None, io_
     request.bits = int(bits)
     request.alpha_channel = -1 if alpha_channel is None else int(alpha_channel)
     request.attributes = _coerce_attributes(attributes)
+    if metadata_mode is not None:
+        request.metadata_mode = metadata_mode
+    if source_metadata is not None:
+        request.source_metadata = source_metadata
+    if explicit_metadata is not None:
+        request.explicit_metadata = explicit_metadata
     request.image = host_image
 
     result = io_runtime.save_image_file(request)
     if not result.success:
         raise RuntimeError(result.error_message or f"failed to save image '{path}'")
     return result
+
+
+def load_image(path, *, attributes=None, io_runtime=None):
+    """Load one file-backed image into HostImageData through rawgl.io."""
+
+    io_runtime_type = globals().get("IoRuntime")
+    image_load_request_type = globals().get("ImageLoadRequest")
+    if io_runtime_type is None or image_load_request_type is None:
+        raise RuntimeError("rawgl.load_image() requires the core Python bindings")
+
+    if io_runtime is None:
+        io_runtime = io_runtime_type()
+
+    request = image_load_request_type()
+    request.path = str(path)
+    request.attributes = _coerce_attributes(attributes)
+
+    result = io_runtime.load_image_file(request)
+    if not result.success:
+        raise RuntimeError(result.error_message or f"failed to load image '{path}'")
+    return result.image
+
+
+def read_metadata(
+    path,
+    *,
+    name_style=None,
+    name_policy=None,
+    include_makernotes=False,
+    max_value_preview_bytes=64,
+    max_value_preview_elements=8,
+    io_runtime=None,
+):
+    """Read metadata entries from one file-backed image or container through rawgl.io."""
+
+    io_runtime_type = globals().get("IoRuntime")
+    metadata_read_request_type = globals().get("MetadataReadRequest")
+    if io_runtime_type is None or metadata_read_request_type is None:
+        raise RuntimeError("rawgl.read_metadata() requires the core Python bindings")
+
+    if io_runtime is None:
+        io_runtime = io_runtime_type()
+
+    request = metadata_read_request_type()
+    request.path = str(path)
+    if name_style is not None:
+        request.name_style = name_style
+    if name_policy is not None:
+        request.name_policy = name_policy
+    request.include_makernotes = bool(include_makernotes)
+    request.max_value_preview_bytes = int(max_value_preview_bytes)
+    request.max_value_preview_elements = int(max_value_preview_elements)
+
+    result = io_runtime.read_metadata_file(request)
+    if not result.success:
+        raise RuntimeError(result.error_message or f"failed to read metadata '{path}'")
+    return result.entries
+
+
+def read_metadata_document(
+    path,
+    *,
+    name_style=None,
+    name_policy=None,
+    include_makernotes=False,
+    io_runtime=None,
+):
+    """Read one typed metadata document from a file-backed image or container through rawgl.io."""
+
+    io_runtime_type = globals().get("IoRuntime")
+    metadata_document_read_request_type = globals().get("MetadataDocumentReadRequest")
+    if io_runtime_type is None or metadata_document_read_request_type is None:
+        raise RuntimeError("rawgl.read_metadata_document() requires the core Python bindings")
+
+    if io_runtime is None:
+        io_runtime = io_runtime_type()
+
+    request = metadata_document_read_request_type()
+    request.path = str(path)
+    if name_style is not None:
+        request.name_style = name_style
+    if name_policy is not None:
+        request.name_policy = name_policy
+    request.include_makernotes = bool(include_makernotes)
+
+    result = io_runtime.read_metadata_document_file(request)
+    if not result.success:
+        raise RuntimeError(result.error_message or f"failed to read metadata document '{path}'")
+    return result.document
 
 
 def _apply_input_scalar_or_sequence(binding, name: str, value) -> InputBinding:
@@ -344,10 +450,6 @@ def _apply_input_scalar_or_sequence(binding, name: str, value) -> InputBinding:
     if isinstance(value, HostImageData):
         binding.source_kind = InputSourceKind.host_texture
         binding.host_texture = value
-        return binding
-    if isinstance(value, (str, Path)):
-        binding.source_kind = InputSourceKind.texture_file
-        binding.texture_path = str(value)
         return binding
     if isinstance(value, Sequence):
         if not value:
@@ -402,11 +504,6 @@ def _coerce_input_binding(name, spec):
                 binding.referenced_output_array_element = int(reference[2])
             return binding
 
-        if "texture_path" in spec or "path" in spec:
-            binding.source_kind = InputSourceKind.texture_file
-            binding.texture_path = str(spec.get("texture_path", spec.get("path")))
-            return binding
-
         if "int_values" in spec:
             binding.source_kind = InputSourceKind.int_values
             binding.int_values = [int(value) for value in spec["int_values"]]
@@ -442,17 +539,8 @@ def _coerce_output_binding(name, spec):
     if spec is True:
         binding.capture_to_host = True
         return binding
-    if isinstance(spec, (str, Path)):
-        binding.path = str(spec)
-        binding.format = "rgb16"
-        binding.channels = 3
-        binding.bits = 16
-        return binding
     if not isinstance(spec, Mapping):
         raise TypeError(f"unsupported output specification for '{name}'")
-
-    if "path" in spec:
-        binding.path = str(spec["path"])
     binding.format = str(spec.get("format", binding.format))
     binding.channels = int(spec.get("channels", binding.channels))
     binding.alpha_channel = int(spec.get("alpha_channel", binding.alpha_channel))
@@ -464,6 +552,114 @@ def _coerce_output_binding(name, spec):
         binding.array_element = int(spec["array_element"])
     binding.attributes = _coerce_attributes(spec.get("attributes", spec.get("attrs")))
     return binding
+
+
+def _is_file_input_spec(spec) -> bool:
+    if isinstance(spec, (str, Path, FileInputBinding, FileInputOverride)):
+        return True
+    if not isinstance(spec, Mapping):
+        return False
+    if "path" in spec or "texture_path" in spec:
+        return True
+    return False
+
+
+def _is_file_output_spec(spec) -> bool:
+    if isinstance(spec, (str, Path, FileOutputBinding)):
+        return True
+    if not isinstance(spec, Mapping):
+        return False
+    return "path" in spec
+
+
+def _coerce_file_input_binding(pass_index: int, name, spec):
+    if isinstance(spec, FileInputBinding):
+        return spec
+
+    binding = FileInputBinding()
+    binding.pass_index = int(pass_index)
+    binding.name = str(name)
+
+    if isinstance(spec, (str, Path)):
+        binding.path = str(spec)
+        return binding
+    if not isinstance(spec, Mapping):
+        raise TypeError(f"unsupported file input specification for '{name}'")
+
+    binding.path = str(spec.get("texture_path", spec.get("path", "")))
+    if not binding.path:
+        raise TypeError(f"file input specification for '{name}' requires 'path'")
+    binding.attributes = _coerce_attributes(spec.get("attributes", spec.get("attrs")))
+    if "array_element" in spec:
+        binding.uses_array_element = True
+        binding.array_element = int(spec["array_element"])
+    return binding
+
+
+def _coerce_file_input_override(pass_index: int, name, spec):
+    if isinstance(spec, FileInputOverride):
+        return spec
+
+    override = FileInputOverride()
+    override.pass_index = int(pass_index)
+    override.name = str(name)
+
+    if isinstance(spec, (str, Path)):
+        override.path = str(spec)
+        return override
+    if not isinstance(spec, Mapping):
+        raise TypeError(f"unsupported file input override specification for '{name}'")
+
+    override.path = str(spec.get("texture_path", spec.get("path", "")))
+    if not override.path:
+        raise TypeError(f"file input override specification for '{name}' requires 'path'")
+    override.attributes = _coerce_attributes(spec.get("attributes", spec.get("attrs")))
+    if "array_element" in spec:
+        override.uses_array_element = True
+        override.array_element = int(spec["array_element"])
+    return override
+
+
+def _coerce_file_output_binding(pass_index: int, name, spec):
+    if isinstance(spec, FileOutputBinding):
+        return spec
+
+    binding = FileOutputBinding()
+    binding.pass_index = int(pass_index)
+    binding.name = str(name)
+
+    if isinstance(spec, (str, Path)):
+        binding.path = str(spec)
+        binding.format = "rgb16"
+        binding.channels = 3
+        binding.bits = 16
+        return binding
+    if not isinstance(spec, Mapping):
+        raise TypeError(f"unsupported file output specification for '{name}'")
+
+    binding.path = str(spec.get("path", ""))
+    if not binding.path:
+        raise TypeError(f"file output specification for '{name}' requires 'path'")
+    binding.format = str(spec.get("format", binding.format))
+    binding.channels = int(spec.get("channels", binding.channels))
+    binding.alpha_channel = int(spec.get("alpha_channel", binding.alpha_channel))
+    binding.bits = int(spec.get("bits", binding.bits))
+    binding.attributes = _coerce_attributes(spec.get("attributes", spec.get("attrs")))
+    if "array_element" in spec:
+        binding.uses_array_element = True
+        binding.array_element = int(spec["array_element"])
+    return binding
+
+
+def _maybe_capture_output_from_file_spec(name, spec):
+    if not isinstance(spec, Mapping):
+        return None
+    if "persistent_texture_name" not in spec and "capture_to_host" not in spec and "capture" not in spec:
+        return None
+
+    core_spec = dict(spec)
+    core_spec.pop("path", None)
+    return _coerce_output_binding(name, core_spec)
 
 
 def _coerce_mesh_binding(spec):
@@ -514,7 +710,6 @@ def _coerce_input_override(pass_index: int, name, spec):
     override.uint_values = list(binding.uint_values)
     override.float_values = list(binding.float_values)
     override.double_values = list(binding.double_values)
-    override.texture_path = binding.texture_path
     override.attributes = list(binding.attributes)
     override.uses_array_element = binding.uses_array_element
     override.array_element = binding.array_element
@@ -552,6 +747,104 @@ def _coerce_input_overrides(inputs, *, default_pass_index=0):
         _coerce_input_override_entry(key, spec, default_pass_index=default_pass_index)
         for key, spec in inputs.items()
     ]
+
+
+def _split_pass_inputs(inputs, *, pass_index=0):
+    core_inputs = []
+    file_inputs = []
+    if inputs is None:
+        return core_inputs, file_inputs
+
+    for name, spec in inputs.items():
+        if _is_file_input_spec(spec):
+            file_inputs.append(_coerce_file_input_binding(pass_index, name, spec))
+            continue
+        core_inputs.append(_coerce_input_binding(name, spec))
+
+    return core_inputs, file_inputs
+
+
+def _split_outputs(session, program_kind, shader_modules, outputs, *, pass_index=0, input_names=None):
+    core_outputs = []
+    file_outputs = []
+    if outputs is None:
+        return core_outputs, file_outputs
+
+    if isinstance(outputs, OutputBinding):
+        return [outputs], file_outputs
+    if isinstance(outputs, FileOutputBinding):
+        return core_outputs, [outputs]
+    if outputs is True:
+        name = _inspect_single_output_name(session, program_kind, shader_modules, input_names=input_names)
+        return [_coerce_output_binding(name, outputs)], file_outputs
+    if isinstance(outputs, (str, Path)):
+        name = _inspect_single_output_name(session, program_kind, shader_modules, input_names=input_names)
+        return core_outputs, [_coerce_file_output_binding(pass_index, name, outputs)]
+    if not isinstance(outputs, Mapping):
+        raise TypeError("outputs must be an OutputBinding, FileOutputBinding, a path/bool, or a mapping")
+
+    if outputs and set(outputs.keys()).issubset(_OUTPUT_SPEC_KEYS):
+        name = _inspect_single_output_name(session, program_kind, shader_modules, input_names=input_names)
+        if _is_file_output_spec(outputs):
+            maybe_capture = _maybe_capture_output_from_file_spec(name, outputs)
+            if maybe_capture is not None:
+                core_outputs.append(maybe_capture)
+            file_outputs.append(_coerce_file_output_binding(pass_index, name, outputs))
+            return core_outputs, file_outputs
+        return [_coerce_output_binding(name, outputs)], file_outputs
+
+    for name, spec in outputs.items():
+        if _is_file_output_spec(spec):
+            maybe_capture = _maybe_capture_output_from_file_spec(name, spec)
+            if maybe_capture is not None:
+                core_outputs.append(maybe_capture)
+            file_outputs.append(_coerce_file_output_binding(pass_index, name, spec))
+            continue
+        core_outputs.append(_coerce_output_binding(name, spec))
+
+    return core_outputs, file_outputs
+
+
+def _resolve_input_override_key(key, default_pass_index):
+    array_element = None
+    if isinstance(key, tuple):
+        if len(key) == 2:
+            pass_index, name = key
+        elif len(key) == 3:
+            pass_index, name, array_element = key
+        else:
+            raise TypeError("input override tuple keys must be (pass_index, name) or (pass_index, name, array_element)")
+    else:
+        if default_pass_index is None:
+            raise TypeError("multi-pass input overrides must use tuple keys like (pass_index, name)")
+        pass_index = default_pass_index
+        name = key
+    return int(pass_index), name, array_element
+
+
+def _split_input_overrides(inputs, *, default_pass_index=0):
+    core_overrides = []
+    file_overrides = []
+    if inputs is None:
+        return core_overrides, file_overrides
+
+    for key, spec in inputs.items():
+        pass_index, name, array_element = _resolve_input_override_key(key, default_pass_index)
+        if _is_file_input_spec(spec):
+            override = _coerce_file_input_override(pass_index, name, spec)
+            if array_element is not None:
+                override.uses_array_element = True
+                override.array_element = int(array_element)
+            file_overrides.append(override)
+            continue
+
+        override = _coerce_input_override(pass_index, name, spec)
+        if array_element is not None:
+            override.uses_array_element = True
+            override.array_element = int(array_element)
+        core_overrides.append(override)
+
+    return core_overrides, file_overrides
 
 
 def _coerce_counter_binding(name, spec):
@@ -606,32 +899,16 @@ def _run_workflow(workflow, *, session=None, settings=None, io_runtime=None):
         session = Session()
     if settings is None:
         settings = RunSettings()
-    if io_runtime is None:
-        io_runtime = _default_io_runtime()
     if io_runtime is not None:
-        return _wrap_run_result(io_runtime.run(session, workflow, settings))
+        raise TypeError("core workflow execution does not accept io_runtime; use rawgl.io helpers for file-backed workflows")
     return _wrap_run_result(session.run(workflow, settings))
 
 
 def _prepare_workflow(workflow, *, session=None, io_runtime=None, error_label="workflow", default_pass_index=0):
     if session is None:
         session = Session()
-    if io_runtime is None:
-        io_runtime = _default_io_runtime()
-
     if io_runtime is not None:
-        prepare = io_runtime.prepare(session, workflow)
-        if not prepare.success:
-            raise RuntimeError(prepare.error_message or f"{error_label} preparation failed")
-        prepared_workflow = prepare.take_workflow()
-        if prepared_workflow is None:
-            raise RuntimeError(f"{error_label} preparation returned no PreparedIoWorkflow")
-        return PreparedJob(
-            prepared_workflow,
-            session=session,
-            io_runtime=io_runtime,
-            default_pass_index=default_pass_index,
-        )
+        raise TypeError("core workflow preparation does not accept io_runtime; use rawgl.io helpers for file-backed workflows")
 
     prepare = session.prepare(workflow)
     if not prepare.success:
@@ -683,7 +960,7 @@ def _coerce_outputs(session, program_kind, shader_modules, outputs, input_names=
         return []
     if isinstance(outputs, OutputBinding):
         return [outputs]
-    if isinstance(outputs, (str, Path)) or outputs is True:
+    if outputs is True:
         name = _inspect_single_output_name(session, program_kind, shader_modules, input_names=input_names)
         return [_coerce_output_binding(name, outputs)]
     if isinstance(outputs, Mapping):
@@ -701,11 +978,19 @@ def _outputs_require_inspection(outputs) -> bool:
         return False
     if isinstance(outputs, OutputBinding):
         return False
-    if isinstance(outputs, (str, Path)) or outputs is True:
+    if outputs is True:
         return True
     if isinstance(outputs, Mapping):
         return bool(outputs) and set(outputs.keys()).issubset(_OUTPUT_SPEC_KEYS)
     return False
+
+
+def _io_outputs_require_inspection(outputs) -> bool:
+    if outputs is None:
+        return False
+    if isinstance(outputs, (str, Path, FileOutputBinding)):
+        return True
+    return _outputs_require_inspection(outputs)
 
 
 def _coerce_run_settings(settings):
@@ -764,11 +1049,18 @@ class PreparedJob:
     def run(self, *, inputs=None, settings=None, system_uniforms=None):
         run_settings = _merge_run_settings(settings=settings, system_uniforms=system_uniforms)
         overrides = list(run_settings.overrides)
+        file_overrides = []
         if inputs is not None:
-            overrides.extend(
-                _coerce_input_overrides(inputs, default_pass_index=self._default_pass_index)
-            )
+            core_overrides, file_overrides = _split_input_overrides(inputs, default_pass_index=self._default_pass_index)
+            overrides.extend(core_overrides)
         run_settings.overrides = overrides
+        if self._io_runtime is not None:
+            request = IoRunRequest()
+            request.settings = run_settings
+            request.file_inputs = file_overrides
+            return _wrap_run_result(self._prepared_workflow.run(request))
+        if file_overrides:
+            raise TypeError("core prepared workflows do not accept file-backed input overrides; use rawgl.io helpers")
         return _wrap_run_result(self._prepared_workflow.run(run_settings))
 
     @property
@@ -901,7 +1193,7 @@ def render_pass(
     pass0.inputs = [] if inputs is None else [
         _coerce_input_binding(name, spec) for name, spec in inputs.items()
     ]
-    if session is None and _outputs_require_inspection(output_spec):
+    if session is None and _io_outputs_require_inspection(output_spec):
         session = Session()
     pass0.outputs = _coerce_outputs(session, ShaderProgramKind.vertfrag, shader_modules, output_spec)
     pass0.meshes = [] if meshes is None else [_coerce_mesh_binding(spec) for spec in meshes]
@@ -962,7 +1254,7 @@ def compute_pass(
     ]
     input_names = [] if inputs is None else list(inputs.keys())
     output_spec = _resolve_output_arguments(outputs=outputs, output=output)
-    if session is None and _outputs_require_inspection(output_spec):
+    if session is None and _io_outputs_require_inspection(output_spec):
         session = Session()
     pass0.outputs = _coerce_outputs(
         session,
@@ -972,6 +1264,91 @@ def compute_pass(
         input_names=input_names,
     )
     return pass0
+
+
+def _build_io_render_workflow(
+    fragment_shader,
+    *,
+    outputs=None,
+    output=None,
+    size=512,
+    inputs=None,
+    vertex_shader=None,
+    verbosity=3,
+    session=None,
+):
+    pass0 = Pass()
+    pass0.program_kind = ShaderProgramKind.vertfrag
+    pass0.size_x, pass0.size_y = _coerce_pass_size(size, inputs, fallback=512)
+
+    shader_modules = []
+    if vertex_shader is not None:
+        shader_modules.append(_coerce_shader_module(vertex_shader, ShaderModuleRole.vertex))
+    shader_modules.append(_coerce_shader_module(fragment_shader, ShaderModuleRole.fragment))
+    pass0.shader_modules = shader_modules
+
+    core_inputs, file_inputs = _split_pass_inputs(inputs, pass_index=0)
+    pass0.inputs = core_inputs
+
+    output_spec = _resolve_output_arguments(outputs=outputs, output=output)
+    if session is None and _io_outputs_require_inspection(output_spec):
+        session = Session()
+    core_outputs, file_outputs = _split_outputs(
+        session,
+        ShaderProgramKind.vertfrag,
+        shader_modules,
+        output_spec,
+        pass_index=0,
+    )
+    pass0.outputs = core_outputs
+
+    workflow = _build_workflow(pass0, verbosity)
+    return workflow, file_inputs, file_outputs
+
+
+def _build_io_compute_workflow(
+    shader,
+    *,
+    outputs=None,
+    output=None,
+    size=None,
+    inputs=None,
+    counters=None,
+    workgroup_size=(16, 16),
+    verbosity=3,
+    session=None,
+):
+    pass0 = Pass()
+    pass0.program_kind = ShaderProgramKind.compute
+    pass0.size_x, pass0.size_y = _coerce_pass_size(size, inputs)
+    pass0.work_group_size_x, pass0.work_group_size_y = _coerce_size(workgroup_size)
+    pass0.has_explicit_work_group_size = True
+    pass0.shader_modules = [_coerce_shader_module(shader, ShaderModuleRole.compute)]
+
+    core_inputs, file_inputs = _split_pass_inputs(inputs, pass_index=0)
+    pass0.inputs = core_inputs
+    pass0.counters = [] if counters is None else [
+        binding
+        for name, spec in counters.items()
+        for binding in _coerce_counter_bindings(name, spec)
+    ]
+
+    input_names = [] if inputs is None else list(inputs.keys())
+    output_spec = _resolve_output_arguments(outputs=outputs, output=output)
+    if session is None and _io_outputs_require_inspection(output_spec):
+        session = Session()
+    core_outputs, file_outputs = _split_outputs(
+        session,
+        ShaderProgramKind.compute,
+        pass0.shader_modules,
+        output_spec,
+        pass_index=0,
+        input_names=input_names,
+    )
+    pass0.outputs = core_outputs
+
+    workflow = _build_workflow(pass0, verbosity)
+    return workflow, file_inputs, file_outputs
 
 
 def build_workflow(*passes, verbosity=3):
@@ -1071,7 +1448,6 @@ def prepare_workflow(
     passes=None,
     verbosity=3,
     session=None,
-    io_runtime=None,
 ):
     """Prepare one multi-pass workflow for repeated execution."""
 
@@ -1080,7 +1456,6 @@ def prepare_workflow(
     return _prepare_workflow(
         workflow_definition,
         session=session,
-        io_runtime=io_runtime,
         error_label="workflow",
         default_pass_index=default_pass_index,
     )
@@ -1092,7 +1467,6 @@ def run_workflow(
     passes=None,
     verbosity=3,
     session=None,
-    io_runtime=None,
     settings=None,
     system_uniforms=None,
     inputs=None,
@@ -1106,7 +1480,7 @@ def run_workflow(
         inputs,
         default_pass_index=override_pass_index,
     )
-    return _run_workflow(workflow_definition, session=session, settings=run_settings, io_runtime=io_runtime)
+    return _run_workflow(workflow_definition, session=session, settings=run_settings)
 
 
 def prepare_render(
@@ -1366,10 +1740,9 @@ class BatchPreparedJob:
     def submit(self, *, inputs=None, settings=None, system_uniforms=None, cancellation=None):
         request = BatchSubmitRequest()
         request.settings = _merge_run_settings(settings=settings, system_uniforms=system_uniforms)
-        request.settings.overrides = list(request.settings.overrides) + _coerce_input_overrides(
-            inputs,
-            default_pass_index=self._default_pass_index,
-        )
+        core_overrides, file_overrides = _split_input_overrides(inputs, default_pass_index=self._default_pass_index)
+        request.settings.overrides = list(request.settings.overrides) + core_overrides
+        request.file_inputs = file_overrides
         return BatchJobHandleView(
             self._batch_runner.submit(self._prepared_workflow, request, cancellation)
         )
@@ -1560,13 +1933,12 @@ def _session_prepare_compute(self, *args, **kwargs):
     return prepare_compute(*args, session=self, **kwargs)
 
 
-def _session_prepare_workflow(self, workflow=None, *, passes=None, verbosity=3, io_runtime=None):
+def _session_prepare_workflow(self, workflow=None, *, passes=None, verbosity=3):
     return prepare_workflow(
         workflow,
         passes=passes,
         verbosity=verbosity,
         session=self,
-        io_runtime=io_runtime,
     )
 
 
@@ -1599,11 +1971,373 @@ def _batch_runner_prepare_compute(self, *args, **kwargs):
     return prepare_batch_compute(self, *args, **kwargs)
 
 
+class _IoNamespace:
+    """Explicit Python file-oriented helper surface."""
+
+    def __init__(self):
+        self.Runtime = globals().get("IoRuntime")
+        self.RuntimeOptions = globals().get("IoRuntimeOptions")
+        self.MetadataTransferMode = globals().get("MetadataTransferMode")
+        self.MetadataNameStyle = globals().get("MetadataNameStyle")
+        self.MetadataNamePolicy = globals().get("MetadataNamePolicy")
+        self.MetadataKeyKind = globals().get("MetadataKeyKind")
+        self.MetadataValueKind = globals().get("MetadataValueKind")
+        self.MetadataElementType = globals().get("MetadataElementType")
+        self.MetadataTextEncoding = globals().get("MetadataTextEncoding")
+        self.MetadataEntryFlags = globals().get("MetadataEntryFlags")
+        self.MetadataEntry = globals().get("MetadataEntry")
+        self.MetadataValue = globals().get("MetadataValue")
+        self.MetadataField = globals().get("MetadataField")
+        self.MetadataDocument = globals().get("MetadataDocument")
+        self.MetadataReadRequest = globals().get("MetadataReadRequest")
+        self.MetadataReadResult = globals().get("MetadataReadResult")
+        self.MetadataDocumentReadRequest = globals().get("MetadataDocumentReadRequest")
+        self.MetadataDocumentReadResult = globals().get("MetadataDocumentReadResult")
+
+    def _resolve_runtime(self, io_runtime=None):
+        if io_runtime is not None:
+            return io_runtime
+        resolved = _default_io_runtime()
+        if resolved is None:
+            raise RuntimeError("rawgl.io helpers require IoRuntime bindings in this build")
+        return resolved
+
+    def load_image(self, path, *, attributes=None, io_runtime=None):
+        return load_image(path, attributes=attributes, io_runtime=self._resolve_runtime(io_runtime))
+
+    def save_image(
+        self,
+        image,
+        path,
+        *,
+        bits=16,
+        alpha_channel=None,
+        attributes=None,
+        metadata_mode=None,
+        source_metadata=None,
+        explicit_metadata=None,
+        io_runtime=None,
+    ):
+        return save_image(
+            image,
+            path,
+            bits=bits,
+            alpha_channel=alpha_channel,
+            attributes=attributes,
+            metadata_mode=metadata_mode,
+            source_metadata=source_metadata,
+            explicit_metadata=explicit_metadata,
+            io_runtime=self._resolve_runtime(io_runtime),
+        )
+
+    def read_metadata(
+        self,
+        path,
+        *,
+        name_style=None,
+        name_policy=None,
+        include_makernotes=False,
+        max_value_preview_bytes=64,
+        max_value_preview_elements=8,
+        io_runtime=None,
+    ):
+        return read_metadata(
+            path,
+            name_style=name_style,
+            name_policy=name_policy,
+            include_makernotes=include_makernotes,
+            max_value_preview_bytes=max_value_preview_bytes,
+            max_value_preview_elements=max_value_preview_elements,
+            io_runtime=self._resolve_runtime(io_runtime),
+        )
+
+    def read_metadata_document(
+        self,
+        path,
+        *,
+        name_style=None,
+        name_policy=None,
+        include_makernotes=False,
+        io_runtime=None,
+    ):
+        return read_metadata_document(
+            path,
+            name_style=name_style,
+            name_policy=name_policy,
+            include_makernotes=include_makernotes,
+            io_runtime=self._resolve_runtime(io_runtime),
+        )
+
+    def prepare_workflow(
+        self,
+        workflow=None,
+        *,
+        passes=None,
+        verbosity=3,
+        session=None,
+        io_runtime=None,
+        file_inputs=None,
+        file_outputs=None,
+    ):
+        workflow_definition = _coerce_workflow_definition(workflow, passes=passes, verbosity=verbosity)
+        if session is None:
+            session = Session()
+        resolved_runtime = self._resolve_runtime(io_runtime)
+        prepare = resolved_runtime.prepare(
+            session,
+            workflow_definition,
+            [] if file_inputs is None else list(file_inputs),
+            [] if file_outputs is None else list(file_outputs),
+        )
+        if not prepare.success:
+            raise RuntimeError(prepare.error_message or "workflow preparation failed")
+        prepared_workflow = prepare.take_workflow()
+        if prepared_workflow is None:
+            raise RuntimeError("workflow preparation returned no PreparedIoWorkflow")
+        default_pass_index = 0 if len(workflow_definition.passes) == 1 else None
+        return PreparedJob(
+            prepared_workflow,
+            session=session,
+            io_runtime=resolved_runtime,
+            default_pass_index=default_pass_index,
+        )
+
+    def run_workflow(
+        self,
+        workflow=None,
+        *,
+        passes=None,
+        verbosity=3,
+        session=None,
+        io_runtime=None,
+        settings=None,
+        system_uniforms=None,
+        inputs=None,
+        file_inputs=None,
+        file_outputs=None,
+    ):
+        workflow_definition = _coerce_workflow_definition(workflow, passes=passes, verbosity=verbosity)
+        if session is None:
+            session = Session()
+        resolved_runtime = self._resolve_runtime(io_runtime)
+        core_overrides, file_overrides = _split_input_overrides(
+            inputs,
+            default_pass_index=0 if len(workflow_definition.passes) == 1 else None,
+        )
+        request = IoRunRequest()
+        request.settings = _merge_run_settings(settings=settings, system_uniforms=system_uniforms)
+        request.settings.overrides = list(request.settings.overrides) + core_overrides
+        request.file_inputs = file_overrides
+        return _wrap_run_result(
+            resolved_runtime.run(
+                session,
+                workflow_definition,
+                request,
+                [] if file_inputs is None else list(file_inputs),
+                [] if file_outputs is None else list(file_outputs),
+            )
+        )
+
+    def prepare_render(
+        self,
+        fragment_shader,
+        *,
+        outputs=None,
+        output=None,
+        size=512,
+        inputs=None,
+        vertex_shader=None,
+        verbosity=3,
+        session=None,
+        io_runtime=None,
+    ):
+        workflow, file_inputs, file_outputs = _build_io_render_workflow(
+            fragment_shader,
+            outputs=outputs,
+            output=output,
+            size=size,
+            inputs=inputs,
+            vertex_shader=vertex_shader,
+            verbosity=verbosity,
+            session=session,
+        )
+        return self.prepare_workflow(
+            workflow,
+            session=session,
+            io_runtime=self._resolve_runtime(io_runtime),
+            verbosity=verbosity,
+            file_inputs=file_inputs,
+            file_outputs=file_outputs,
+        )
+
+    def prepare_image(
+        self,
+        fragment_shader,
+        *,
+        output=None,
+        outputs=None,
+        size=512,
+        inputs=None,
+        verbosity=3,
+        session=None,
+        io_runtime=None,
+    ):
+        return self.prepare_render(
+            fragment_shader,
+            output=output,
+            outputs=outputs,
+            size=size,
+            inputs=inputs,
+            verbosity=verbosity,
+            session=session,
+            io_runtime=io_runtime,
+        )
+
+    def prepare_compute(
+        self,
+        shader,
+        *,
+        outputs=None,
+        output=None,
+        size=None,
+        inputs=None,
+        counters=None,
+        workgroup_size=(16, 16),
+        verbosity=3,
+        session=None,
+        io_runtime=None,
+    ):
+        workflow, file_inputs, file_outputs = _build_io_compute_workflow(
+            shader,
+            outputs=outputs,
+            output=output,
+            size=size,
+            inputs=inputs,
+            counters=counters,
+            workgroup_size=workgroup_size,
+            verbosity=verbosity,
+            session=session,
+        )
+        return self.prepare_workflow(
+            workflow,
+            session=session,
+            io_runtime=self._resolve_runtime(io_runtime),
+            verbosity=verbosity,
+            file_inputs=file_inputs,
+            file_outputs=file_outputs,
+        )
+
+    def render(
+        self,
+        fragment_shader,
+        *,
+        outputs=None,
+        output=None,
+        size=512,
+        inputs=None,
+        vertex_shader=None,
+        verbosity=3,
+        session=None,
+        io_runtime=None,
+        settings=None,
+        system_uniforms=None,
+    ):
+        workflow, file_inputs, file_outputs = _build_io_render_workflow(
+            fragment_shader,
+            outputs=outputs,
+            output=output,
+            size=size,
+            inputs=inputs,
+            vertex_shader=vertex_shader,
+            verbosity=verbosity,
+            session=session,
+        )
+        request = IoRunRequest()
+        request.settings = _merge_run_settings(settings=settings, system_uniforms=system_uniforms)
+        return _wrap_run_result(
+            self._resolve_runtime(io_runtime).run(
+                Session() if session is None else session,
+                workflow,
+                request,
+                file_inputs,
+                file_outputs,
+            )
+        )
+
+    def image(
+        self,
+        fragment_shader,
+        *,
+        output=None,
+        outputs=None,
+        size=512,
+        inputs=None,
+        verbosity=3,
+        session=None,
+        io_runtime=None,
+        settings=None,
+        system_uniforms=None,
+    ):
+        return self.render(
+            fragment_shader,
+            output=output,
+            outputs=outputs,
+            size=size,
+            inputs=inputs,
+            verbosity=verbosity,
+            session=session,
+            io_runtime=io_runtime,
+            settings=settings,
+            system_uniforms=system_uniforms,
+        )
+
+    def compute(
+        self,
+        shader,
+        *,
+        outputs=None,
+        output=None,
+        size=None,
+        inputs=None,
+        counters=None,
+        workgroup_size=(16, 16),
+        verbosity=3,
+        session=None,
+        io_runtime=None,
+        settings=None,
+        system_uniforms=None,
+    ):
+        workflow, file_inputs, file_outputs = _build_io_compute_workflow(
+            shader,
+            outputs=outputs,
+            output=output,
+            size=size,
+            inputs=inputs,
+            counters=counters,
+            workgroup_size=workgroup_size,
+            verbosity=verbosity,
+            session=session,
+        )
+        request = IoRunRequest()
+        request.settings = _merge_run_settings(settings=settings, system_uniforms=system_uniforms)
+        return _wrap_run_result(
+            self._resolve_runtime(io_runtime).run(
+                Session() if session is None else session,
+                workflow,
+                request,
+                file_inputs,
+                file_outputs,
+            )
+        )
+
+
 Session.prepare_render = _session_prepare_render
 Session.prepare_image = _session_prepare_image
 Session.prepare_compute = _session_prepare_compute
 Session.prepare_workflow = _session_prepare_workflow
 Session.batch = _session_batch
+
+io = _IoNamespace()
 
 if "BatchRunner" in globals():
     BatchRunner.prepare_workflow = _batch_runner_prepare_workflow

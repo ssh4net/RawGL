@@ -22,6 +22,20 @@ The normal path is the high-level helper layer:
 - ``rawgl.prepare_render(...)``
 - ``rawgl.prepare_compute(...)``
 
+Use the explicit ``rawgl.io`` helper surface when the workflow starts or ends
+with files:
+
+- ``rawgl.io.image(...)``
+- ``rawgl.io.render(...)``
+- ``rawgl.io.compute(...)``
+- ``rawgl.io.prepare_image(...)``
+- ``rawgl.io.prepare_render(...)``
+- ``rawgl.io.prepare_compute(...)``
+- ``rawgl.io.load_image(...)``
+- ``rawgl.io.save_image(...)``
+- ``rawgl.io.read_metadata(...)``
+- ``rawgl.io.read_metadata_document(...)``
+
 This layer is intended for:
 
 - scripts
@@ -49,6 +63,34 @@ Run one fullscreen pass:
    )
 
    array = result.output_array()
+
+Run one file-oriented fullscreen pass:
+
+.. code-block:: python
+
+   import rawgl
+
+   result = rawgl.io.image(
+       fragment_shader,
+       size=(512, 512),
+       inputs={"u_src0": "input.png"},
+       output="output.png",
+   )
+
+Read metadata from one file-backed image or container:
+
+.. code-block:: python
+
+   import rawgl
+
+   entries = rawgl.io.read_metadata(
+       "output.tif",
+       name_style=rawgl.MetadataNameStyle.oiio,
+       name_policy=rawgl.MetadataNamePolicy.exif_tool_alias,
+   )
+
+   for entry in entries[:8]:
+       print(entry.name, entry.value_text)
 
 This path intentionally hides:
 
@@ -79,6 +121,48 @@ This is the intended integration point for pipelines built around:
 - scikit-image
 - OpenCV
 - other Python preprocessing stages that already hold image data in memory
+
+Metadata
+--------
+
+Metadata readback is file-oriented and lives under ``rawgl.io``.
+
+Current Python metadata support includes:
+
+- ``rawgl.io.read_metadata(...)`` for preview-oriented inspection
+- ``rawgl.io.read_metadata_document(...)`` for typed transfer and editing
+- ``rawgl.io.save_image(..., metadata_mode=...)`` for metadata-preserving or
+  explicit metadata writes
+- ``rawgl.MetadataReadRequest`` and ``rawgl.IoRuntime.read_metadata_file(...)``
+  for explicit preview control
+- ``rawgl.MetadataDocumentReadRequest`` and
+  ``rawgl.IoRuntime.read_metadata_document_file(...)`` for explicit typed
+  document reads
+
+This path requires an OpenMeta-enabled build of RawGL.
+
+Typical round-trip shape:
+
+.. code-block:: python
+
+   import rawgl
+
+   image = rawgl.io.load_image("input.png")
+   rawgl.io.save_image(image, "stage.tif", bits=16)
+
+   document = rawgl.io.read_metadata_document(
+       "stage.tif",
+       name_style=rawgl.MetadataNameStyle.oiio,
+       name_policy=rawgl.MetadataNamePolicy.exif_tool_alias,
+   )
+
+   rawgl.io.save_image(
+       image,
+       "copy.tif",
+       bits=16,
+       metadata_mode=rawgl.MetadataTransferMode.copy_source,
+       source_metadata=document,
+   )
 
 Prepared workflows
 ------------------
@@ -170,3 +254,5 @@ Use that when you need explicit control over:
 - ``InputBinding``
 - ``OutputBinding``
 - lower-level request/result objects
+
+Top-level helpers are memory-first. Use ``rawgl.io`` for file-backed workflows.

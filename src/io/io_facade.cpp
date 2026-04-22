@@ -3,6 +3,7 @@
 
 #include "rawgl/rawgl_io.h"
 
+#include "metadata_internal.h"
 #include "output_writer.h"
 #include "texture_loader.h"
 
@@ -25,7 +26,7 @@ to_attribute_map(const std::vector<Attribute>& attributes)
 }
 
 static std::string
-build_addressed_output_name(const OutputBinding& output)
+build_addressed_output_name(const FileOutputBinding& output)
 {
     if (!output.usesArrayElement) {
         return output.name;
@@ -40,8 +41,56 @@ static std::string
 build_output_capture_key(const OutputSaveBinding& outputSave)
 {
     std::ostringstream stream;
-    stream << build_addressed_output_name(outputSave.output) << "::" << outputSave.passIndex;
+    stream << build_addressed_output_name(outputSave.output) << "::" << outputSave.output.passIndex;
     return stream.str();
+}
+
+static bool
+append_metadata_attributes(const ImageSaveRequest& request,
+                           std::map<std::string, std::string>* attributes,
+                           std::string* errorMessage)
+{
+    if (!attributes || !errorMessage) {
+        return false;
+    }
+
+    switch (request.metadataMode) {
+    case MetadataTransferMode::None: return true;
+    case MetadataTransferMode::CopySource:
+        if (!request.sourceMetadata) {
+            *errorMessage = "metadata transfer requested CopySource without source metadata";
+            return false;
+        }
+        return flatten_metadata_document_to_oiio_attributes(*request.sourceMetadata, attributes, errorMessage);
+    case MetadataTransferMode::ExplicitOnly:
+        if (!request.explicitMetadata) {
+            *errorMessage = "metadata transfer requested ExplicitOnly without explicit metadata";
+            return false;
+        }
+        return flatten_metadata_document_to_oiio_attributes(*request.explicitMetadata, attributes, errorMessage);
+    case MetadataTransferMode::MergeSourceAndExplicit: {
+        if (!request.sourceMetadata && !request.explicitMetadata) {
+            *errorMessage = "metadata transfer requested MergeSourceAndExplicit without metadata";
+            return false;
+        }
+        if (request.sourceMetadata
+            && !flatten_metadata_document_to_oiio_attributes(*request.sourceMetadata, attributes, errorMessage)) {
+            return false;
+        }
+        if (request.explicitMetadata) {
+            std::map<std::string, std::string> explicitAttributes;
+            if (!flatten_metadata_document_to_oiio_attributes(*request.explicitMetadata, &explicitAttributes, errorMessage)) {
+                return false;
+            }
+            for (const auto& attribute : explicitAttributes) {
+                (*attributes)[attribute.first] = attribute.second;
+            }
+        }
+        return true;
+    }
+    }
+
+    return true;
 }
 
 static ImageSaveResult
@@ -50,9 +99,18 @@ save_image_file_impl(const ImageSaveRequest& request)
     ImageSaveResult result;
 
     try {
+        std::map<std::string, std::string> attributes;
+        if (!append_metadata_attributes(request, &attributes, &result.errorMessage)) {
+            return result;
+        }
+        const std::map<std::string, std::string> requestAttributes = to_attribute_map(request.attributes);
+        for (const auto& attribute : requestAttributes) {
+            attributes[attribute.first] = attribute.second;
+        }
+
         OutputWriteRequest writeRequest;
         writeRequest.path         = request.path;
-        writeRequest.attributes   = to_attribute_map(request.attributes);
+        writeRequest.attributes   = std::move(attributes);
         writeRequest.alphaChannel = request.alphaChannel;
         writeRequest.bits         = request.bits;
         writeRequest.image        = &request.image;
@@ -100,41 +158,82 @@ IoRuntime::saveImageFile(const ImageSaveRequest& request) const
 }
 
 WorkflowMaterializationResult
-IoRuntime::materializeWorkflow(const Workflow& workflow) const
+IoRuntime::materializeWorkflow(const Workflow& workflow,
+                               const std::vector<FileInputBinding>& fileInputs,
+                               const std::vector<FileOutputBinding>& fileOutputs) const
 {
     WorkflowMaterializationResult result;
     result.workflow = workflow;
 
     try {
-        for (size_t passIndex = 0; passIndex < result.workflow.passes.size(); ++passIndex) {
-            Pass& pass = result.workflow.passes[passIndex];
+        for (const FileInputBinding& fileInput : fileInputs) {
+            if (fileInput.passIndex >= result.workflow.passes.size()) {
+                result.errorMessage = "file input references an out-of-range pass index";
+                return result;
+            }
 
-            for (InputBinding& input : pass.inputs) {
-                if (input.sourceKind != InputSourceKind::textureFile) {
+            const ImageLoadResult loadResult = loadImageFile(ImageLoadRequest { fileInput.path, fileInput.attributes });
+            if (!loadResult.success) {
+                result.errorMessage = loadResult.errorMessage.empty() ? "workflow input materialization failed"
+                                                                     : loadResult.errorMessage;
+                return result;
+            }
+
+            Pass& pass = result.workflow.passes[fileInput.passIndex];
+            for (const InputBinding& existingInput : pass.inputs) {
+                if (existingInput.name != fileInput.name || existingInput.usesArrayElement != fileInput.usesArrayElement
+                    || existingInput.arrayElement != fileInput.arrayElement) {
                     continue;
                 }
 
-                const ImageLoadResult loadResult = loadImageFile(ImageLoadRequest { input.texturePath, input.attributes });
-                if (!loadResult.success) {
-                    result.errorMessage = loadResult.errorMessage.empty() ? "workflow input materialization failed"
-                                                                         : loadResult.errorMessage;
-                    return result;
-                }
-
-                input.sourceKind  = InputSourceKind::hostTexture;
-                input.hostTexture = std::make_shared<HostImageData>(loadResult.image);
-                input.texturePath.clear();
+                result.errorMessage = "file input duplicates an in-memory workflow input";
+                return result;
             }
 
+            InputBinding input;
+            input.name = fileInput.name;
+            input.sourceKind = InputSourceKind::hostTexture;
+            input.attributes = fileInput.attributes;
+            input.usesArrayElement = fileInput.usesArrayElement;
+            input.arrayElement = fileInput.arrayElement;
+            input.hostTexture = std::make_shared<HostImageData>(loadResult.image);
+            pass.inputs.push_back(std::move(input));
+        }
+
+        for (const FileOutputBinding& fileOutput : fileOutputs) {
+            if (fileOutput.passIndex >= result.workflow.passes.size()) {
+                result.errorMessage = "file output references an out-of-range pass index";
+                return result;
+            }
+
+            Pass& pass = result.workflow.passes[fileOutput.passIndex];
+            bool matchedOutput = false;
             for (OutputBinding& output : pass.outputs) {
-                if (output.path.empty()) {
+                if (output.name != fileOutput.name || output.usesArrayElement != fileOutput.usesArrayElement
+                    || output.arrayElement != fileOutput.arrayElement) {
                     continue;
                 }
 
-                result.outputSaves.push_back(OutputSaveBinding { passIndex, output });
-                output.path.clear();
                 output.captureToHost = true;
+                matchedOutput = true;
+                break;
             }
+
+            if (!matchedOutput) {
+                OutputBinding output;
+                output.name = fileOutput.name;
+                output.format = fileOutput.format;
+                output.channels = fileOutput.channels;
+                output.alphaChannel = fileOutput.alphaChannel;
+                output.bits = fileOutput.bits;
+                output.attributes = fileOutput.attributes;
+                output.captureToHost = true;
+                output.usesArrayElement = fileOutput.usesArrayElement;
+                output.arrayElement = fileOutput.arrayElement;
+                pass.outputs.push_back(std::move(output));
+            }
+
+            result.outputSaves.push_back(OutputSaveBinding { fileOutput });
         }
     } catch (const std::exception& exception) {
         result.errorMessage = exception.what();
@@ -146,28 +245,40 @@ IoRuntime::materializeWorkflow(const Workflow& workflow) const
 }
 
 RunSettingsMaterializationResult
-IoRuntime::materializeRunSettings(const RunSettings& settings) const
+IoRuntime::materializeRunSettings(const RunRequest& request) const
 {
     RunSettingsMaterializationResult result;
-    result.settings = settings;
+    result.settings = request.settings;
 
     try {
-        for (InputOverride& inputOverride : result.settings.overrides) {
-            if (inputOverride.sourceKind != InputSourceKind::textureFile) {
-                continue;
-            }
-
-            const ImageLoadResult loadResult =
-                loadImageFile(ImageLoadRequest { inputOverride.texturePath, inputOverride.attributes });
+        for (const FileInputOverride& fileInput : request.fileInputs) {
+            const ImageLoadResult loadResult = loadImageFile(ImageLoadRequest { fileInput.path, fileInput.attributes });
             if (!loadResult.success) {
                 result.errorMessage = loadResult.errorMessage.empty() ? "run settings materialization failed"
                                                                      : loadResult.errorMessage;
                 return result;
             }
 
-            inputOverride.sourceKind  = InputSourceKind::hostTexture;
+            for (const InputOverride& existingOverride : result.settings.overrides) {
+                if (existingOverride.passIndex != fileInput.passIndex || existingOverride.name != fileInput.name
+                    || existingOverride.usesArrayElement != fileInput.usesArrayElement
+                    || existingOverride.arrayElement != fileInput.arrayElement) {
+                    continue;
+                }
+
+                result.errorMessage = "file input override duplicates an in-memory run override";
+                return result;
+            }
+
+            InputOverride inputOverride;
+            inputOverride.passIndex = fileInput.passIndex;
+            inputOverride.name = fileInput.name;
+            inputOverride.sourceKind = InputSourceKind::hostTexture;
+            inputOverride.attributes = fileInput.attributes;
+            inputOverride.usesArrayElement = fileInput.usesArrayElement;
+            inputOverride.arrayElement = fileInput.arrayElement;
             inputOverride.hostTexture = std::make_shared<HostImageData>(loadResult.image);
-            inputOverride.texturePath.clear();
+            result.settings.overrides.push_back(std::move(inputOverride));
         }
     } catch (const std::exception& exception) {
         result.errorMessage = exception.what();

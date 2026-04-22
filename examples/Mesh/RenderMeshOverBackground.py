@@ -113,7 +113,6 @@ workflow = rawgl.build_workflow(
         },
         outputs={
             "Composite": {
-                "path": str(output_path),
                 "format": "rgba32f",
                 "channels": 4,
                 "alpha_channel": 3,
@@ -133,5 +132,13 @@ if not result.success:
     raise RuntimeError(result.error_message)
 
 image = result.output_array("Composite::2")
+rawgl.io.save_image(
+    result.captured_outputs["Composite::2"],
+    output_path,
+    bits=16,
+    attributes={
+        "png:compressionLevel": 0,
+    },
+)
 print(f"composited image shape: {image.shape}")
 print(output_path.resolve())

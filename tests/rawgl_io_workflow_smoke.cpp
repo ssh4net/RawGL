@@ -38,37 +38,25 @@ void main()
     fragmentModule.debugLabel = "rawgl_io_workflow_smoke_fragment";
     pass.shaderModules.push_back(fragmentModule);
 
-    rawgl::InputBinding input;
-    input.name        = "u_src0";
-    input.sourceKind  = rawgl::InputSourceKind::textureFile;
-    input.texturePath = inputPath.string();
-    pass.inputs.push_back(input);
-
-    rawgl::OutputBinding output;
-    output.name = "out_color";
-    output.path = outputPath.string();
-    pass.outputs.push_back(output);
-
     workflow.passes.push_back(pass);
 
     rawgl::Session session;
     rawgl::io::IoRuntime ioRuntime;
+    std::vector<rawgl::io::FileInputBinding> fileInputs;
+    fileInputs.push_back(rawgl::io::FileTextureInput(0, "u_src0", inputPath.string()));
+    std::vector<rawgl::io::FileOutputBinding> fileOutputs;
+    fileOutputs.push_back(rawgl::io::FileOutput(0, "out_color", outputPath.string()));
 
-    rawgl::io::PrepareWorkflowResult prepareResult = ioRuntime.prepare(session, workflow);
+    rawgl::io::PrepareWorkflowResult prepareResult = ioRuntime.prepare(session, workflow, fileInputs, fileOutputs);
     if (!prepareResult.success || !prepareResult.workflow) {
         std::cerr << "IO workflow prepare failed: " << prepareResult.errorMessage << std::endl;
         return 1;
     }
 
-    rawgl::RunSettings settings;
-    rawgl::InputOverride overrideInput;
-    overrideInput.passIndex = 0;
-    overrideInput.name = "u_src0";
-    overrideInput.sourceKind = rawgl::InputSourceKind::textureFile;
-    overrideInput.texturePath = inputPath.string();
-    settings.overrides.push_back(overrideInput);
+    rawgl::io::RunRequest runRequest;
+    runRequest.fileInputs.push_back(rawgl::io::FileTextureOverride(0, "u_src0", inputPath.string()));
 
-    const rawgl::RunResult preparedRunResult = prepareResult.workflow->run(settings);
+    const rawgl::RunResult preparedRunResult = prepareResult.workflow->run(runRequest);
     if (!preparedRunResult.success) {
         std::cerr << "Prepared IO workflow run failed: " << preparedRunResult.errorMessage << std::endl;
         return 1;
@@ -84,7 +72,7 @@ void main()
         return 1;
     }
 
-    const rawgl::RunResult directRunResult = ioRuntime.run(session, workflow);
+    const rawgl::RunResult directRunResult = ioRuntime.run(session, workflow, {}, fileInputs, fileOutputs);
     if (!directRunResult.success) {
         std::cerr << "Direct IO workflow run failed: " << directRunResult.errorMessage << std::endl;
         return 1;

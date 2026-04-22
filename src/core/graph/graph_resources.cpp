@@ -139,22 +139,6 @@ validate_host_image_data(const HostImageData& hostImage, const std::string& cont
     }
 }
 
-static std::shared_ptr<Texture>
-require_cached_texture_resource(const RawGLContextState& contextState,
-                                const std::string& path,
-                                const std::vector<GraphAttribute>& attributes)
-{
-    const std::string cacheKey = build_texture_resource_key(path, attributes);
-
-    std::shared_lock<std::shared_mutex> readLock(contextState.textureCacheMutex);
-    auto cacheIt = contextState.textureCache.find(cacheKey);
-    if (cacheIt == contextState.textureCache.end() || !cacheIt->second) {
-        throw std::runtime_error("Prepared input texture is missing.");
-    }
-
-    return cacheIt->second;
-}
-
 static std::shared_ptr<SequenceSharedMeshData>
 load_cached_mesh_resource(const RawGLContextState& contextState, const GraphMeshDefinition& mesh)
 {
@@ -314,15 +298,6 @@ build_resource_plan(const RawGLContextState& contextState, const RawGLGraphState
         resourcePass.atomicCounters = validatedPass.definition.atomicCounters;
         resourcePass.outputs        = validatedPass.definition.outputs;
         resourcePass.meshes         = validatedPass.definition.meshes;
-
-        for (const GraphInputDefinition& inputDefinition : resourcePass.inputs) {
-            if (inputDefinition.sourceKind == GraphInputSourceKind::textureFile) {
-                const std::string cacheKey = build_texture_resource_key(inputDefinition.texturePath,
-                                                                        inputDefinition.attributes);
-                resourcePlan.sharedTextures[cacheKey] =
-                    require_cached_texture_resource(contextState, inputDefinition.texturePath, inputDefinition.attributes);
-            }
-        }
 
         for (const GraphMeshDefinition& meshDefinition : resourcePass.meshes) {
             if (meshDefinition.sourceKind != GraphMeshSourceKind::file) {

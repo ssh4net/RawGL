@@ -2,6 +2,7 @@
 // Copyright (c) 2022-2026 Erium Vladlen.
 
 #include "rawgl/rawgl.h"
+#include "rawgl/rawgl_io.h"
 
 #include <OpenImageIO/imageio.h>
 
@@ -78,9 +79,15 @@ verify_output(const std::filesystem::path& outputPath, float expectedValue)
     return true;
 }
 
-rawgl::Workflow
+struct IoWorkflowCase {
+    rawgl::Workflow workflow;
+    std::vector<rawgl::io::FileOutputBinding> fileOutputs;
+};
+
+IoWorkflowCase
 make_persistent_workflow(const std::filesystem::path& outputPath)
 {
+    IoWorkflowCase result;
     rawgl::Pass writePass;
     writePass.programKind              = rawgl::ShaderProgramKind::compute;
     writePass.shaderModules.push_back(make_file_module(rawgl::ShaderProgramKind::compute, "tests/shaders/persistent_write.comp"));
@@ -118,20 +125,11 @@ make_persistent_workflow(const std::filesystem::path& outputPath)
     historyInput.workflowTextureName = "history";
     readPass.inputs.push_back(std::move(historyInput));
 
-    rawgl::OutputBinding finalOutput;
-    finalOutput.name         = "o_out0";
-    finalOutput.path         = outputPath.string();
-    finalOutput.format       = "rgba32f";
-    finalOutput.channels     = 4;
-    finalOutput.alphaChannel = 3;
-    finalOutput.bits         = 16;
-    readPass.outputs.push_back(std::move(finalOutput));
-
-    rawgl::Workflow workflow;
-    workflow.verbosity = 0;
-    workflow.passes.push_back(std::move(writePass));
-    workflow.passes.push_back(std::move(readPass));
-    return workflow;
+    result.workflow.verbosity = 0;
+    result.workflow.passes.push_back(std::move(writePass));
+    result.workflow.passes.push_back(std::move(readPass));
+    result.fileOutputs.push_back(rawgl::io::FileOutput(1, "o_out0", outputPath.string(), "rgba32f", 4, 3, 16));
+    return result;
 }
 
 }  // namespace
@@ -144,27 +142,25 @@ main()
     std::filesystem::remove(outputPath, removeError);
 
     rawgl::Session session;
+    rawgl::io::IoRuntime ioRuntime;
 
-    rawgl::PrepareResult prepareResult = session.prepare(make_persistent_workflow(outputPath));
+    const IoWorkflowCase workflowCase = make_persistent_workflow(outputPath);
+    rawgl::io::PrepareWorkflowResult prepareResult =
+        ioRuntime.prepare(session, workflowCase.workflow, {}, workflowCase.fileOutputs);
     if (!prepareResult.success || !prepareResult.workflow) {
         std::cerr << "Persistent workflow preparation failed: " << prepareResult.errorMessage << std::endl;
         return 1;
     }
 
-    rawgl::RunSettings firstRun;
-    rawgl::InputOverride historyOverride;
-    historyOverride.passIndex   = 1;
-    historyOverride.name        = "history_in";
-    historyOverride.sourceKind  = rawgl::InputSourceKind::textureFile;
-    historyOverride.texturePath = "tests/inputs/EmptyPresetLUT.png";
-    firstRun.overrides.push_back(std::move(historyOverride));
+    rawgl::io::RunRequest firstRun;
+    firstRun.fileInputs.push_back(rawgl::io::FileTextureOverride(1, "history_in", "tests/inputs/EmptyPresetLUT.png"));
 
     rawgl::InputOverride seedOverride;
     seedOverride.passIndex   = 0;
     seedOverride.name        = "seed";
     seedOverride.sourceKind  = rawgl::InputSourceKind::floatValues;
     seedOverride.floatValues = { 0.5f };
-    firstRun.overrides.push_back(std::move(seedOverride));
+    firstRun.settings.overrides.push_back(std::move(seedOverride));
 
     const rawgl::RunResult firstResult = prepareResult.workflow->run(firstRun);
     if (!firstResult.success) {
@@ -180,13 +176,13 @@ main()
         return 1;
     }
 
-    rawgl::RunSettings secondRun;
+    rawgl::io::RunRequest secondRun;
     rawgl::InputOverride secondSeedOverride;
     secondSeedOverride.passIndex   = 0;
     secondSeedOverride.name        = "seed";
     secondSeedOverride.sourceKind  = rawgl::InputSourceKind::floatValues;
     secondSeedOverride.floatValues = { 0.75f };
-    secondRun.overrides.push_back(std::move(secondSeedOverride));
+    secondRun.settings.overrides.push_back(std::move(secondSeedOverride));
 
     const rawgl::RunResult secondResult = prepareResult.workflow->run(secondRun);
     if (!secondResult.success) {

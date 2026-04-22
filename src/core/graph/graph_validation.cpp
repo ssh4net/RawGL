@@ -232,8 +232,7 @@ validate_input_definition(const RawGLGraphState::ValidatedGraph& graph,
         throw std::runtime_error("in (" + definition.name + "): program uniform not found");
     }
 
-    if (definition.sourceKind == GraphInputSourceKind::textureFile
-        || definition.sourceKind == GraphInputSourceKind::hostTexture
+    if (definition.sourceKind == GraphInputSourceKind::hostTexture
         || definition.sourceKind == GraphInputSourceKind::passOutput
         || definition.sourceKind == GraphInputSourceKind::graphTexture) {
         const ShaderResourceInfo* samplerResource = find_resource_by_name(pass.shaderInterface.samplers, definition.name);
@@ -253,11 +252,7 @@ validate_input_definition(const RawGLGraphState::ValidatedGraph& graph,
         probeInput.uniform = uniform;
         apply_texture_attributes(probeInput, definition.attributes);
 
-        if (definition.sourceKind == GraphInputSourceKind::textureFile) {
-            if (definition.texturePath.empty()) {
-                throw std::runtime_error("in (" + definition.name + "): texture path is empty");
-            }
-        } else if (definition.sourceKind == GraphInputSourceKind::hostTexture) {
+        if (definition.sourceKind == GraphInputSourceKind::hostTexture) {
             if (!definition.hostTexture) {
                 throw std::runtime_error("in (" + definition.name + "): host texture payload is missing");
             }
@@ -485,7 +480,6 @@ validate_execution_input_override(const RawGLGraphState::ValidatedGraph& graph, 
     }
 
     switch (inputOverride.sourceKind) {
-    case GraphInputSourceKind::textureFile:
     case GraphInputSourceKind::hostTexture: {
         const bool isSampler = find_resource_by_name(pass.shaderInterface.samplers, inputOverride.name) != nullptr;
         const bool isImage   = find_resource_by_name(pass.shaderInterface.images, inputOverride.name) != nullptr;
@@ -496,9 +490,6 @@ validate_execution_input_override(const RawGLGraphState::ValidatedGraph& graph, 
         if (inputOverride.usesArrayElement) {
             throw std::runtime_error("input override (" + inputOverride.name
                                      + "): array-addressed texture/image inputs are not supported yet");
-        }
-        if (inputOverride.sourceKind == GraphInputSourceKind::textureFile && inputOverride.texturePath.empty()) {
-            throw std::runtime_error("input override (" + inputOverride.name + "): texture path is empty");
         }
         if (inputOverride.sourceKind == GraphInputSourceKind::hostTexture) {
             if (!inputOverride.hostTexture) {

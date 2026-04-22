@@ -3,11 +3,8 @@
 
 #include "rawgl/rawgl.h"
 
-#include <OpenImageIO/imageio.h>
-
-#include <filesystem>
 #include <iostream>
-#include <memory>
+#include <cstring>
 
 namespace {
 
@@ -22,22 +19,21 @@ make_file_module(const char* path)
 }
 
 bool
-read_pixel_rgba32f(const std::filesystem::path& path, float pixel[4])
+read_pixel_rgba32f(const rawgl::RunResult& runResult, float pixel[4])
 {
-    std::unique_ptr<OIIO::ImageInput> input = OIIO::ImageInput::open(path.string());
-    if (!input) {
+    const auto captureIt = runResult.capturedOutputs.find("o_out0::0");
+    if (captureIt == runResult.capturedOutputs.end()) {
         return false;
     }
-
-    if (!input->read_image(0, 0, 0, 4, OIIO::TypeDesc::FLOAT, pixel)) {
+    if (captureIt->second.bytes.size() < sizeof(pixel[0]) * 4u) {
         return false;
     }
-
-    return input->close();
+    std::memcpy(pixel, captureIt->second.bytes.data(), sizeof(pixel[0]) * 4u);
+    return true;
 }
 
 rawgl::Workflow
-make_input_override_workflow(const std::filesystem::path& outputPath)
+make_input_override_workflow()
 {
     rawgl::Pass pass;
     pass.programKind              = rawgl::ShaderProgramKind::compute;
@@ -54,14 +50,7 @@ make_input_override_workflow(const std::filesystem::path& outputPath)
     input.floatValues.push_back(0.25f);
     pass.inputs.push_back(std::move(input));
 
-    rawgl::OutputBinding output;
-    output.name         = "o_out0";
-    output.path         = outputPath.string();
-    output.format       = "rgba32f";
-    output.channels     = 4;
-    output.alphaChannel = 3;
-    output.bits         = 16;
-    pass.outputs.push_back(std::move(output));
+    pass.outputs.push_back(rawgl::CapturedOutput("o_out0", "rgba32f", 4, 3, 16));
 
     rawgl::Workflow workflow;
     workflow.verbosity = 0;
@@ -70,16 +59,16 @@ make_input_override_workflow(const std::filesystem::path& outputPath)
 }
 
 bool
-verify_output(const std::filesystem::path& outputPath, float expectedValue)
+verify_output(const rawgl::RunResult& runResult, float expectedValue)
 {
     float pixel[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    if (!read_pixel_rgba32f(outputPath, pixel)) {
-        std::cerr << "Unable to read output image: " << outputPath << std::endl;
+    if (!read_pixel_rgba32f(runResult, pixel)) {
+        std::cerr << "Unable to read captured output image." << std::endl;
         return false;
     }
 
     if (pixel[0] != expectedValue || pixel[1] != expectedValue || pixel[2] != expectedValue || pixel[3] != 1.0f) {
-        std::cerr << "Unexpected output pixel in " << outputPath << ": [" << pixel[0] << ", " << pixel[1] << ", "
+        std::cerr << "Unexpected captured output pixel: [" << pixel[0] << ", " << pixel[1] << ", "
                   << pixel[2] << ", " << pixel[3] << "]" << std::endl;
         return false;
     }
@@ -92,12 +81,8 @@ verify_output(const std::filesystem::path& outputPath, float expectedValue)
 int
 main()
 {
-    const std::filesystem::path outputPath = "tests/outputs/rawgl_core_input_override_smoke.exr";
-    std::error_code removeError;
-    std::filesystem::remove(outputPath, removeError);
-
     rawgl::Session session;
-    rawgl::PrepareResult prepareResult = session.prepare(make_input_override_workflow(outputPath));
+    rawgl::PrepareResult prepareResult = session.prepare(make_input_override_workflow());
     if (!prepareResult.success || !prepareResult.workflow) {
         std::cerr << "Workflow preparation failed: " << prepareResult.errorMessage << std::endl;
         return 1;
@@ -108,7 +93,7 @@ main()
         std::cerr << "Default workflow execution failed: " << defaultRun.errorMessage << std::endl;
         return 1;
     }
-    if (!verify_output(outputPath, 0.25f)) {
+    if (!verify_output(defaultRun, 0.25f)) {
         return 1;
     }
 
@@ -125,7 +110,7 @@ main()
         std::cerr << "Overridden workflow execution failed: " << overriddenRun.errorMessage << std::endl;
         return 1;
     }
-    if (!verify_output(outputPath, 0.75f)) {
+    if (!verify_output(overriddenRun, 0.75f)) {
         return 1;
     }
 

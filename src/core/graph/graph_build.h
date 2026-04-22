@@ -98,22 +98,12 @@ struct RawGLGraphState {
         std::string persistentCounterName;
     };
 
-    struct FileOutputBinding {
-        size_t passIndex = 0;
-        std::string outputName;
-        std::string path;
-        std::map<std::string, std::string> attributes;
-        int alphaChannel = -1;
-        int bits = 16;
-    };
-
     struct ExecutionPlan {
         SequenceRuntimeConfig sequenceRuntimeConfig;
         std::vector<ExecutionPass> passes;
         std::vector<PersistentInputBinding> persistentInputs;
         std::vector<PersistentOutputBinding> persistentOutputs;
         std::vector<PersistentAtomicCounterBinding> persistentAtomicCounters;
-        std::vector<FileOutputBinding> fileOutputs;
     };
 
     ValidatedGraph validatedGraph;

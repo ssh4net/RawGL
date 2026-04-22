@@ -20,19 +20,12 @@ void main()
 )";
     fragment.debugLabel = "rawgl_core_default_vertex_smoke_fragment";
 
-    rawgl::OutputBinding output;
-    output.name = "OutColor";
-    output.format = "rgba32f";
-    output.channels = 4;
-    output.alphaChannel = 3;
-    output.captureToHost = true;
-
     rawgl::Pass pass;
     pass.programKind = rawgl::ShaderProgramKind::vertfrag;
     pass.shaderModules = { fragment };
     pass.sizeX = 2;
     pass.sizeY = 2;
-    pass.outputs = { output };
+    pass.outputs = { rawgl::CapturedOutput("OutColor", "rgba32f", 4, 3, 16) };
 
     rawgl::Workflow workflow;
     workflow.verbosity = 0;

@@ -35,14 +35,21 @@ Typical file-backed C++ path
    rawgl::io::IoRuntime io_runtime;
 
    rawgl::Workflow workflow;
-   // Build workflow with file-backed inputs/outputs.
+   rawgl::Pass pass;
+   workflow.passes.push_back(pass);
 
-   rawgl::io::PrepareWorkflowResult prepared = io_runtime.prepare(session, workflow);
+   std::vector<rawgl::io::FileInputBinding> file_inputs;
+   file_inputs.push_back(rawgl::io::FileTextureInput(0, "u_src0", "input.png"));
+
+   std::vector<rawgl::io::FileOutputBinding> file_outputs;
+   file_outputs.push_back(rawgl::io::FileOutput(0, "out_color", "output.png"));
+
+   rawgl::io::PrepareWorkflowResult prepared = io_runtime.prepare(session, workflow, file_inputs, file_outputs);
    if (!prepared.success) {
        // prepared.errorMessage
    }
 
-   rawgl::RunResult result = prepared.workflow->run({});
+   rawgl::RunResult result = prepared.workflow->run(rawgl::io::RunRequest{});
 
 Direct file helpers
 -------------------
@@ -51,9 +58,50 @@ Direct file helpers
 
 - ``LoadImageFile(...)``
 - ``SaveImageFile(...)``
+- ``ReadMetadataFile(...)``
+- ``ReadMetadataDocumentFile(...)``
 
 These are useful when you want to explicitly move data between files and
-``HostImageData`` without preparing a whole workflow.
+``HostImageData`` or inspect metadata without preparing a whole workflow.
+
+File-oriented workflow helpers
+------------------------------
+
+``rawgl::io`` also exposes small workflow-construction helpers for the
+file-backed path:
+
+- ``FileTextureInput(...)``
+- ``FileTextureOverride(...)``
+- ``FileOutput(...)``
+
+Use these to keep file-backed state in ``rawgl_io`` instead of mixing it into
+the memory-first ``rawgl::Workflow`` surface.
+
+Metadata
+--------
+
+``rawgl::io`` also owns file-backed metadata readback.
+
+Use metadata readback when:
+
+- you need EXIF, XMP, IPTC, ICC, BMFF, JUMBF, or PNG text fields from a file
+- the metadata inspection step should stay separate from workflow execution
+- you want the file boundary to remain explicit
+
+Current support includes both preview reads and typed transfer documents.
+
+Python exposes the same path through:
+
+- ``rawgl.io.read_metadata(...)``
+- ``rawgl.io.read_metadata_document(...)``
+- ``rawgl.io.save_image(..., metadata_mode=...)``
+- ``rawgl.MetadataReadRequest``
+- ``rawgl.IoRuntime.read_metadata_file(...)``
+
+Use the preview path when you want printable metadata entries.
+
+Use the typed document path when you need to preserve, merge, or replace
+metadata during a later save.
 
 When to prefer IoRuntime
 ------------------------

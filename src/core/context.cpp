@@ -9,7 +9,6 @@
 #include "common.h"
 #include "graph_build.h"
 #include "graph_shared.h"
-#include "graph_request_materializer.h"
 #include "io_runtime.h"
 #include "log.h"
 #include "shader_interface_cache.h"
@@ -154,13 +153,6 @@ has_sequence_override(const std::vector<SequenceExecutionInputOverride>& inputOv
     return false;
 }
 
-static const rawgl::io::IoRuntimeService&
-resolve_io_runtime(const std::shared_ptr<rawgl::io::IoRuntimeService>& ioRuntime)
-{
-    static const rawgl::io::IoRuntimeService defaultIoRuntime;
-    return ioRuntime ? *ioRuntime : defaultIoRuntime;
-}
-
 static ShaderInterface
 inspect_shader_interface_from_session(const void* userData,
                                       const ShaderProgramKind kind,
@@ -202,7 +194,6 @@ RawGLContext::buildGraph(const GraphBuildRequest& request) const
     GraphBuildResult result;
 
     try {
-        rawgl::io::materialize_graph_build_request(*m_state, request);
         auto state = std::make_unique<RawGLGraphState>();
         build_graph_state(*m_state, request, *state);
         result.graph    = std::make_unique<RawGLGraph>(m_state, std::move(state));
@@ -265,10 +256,8 @@ RawGLGraph::execute(const GraphExecutionRequest& request)
     GraphExecutionResult result;
 
     try {
-        const GraphExecutionRequest materializedRequest =
-            rawgl::io::materialize_graph_execution_request(m_contextState->ioRuntime, request);
         std::vector<SequenceExecutionInputOverride> inputOverrides =
-            build_sequence_input_overrides(*m_state, materializedRequest);
+            build_sequence_input_overrides(*m_state, request);
         std::map<std::string, std::shared_ptr<Texture>> persistentTextureSnapshot;
         for (const auto& persistentTexture : m_state->persistentTextures) {
             persistentTextureSnapshot[persistentTexture.first] = clone_texture_resource(persistentTexture.second);
@@ -332,21 +321,6 @@ RawGLGraph::execute(const GraphExecutionRequest& request)
             m_state->persistentAtomicCounters[persistentCounter.persistentCounterName] = counterValues;
         }
         std::map<std::string, HostImageData> capturedOutputImages;
-        for (const RawGLGraphState::FileOutputBinding& fileOutput : m_state->executionPlan.fileOutputs) {
-            const HostImageData& outputImage =
-                ensure_captured_output_image(*m_state->sequence,
-                                             fileOutput.passIndex,
-                                             fileOutput.outputName,
-                                             capturedOutputImages);
-
-            rawgl::io::OutputWriteRequest request;
-            request.path         = fileOutput.path;
-            request.attributes   = fileOutput.attributes;
-            request.alphaChannel = fileOutput.alphaChannel;
-            request.bits         = fileOutput.bits;
-            request.image        = &outputImage;
-            resolve_io_runtime(m_contextState->ioRuntime).saveImageOutput(request);
-        }
         for (size_t passIndex = 0; passIndex < m_state->resourcePlan.passes.size(); ++passIndex) {
             const RawGLGraphState::ResourcePass& resourcePass = m_state->resourcePlan.passes[passIndex];
 
@@ -443,10 +417,11 @@ Run(const CommandLineRequest& request)
 
     try {
         Session session;
-        const Workflow workflow = BuildWorkflowFromCommandLine(
+        const CliWorkflow workflow = BuildCliWorkflowFromCommandLine(
             request,
             ShaderInterfaceInspector { &session, inspect_shader_interface_from_session });
-        const RunResult executionResult = session.run(workflow);
+        const io::IoRuntime ioRuntime;
+        const RunResult executionResult = ioRuntime.run(session, workflow.workflow, {}, workflow.fileInputs, workflow.fileOutputs);
         if (!executionResult.success) {
             throw std::runtime_error(executionResult.errorMessage.empty() ? "Failed to execute RawGL workflow."
                                                                           : executionResult.errorMessage);

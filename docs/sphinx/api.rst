@@ -13,8 +13,9 @@ The stable public surface is centered on:
 - ``rawgl/rawgl_batch.h``
 - ``rawgl/rawgl_cli.h``
 
-``rawgl/rawgl_core.h`` is still present while the transitional graph-oriented
-API remains public, but new code should prefer the higher-level façade headers.
+``rawgl/rawgl_core.h`` remains available as the low-level graph-oriented API.
+Use it when you need explicit graph control. Use the higher-level façade
+headers for normal application code.
 
 .. doxygenindex::
    :project: rawgl

@@ -30,6 +30,22 @@ def main() -> int:
             return fail("core binding mode does not expose IoRuntime")
         if not hasattr(rawgl, "BatchRunner"):
             return fail("core binding mode does not expose BatchRunner")
+        if not hasattr(rawgl, "MetadataReadRequest"):
+            return fail("core binding mode does not expose MetadataReadRequest")
+        if not hasattr(rawgl, "MetadataDocument"):
+            return fail("core binding mode does not expose MetadataDocument")
+        if not hasattr(rawgl, "io"):
+            return fail("core binding mode does not expose rawgl.io")
+        if getattr(rawgl.io, "Runtime", None) is None:
+            return fail("rawgl.io does not expose Runtime")
+        if getattr(rawgl.io, "MetadataNameStyle", None) is None:
+            return fail("rawgl.io does not expose MetadataNameStyle")
+        if getattr(rawgl.io, "MetadataTransferMode", None) is None:
+            return fail("rawgl.io does not expose MetadataTransferMode")
+        if not hasattr(rawgl.io, "read_metadata"):
+            return fail("rawgl.io does not expose read_metadata()")
+        if not hasattr(rawgl.io, "read_metadata_document"):
+            return fail("rawgl.io does not expose read_metadata_document()")
 
     return 0
 

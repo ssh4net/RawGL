@@ -3,11 +3,8 @@
 
 #include "rawgl/rawgl.h"
 
-#include <OpenImageIO/imageio.h>
-
-#include <filesystem>
 #include <iostream>
-#include <memory>
+#include <cstring>
 
 namespace {
 
@@ -22,22 +19,21 @@ make_file_module(const char* path)
 }
 
 bool
-read_pixel_rgba32f(const std::filesystem::path& path, float pixel[4])
+read_pixel_rgba32f(const rawgl::RunResult& runResult, float pixel[4])
 {
-    std::unique_ptr<OIIO::ImageInput> input = OIIO::ImageInput::open(path.string());
-    if (!input) {
+    const auto captureIt = runResult.capturedOutputs.find("o_out0::0");
+    if (captureIt == runResult.capturedOutputs.end()) {
         return false;
     }
-
-    if (!input->read_image(0, 0, 0, 4, OIIO::TypeDesc::FLOAT, pixel)) {
+    if (captureIt->second.bytes.size() < sizeof(pixel[0]) * 4u) {
         return false;
     }
-
-    return input->close();
+    std::memcpy(pixel, captureIt->second.bytes.data(), sizeof(pixel[0]) * 4u);
+    return true;
 }
 
 rawgl::Workflow
-make_system_uniform_workflow(const std::filesystem::path& outputPath)
+make_system_uniform_workflow()
 {
     rawgl::Pass pass;
     pass.programKind              = rawgl::ShaderProgramKind::compute;
@@ -48,14 +44,7 @@ make_system_uniform_workflow(const std::filesystem::path& outputPath)
     pass.workGroupSizeY           = 1;
     pass.hasExplicitWorkGroupSize = true;
 
-    rawgl::OutputBinding output;
-    output.name         = "o_out0";
-    output.path         = outputPath.string();
-    output.format       = "rgba32f";
-    output.channels     = 4;
-    output.alphaChannel = 3;
-    output.bits         = 16;
-    pass.outputs.push_back(std::move(output));
+    pass.outputs.push_back(rawgl::CapturedOutput("o_out0", "rgba32f", 4, 3, 16));
 
     rawgl::Workflow workflow;
     workflow.verbosity = 0;
@@ -64,16 +53,16 @@ make_system_uniform_workflow(const std::filesystem::path& outputPath)
 }
 
 bool
-verify_output(const std::filesystem::path& outputPath, float expectedTime, float expectedFrame, float expectedPassIndex)
+verify_output(const rawgl::RunResult& runResult, float expectedTime, float expectedFrame, float expectedPassIndex)
 {
     float pixel[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    if (!read_pixel_rgba32f(outputPath, pixel)) {
-        std::cerr << "Unable to read output image: " << outputPath << std::endl;
+    if (!read_pixel_rgba32f(runResult, pixel)) {
+        std::cerr << "Unable to read captured output image." << std::endl;
         return false;
     }
 
     if (pixel[0] != expectedTime || pixel[1] != expectedFrame || pixel[2] != expectedPassIndex || pixel[3] != 1.0f) {
-        std::cerr << "Unexpected output pixel in " << outputPath << ": [" << pixel[0] << ", " << pixel[1] << ", "
+        std::cerr << "Unexpected captured output pixel: [" << pixel[0] << ", " << pixel[1] << ", "
                   << pixel[2] << ", " << pixel[3] << "]" << std::endl;
         return false;
     }
@@ -86,12 +75,6 @@ verify_output(const std::filesystem::path& outputPath, float expectedTime, float
 int
 main()
 {
-    const std::filesystem::path outputA = "tests/outputs/rawgl_core_shared_context_a.exr";
-    const std::filesystem::path outputB = "tests/outputs/rawgl_core_shared_context_b.exr";
-    std::error_code removeError;
-    std::filesystem::remove(outputA, removeError);
-    std::filesystem::remove(outputB, removeError);
-
     rawgl::Session session;
 
     const rawgl::ShaderInterface inspectionA =
@@ -112,8 +95,8 @@ main()
         return 1;
     }
 
-    rawgl::PrepareResult workflowA = session.prepare(make_system_uniform_workflow(outputA));
-    rawgl::PrepareResult workflowB = session.prepare(make_system_uniform_workflow(outputB));
+    rawgl::PrepareResult workflowA = session.prepare(make_system_uniform_workflow());
+    rawgl::PrepareResult workflowB = session.prepare(make_system_uniform_workflow());
 
     if (!workflowA.success || !workflowA.workflow) {
         std::cerr << "Shared-session workflow A preparation failed: " << workflowA.errorMessage << std::endl;
@@ -141,15 +124,10 @@ main()
         return 1;
     }
 
-    if (!std::filesystem::exists(outputA) || !std::filesystem::exists(outputB)) {
-        std::cerr << "Shared-context execution did not produce expected output images." << std::endl;
+    if (!verify_output(runA, 2.0f, 7.0f, 0.0f)) {
         return 1;
     }
-
-    if (!verify_output(outputA, 2.0f, 7.0f, 0.0f)) {
-        return 1;
-    }
-    if (!verify_output(outputB, 3.0f, 9.0f, 0.0f)) {
+    if (!verify_output(runB, 3.0f, 9.0f, 0.0f)) {
         return 1;
     }
 

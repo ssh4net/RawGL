@@ -9,6 +9,7 @@ Related architectural notes:
 - [rawgl_type_support_and_python_binding_plan_2026-04-15.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_type_support_and_python_binding_plan_2026-04-15.md)
 - [rawgl_module_split_2026-04-17.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_module_split_2026-04-17.md)
 - [rawgl_batch_design_2026-04-18.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_batch_design_2026-04-18.md)
+- [rawgl_metadata_write_and_transfer_2026-04-22.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_metadata_write_and_transfer_2026-04-22.md)
 
 ## 1. Current problem
 

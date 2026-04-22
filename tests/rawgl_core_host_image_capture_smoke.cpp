@@ -108,25 +108,14 @@ make_host_capture_workflow()
     pass.workGroupSizeY           = 1;
     pass.hasExplicitWorkGroupSize = true;
 
-    rawgl::InputBinding input;
-    input.name        = "u_src0";
-    input.sourceKind  = rawgl::InputSourceKind::hostTexture;
-    input.hostTexture = make_rgba32f_host_image(0.25f, 0.5f, 0.75f, 1.0f);
-    pass.inputs.push_back(std::move(input));
+    pass.inputs.push_back(rawgl::HostTextureInput("u_src0", make_rgba32f_host_image(0.25f, 0.5f, 0.75f, 1.0f)));
 
     rawgl::CounterBinding counter;
     counter.name         = "counter0";
     counter.initialValue = 7u;
     pass.counters.push_back(std::move(counter));
 
-    rawgl::OutputBinding output;
-    output.name          = "o_out0";
-    output.format        = "rgba32f";
-    output.channels      = 4;
-    output.alphaChannel  = 3;
-    output.bits          = 16;
-    output.captureToHost = true;
-    pass.outputs.push_back(std::move(output));
+    pass.outputs.push_back(rawgl::CapturedOutput("o_out0", "rgba32f", 4, 3, 16));
 
     rawgl::Workflow workflow;
     workflow.verbosity = 0;
@@ -164,12 +153,8 @@ main()
     }
 
     rawgl::RunSettings overrideRun;
-    rawgl::InputOverride overrideInput;
-    overrideInput.passIndex   = 0;
-    overrideInput.name        = "u_src0";
-    overrideInput.sourceKind  = rawgl::InputSourceKind::hostTexture;
-    overrideInput.hostTexture = make_rgba32f_host_image(1.0f, 0.125f, 0.0f, 0.5f);
-    overrideRun.overrides.push_back(std::move(overrideInput));
+    overrideRun.overrides.push_back(
+        rawgl::HostTextureOverride(0, "u_src0", make_rgba32f_host_image(1.0f, 0.125f, 0.0f, 0.5f)));
 
     const rawgl::RunResult overriddenRun = prepareResult.workflow->run(overrideRun);
     if (!overriddenRun.success) {

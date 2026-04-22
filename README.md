@@ -77,6 +77,24 @@ cmake --build --preset linux-release
 ctest --preset linux-release
 ```
 
+If your Linux dependency prefix is built with libc++, use the explicit libc++
+presets instead of the generic Linux presets.
+
+The current validated UBc prefix on this system is:
+
+```text
+/mnt/e/UBc/Release
+```
+
+Use it with:
+
+```sh
+export RAWGL_LINUX_PREFIX=/mnt/e/UBc/Release
+cmake --preset linux-release-python-core-libcxx
+cmake --build --preset linux-release-python-core-libcxx
+ctest --test-dir build_linux_release_python_core_libcxx --output-on-failure
+```
+
 Linux Python wheel workflow:
 
 ```sh
@@ -153,7 +171,7 @@ For more explicit control, the lower-level nanobind façade remains available un
 rawgl.advanced
 ```
 
-That path exposes the direct bound classes and structs such as `Session`, `Workflow`, `Pass`, `InputBinding`, and `OutputBinding`. It is kept for advanced workflows and compatibility, but the default examples should prefer the higher-level helpers.
+That path exposes the direct bound classes and structs such as `Session`, `Workflow`, `Pass`, `InputBinding`, and `OutputBinding`. Use it for advanced workflows. The default examples should prefer the higher-level helpers.
 
 C++ IO-facing API
 =================
@@ -167,9 +185,12 @@ For file-backed C++ workflows, prefer the explicit IO/runtime split:
 rawgl::Session session;
 rawgl::io::IoRuntime io_runtime;
 
-rawgl::Workflow workflow = /* build workflow with file-backed inputs/outputs */;
-rawgl::io::PrepareWorkflowResult prepared = io_runtime.prepare(session, workflow);
-rawgl::RunResult result = prepared.workflow->run();
+rawgl::Workflow workflow = /* build memory-first workflow */;
+std::vector<rawgl::io::FileInputBinding> file_inputs;
+std::vector<rawgl::io::FileOutputBinding> file_outputs;
+
+rawgl::io::PrepareWorkflowResult prepared = io_runtime.prepare(session, workflow, file_inputs, file_outputs);
+rawgl::RunResult result = prepared.workflow->run(rawgl::io::RunRequest{});
 ```
 
 That keeps file decode/encode in `rawgl_io` and leaves `rawgl_core` focused on prepared workflow execution and host-memory transfer.

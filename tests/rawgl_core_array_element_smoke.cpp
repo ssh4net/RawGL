@@ -2,12 +2,8 @@
 // Copyright (c) 2022-2026 Erium Vladlen.
 
 #include "rawgl/rawgl.h"
-
-#include <OpenImageIO/imageio.h>
-
-#include <filesystem>
 #include <iostream>
-#include <memory>
+#include <cstring>
 #include <vector>
 
 namespace {
@@ -24,42 +20,31 @@ make_file_module(const rawgl::ShaderProgramKind programKind, const char* path)
 }
 
 bool
-read_pixel_rgba32f(const std::filesystem::path& path, float pixel[4])
+read_pixel_rgba32f(const rawgl::RunResult& runResult, const char* captureKey, float pixel[4])
 {
-    std::unique_ptr<OIIO::ImageInput> input = OIIO::ImageInput::open(path.string());
-    if (!input) {
+    const auto captureIt = runResult.capturedOutputs.find(captureKey);
+    if (captureIt == runResult.capturedOutputs.end()) {
         return false;
     }
-
-    const OIIO::ImageSpec spec = input->spec();
-    if (spec.width <= 0 || spec.nchannels <= 0) {
+    if (captureIt->second.bytes.size() < sizeof(pixel[0]) * 4u) {
         return false;
     }
-
-    std::vector<float> scanline(static_cast<size_t>(spec.width) * static_cast<size_t>(spec.nchannels), 0.0f);
-    if (!input->read_scanline(0, 0, OIIO::TypeDesc::FLOAT, scanline.data()) || !input->close()) {
-        return false;
-    }
-
-    pixel[0] = scanline[0];
-    pixel[1] = spec.nchannels > 1 ? scanline[1] : pixel[0];
-    pixel[2] = spec.nchannels > 2 ? scanline[2] : pixel[0];
-    pixel[3] = spec.nchannels > 3 ? scanline[3] : 1.0f;
+    std::memcpy(pixel, captureIt->second.bytes.data(), sizeof(pixel[0]) * 4u);
     return true;
 }
 
 bool
-verify_pixel(const std::filesystem::path& path, const float expected[4])
+verify_pixel(const rawgl::RunResult& runResult, const char* captureKey, const float expected[4])
 {
     float pixel[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    if (!read_pixel_rgba32f(path, pixel)) {
-        std::cerr << "Unable to read output image: " << path << std::endl;
+    if (!read_pixel_rgba32f(runResult, captureKey, pixel)) {
+        std::cerr << "Unable to read captured output image: " << captureKey << std::endl;
         return false;
     }
 
     for (int i = 0; i < 4; ++i) {
         if (pixel[i] != expected[i]) {
-            std::cerr << "Unexpected output pixel in " << path << ": [" << pixel[0] << ", " << pixel[1] << ", "
+            std::cerr << "Unexpected captured output pixel: [" << pixel[0] << ", " << pixel[1] << ", "
                       << pixel[2] << ", " << pixel[3] << "]" << std::endl;
             return false;
         }
@@ -69,7 +54,7 @@ verify_pixel(const std::filesystem::path& path, const float expected[4])
 }
 
 rawgl::Workflow
-make_numeric_array_workflow(const std::filesystem::path& outputPath)
+make_numeric_array_workflow()
 {
     rawgl::Pass pass;
     pass.programKind              = rawgl::ShaderProgramKind::compute;
@@ -88,14 +73,7 @@ make_numeric_array_workflow(const std::filesystem::path& outputPath)
     weights.arrayElement     = 3;
     pass.inputs.push_back(std::move(weights));
 
-    rawgl::OutputBinding output;
-    output.name         = "o_out0";
-    output.path         = outputPath.string();
-    output.format       = "rgba32f";
-    output.channels     = 4;
-    output.alphaChannel = 3;
-    output.bits         = 16;
-    pass.outputs.push_back(std::move(output));
+    pass.outputs.push_back(rawgl::CapturedOutput("o_out0", "rgba32f", 4, 3, 16));
 
     rawgl::Workflow workflow;
     workflow.verbosity = 0;
@@ -104,7 +82,7 @@ make_numeric_array_workflow(const std::filesystem::path& outputPath)
 }
 
 rawgl::Workflow
-make_output_array_workflow(const std::filesystem::path& outputPath)
+make_output_array_workflow()
 {
     rawgl::Pass sourcePass;
     sourcePass.programKind = rawgl::ShaderProgramKind::vertfrag;
@@ -149,14 +127,7 @@ make_output_array_workflow(const std::filesystem::path& outputPath)
     input.referencedOutputArrayElement     = 1;
     consumePass.inputs.push_back(std::move(input));
 
-    rawgl::OutputBinding output;
-    output.name         = "o_out0";
-    output.path         = outputPath.string();
-    output.format       = "rgba32f";
-    output.channels     = 4;
-    output.alphaChannel = 3;
-    output.bits         = 16;
-    consumePass.outputs.push_back(std::move(output));
+    consumePass.outputs.push_back(rawgl::CapturedOutput("o_out0", "rgba32f", 4, 3, 16));
 
     rawgl::Workflow workflow;
     workflow.verbosity = 0;
@@ -166,7 +137,7 @@ make_output_array_workflow(const std::filesystem::path& outputPath)
 }
 
 rawgl::Workflow
-make_atomic_array_workflow(const std::filesystem::path& outputPath)
+make_atomic_array_workflow()
 {
     rawgl::Pass pass;
     pass.programKind              = rawgl::ShaderProgramKind::compute;
@@ -184,14 +155,7 @@ make_atomic_array_workflow(const std::filesystem::path& outputPath)
     counter.arrayElement     = 1;
     pass.counters.push_back(std::move(counter));
 
-    rawgl::OutputBinding output;
-    output.name         = "o_out0";
-    output.path         = outputPath.string();
-    output.format       = "rgba32f";
-    output.channels     = 4;
-    output.alphaChannel = 3;
-    output.bits         = 16;
-    pass.outputs.push_back(std::move(output));
+    pass.outputs.push_back(rawgl::CapturedOutput("o_out0", "rgba32f", 4, 3, 16));
 
     rawgl::Workflow workflow;
     workflow.verbosity = 0;
@@ -202,13 +166,10 @@ make_atomic_array_workflow(const std::filesystem::path& outputPath)
 bool
 execute_and_verify(rawgl::Session& session,
                    const rawgl::Workflow& workflow,
-                   const std::filesystem::path& outputPath,
+                   const char* captureKey,
                    const float expected[4],
                    const char* label)
 {
-    std::error_code removeError;
-    std::filesystem::remove(outputPath, removeError);
-
     rawgl::PrepareResult prepareResult = session.prepare(workflow);
     if (!prepareResult.success || !prepareResult.workflow) {
         std::cerr << label << " preparation failed: " << prepareResult.errorMessage << std::endl;
@@ -221,7 +182,7 @@ execute_and_verify(rawgl::Session& session,
         return false;
     }
 
-    return verify_pixel(outputPath, expected);
+    return verify_pixel(runResult, captureKey, expected);
 }
 
 }  // namespace
@@ -231,12 +192,9 @@ main()
 {
     rawgl::Session session;
 
-    const std::filesystem::path numericOutputPath = "tests/outputs/rawgl_core_array_element_uniform_smoke.exr";
     const float numericExpected[4]               = { 0.75f, 0.75f, 0.75f, 1.0f };
-    std::error_code removeError;
-    std::filesystem::remove(numericOutputPath, removeError);
 
-    rawgl::PrepareResult numericPrepare = session.prepare(make_numeric_array_workflow(numericOutputPath));
+    rawgl::PrepareResult numericPrepare = session.prepare(make_numeric_array_workflow());
     if (!numericPrepare.success || !numericPrepare.workflow) {
         std::cerr << "numeric array element preparation failed: " << numericPrepare.errorMessage << std::endl;
         return 1;
@@ -247,7 +205,7 @@ main()
         std::cerr << "numeric array element execution failed: " << numericDefaultRun.errorMessage << std::endl;
         return 1;
     }
-    if (!verify_pixel(numericOutputPath, numericExpected)) {
+    if (!verify_pixel(numericDefaultRun, "o_out0::0", numericExpected)) {
         return 1;
     }
 
@@ -269,14 +227,14 @@ main()
     }
 
     const float numericOverrideExpected[4] = { 0.5f, 0.5f, 0.5f, 1.0f };
-    if (!verify_pixel(numericOutputPath, numericOverrideExpected)) {
+    if (!verify_pixel(numericOverrideRun, "o_out0::0", numericOverrideExpected)) {
         return 1;
     }
 
     const float outputExpected[4] = { 0.0f, 1.0f, 0.0f, 1.0f };
     if (!execute_and_verify(session,
-                            make_output_array_workflow("tests/outputs/rawgl_core_output_array_element_smoke.exr"),
-                            "tests/outputs/rawgl_core_output_array_element_smoke.exr",
+                            make_output_array_workflow(),
+                            "o_out0::1",
                             outputExpected,
                             "output array element")) {
         return 1;
@@ -284,8 +242,8 @@ main()
 
     const float atomicExpected[4] = { 0.0f, 5.0f, 0.0f, 1.0f };
     if (!execute_and_verify(session,
-                            make_atomic_array_workflow("tests/outputs/rawgl_core_atomic_array_element_smoke.exr"),
-                            "tests/outputs/rawgl_core_atomic_array_element_smoke.exr",
+                            make_atomic_array_workflow(),
+                            "o_out0::0",
                             atomicExpected,
                             "atomic counter array element")) {
         return 1;

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -12,6 +13,8 @@
 #include <rawgl/rawgl.h>
 
 namespace rawgl::io {
+
+struct MetadataDocumentStorage;
 
 /// Controls CPU-side image decode and encode worker policy.
 struct IoRuntimeOptions {
@@ -37,6 +40,14 @@ struct ImageLoadResult {
     HostImageData image;
 };
 
+/// Metadata transfer policy applied during file-backed save.
+enum class MetadataTransferMode : uint8_t {
+    None,
+    CopySource,
+    ExplicitOnly,
+    MergeSourceAndExplicit,
+};
+
 /// Describes one file-backed image save request.
 struct ImageSaveRequest {
     /// Destination image path.
@@ -47,6 +58,12 @@ struct ImageSaveRequest {
     int alphaChannel = -1;
     /// Preferred output bit depth when the target format supports it.
     int bits = 16;
+    /// Metadata transfer policy applied before backend write.
+    MetadataTransferMode metadataMode = MetadataTransferMode::None;
+    /// Metadata copied from a previous file-backed read when transfer is requested.
+    std::shared_ptr<struct MetadataDocument> sourceMetadata;
+    /// Explicit caller-provided metadata written or merged during save.
+    std::shared_ptr<struct MetadataDocument> explicitMetadata;
     /// Source host-memory image payload.
     HostImageData image;
 };
@@ -59,12 +76,223 @@ struct ImageSaveResult {
     std::string errorMessage;
 };
 
+/// Export name style for metadata readback.
+enum class MetadataNameStyle : uint8_t {
+    Canonical,
+    XmpPortable,
+    Oiio,
+};
+
+/// Export aliasing policy for metadata readback.
+enum class MetadataNamePolicy : uint8_t {
+    Spec,
+    ExifToolAlias,
+};
+
+/// Metadata key family exposed by `rawgl::io`.
+enum class MetadataKeyKind : uint8_t {
+    ExifTag,
+    Comment,
+    ExrAttribute,
+    IptcDataset,
+    XmpProperty,
+    IccHeaderField,
+    IccTag,
+    PhotoshopIrb,
+    PhotoshopIrbField,
+    GeotiffKey,
+    PrintImField,
+    BmffField,
+    JumbfField,
+    JumbfCborKey,
+    PngText,
+};
+
+/// Top-level metadata value storage kind exposed by `rawgl::io`.
+enum class MetadataValueKind : uint8_t {
+    Empty,
+    Scalar,
+    Array,
+    Bytes,
+    Text,
+};
+
+/// Metadata scalar or array element type exposed by `rawgl::io`.
+enum class MetadataElementType : uint8_t {
+    U8,
+    I8,
+    U16,
+    I16,
+    U32,
+    I32,
+    U64,
+    I64,
+    F32,
+    F64,
+    URational,
+    SRational,
+};
+
+/// Text encoding hint for metadata text payloads.
+enum class MetadataTextEncoding : uint8_t {
+    Unknown,
+    Ascii,
+    Utf8,
+    Utf16LE,
+    Utf16BE,
+};
+
+/// Per-entry metadata flags preserved from the decode layer.
+enum class MetadataEntryFlags : uint32_t {
+    None = 0,
+    Deleted = 1U << 0U,
+    Dirty = 1U << 1U,
+    Derived = 1U << 2U,
+    Truncated = 1U << 3U,
+    Unreadable = 1U << 4U,
+    ContextualName = 1U << 5U,
+};
+
+constexpr MetadataEntryFlags
+operator|(MetadataEntryFlags a, MetadataEntryFlags b) noexcept
+{
+    return static_cast<MetadataEntryFlags>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+}
+
+constexpr MetadataEntryFlags
+operator&(MetadataEntryFlags a, MetadataEntryFlags b) noexcept
+{
+    return static_cast<MetadataEntryFlags>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
+}
+
+constexpr bool
+any(MetadataEntryFlags flags, MetadataEntryFlags test) noexcept
+{
+    return static_cast<uint32_t>(flags & test) != 0U;
+}
+
+/// One exported metadata item with a best-effort text preview.
+struct MetadataEntry {
+    MetadataKeyKind keyKind = MetadataKeyKind::ExifTag;
+    MetadataValueKind valueKind = MetadataValueKind::Empty;
+    MetadataElementType elementType = MetadataElementType::U8;
+    MetadataTextEncoding textEncoding = MetadataTextEncoding::Unknown;
+    MetadataEntryFlags flags = MetadataEntryFlags::None;
+    uint32_t count = 0;
+    std::string name;
+    std::string valueText;
+};
+
+/// One typed metadata value owned by RawGL.
+struct MetadataValue {
+    MetadataValueKind kind = MetadataValueKind::Empty;
+    MetadataElementType elementType = MetadataElementType::U8;
+    MetadataTextEncoding textEncoding = MetadataTextEncoding::Unknown;
+    uint32_t count = 0;
+    std::vector<std::byte> bytes;
+};
+
+/// One typed metadata field owned by RawGL.
+struct MetadataField {
+    MetadataKeyKind keyKind = MetadataKeyKind::ExifTag;
+    MetadataEntryFlags flags = MetadataEntryFlags::None;
+    std::string name;
+    MetadataValue value;
+};
+
+/// Typed metadata document owned by RawGL.
+struct MetadataDocument {
+    std::vector<MetadataField> fields;
+    /// Optional opaque backend-side cache used for transfer helpers.
+    std::shared_ptr<const MetadataDocumentStorage> storage;
+};
+
+/// Describes one metadata read request.
+struct MetadataReadRequest {
+    /// Source image or container path.
+    std::string path;
+    /// Export naming style for MetadataEntry::name.
+    MetadataNameStyle nameStyle = MetadataNameStyle::Canonical;
+    /// Export aliasing policy for MetadataEntry::name.
+    MetadataNamePolicy namePolicy = MetadataNamePolicy::Spec;
+    /// Include MakerNote-derived metadata families when available.
+    bool includeMakernotes = false;
+    /// Maximum bytes used when previewing byte/text payloads.
+    size_t maxValuePreviewBytes = 64;
+    /// Maximum elements shown for scalar-array previews.
+    size_t maxValuePreviewElements = 8;
+};
+
+/// Result of reading metadata from one file-backed image or container.
+struct MetadataReadResult {
+    /// False when metadata read failed or the file format is unsupported.
+    bool success = false;
+    /// Failure details when \ref success is false.
+    std::string errorMessage;
+    /// Exported metadata entries in source order.
+    std::vector<MetadataEntry> entries;
+};
+
+/// Describes one typed metadata document read request.
+struct MetadataDocumentReadRequest {
+    /// Source image or container path.
+    std::string path;
+    /// Export naming style for MetadataField::name.
+    MetadataNameStyle nameStyle = MetadataNameStyle::Canonical;
+    /// Export aliasing policy for MetadataField::name.
+    MetadataNamePolicy namePolicy = MetadataNamePolicy::Spec;
+    /// Include MakerNote-derived metadata families when available.
+    bool includeMakernotes = false;
+};
+
+/// Result of reading one typed metadata document.
+struct MetadataDocumentReadResult {
+    /// False when metadata read failed or the file format is unsupported.
+    bool success = false;
+    /// Failure details when \ref success is false.
+    std::string errorMessage;
+    /// Typed metadata document in source order.
+    MetadataDocument document;
+};
+
+/// One file-backed workflow input owned by `rawgl::io`.
+struct FileInputBinding {
+    size_t passIndex = 0;
+    std::string name;
+    std::string path;
+    std::vector<Attribute> attributes;
+    bool usesArrayElement = false;
+    size_t arrayElement = 0;
+};
+
+/// One file-backed per-run input override owned by `rawgl::io`.
+struct FileInputOverride {
+    size_t passIndex = 0;
+    std::string name;
+    std::string path;
+    std::vector<Attribute> attributes;
+    bool usesArrayElement = false;
+    size_t arrayElement = 0;
+};
+
+/// One file-backed workflow output owned by `rawgl::io`.
+struct FileOutputBinding {
+    size_t passIndex = 0;
+    std::string name;
+    std::string path;
+    std::string format = "rgb32f";
+    int channels = 3;
+    int alphaChannel = -1;
+    int bits = 16;
+    std::vector<Attribute> attributes;
+    bool usesArrayElement = false;
+    size_t arrayElement = 0;
+};
+
 /// One deferred file-backed workflow output.
 struct OutputSaveBinding {
-    /// Workflow pass that produced this output.
-    size_t passIndex = 0;
-    /// Original workflow output declaration.
-    OutputBinding output;
+    /// Original file-backed output declaration.
+    FileOutputBinding output;
 };
 
 /// Result of materializing file-backed workflow inputs for in-memory execution.
@@ -89,6 +317,12 @@ struct RunSettingsMaterializationResult {
     RunSettings settings;
 };
 
+/// One IO-backed per-run request.
+struct RunRequest {
+    RunSettings settings;
+    std::vector<FileInputOverride> fileInputs;
+};
+
 /// Result of saving one or more captured workflow outputs to files.
 struct SaveOutputsResult {
     /// False when saving failed.
@@ -111,6 +345,53 @@ struct PrepareWorkflowResult {
     std::unique_ptr<PreparedIoWorkflow> workflow;
 };
 
+/// Builds one file-backed image input binding for use with \ref IoRuntime.
+inline FileInputBinding
+FileTextureInput(size_t passIndex, std::string name, std::string path, std::vector<Attribute> attributes = {})
+{
+    FileInputBinding result;
+    result.passIndex = passIndex;
+    result.name = std::move(name);
+    result.path = std::move(path);
+    result.attributes = std::move(attributes);
+    return result;
+}
+
+/// Builds one file-backed image per-run override for use with \ref IoRuntime.
+inline FileInputOverride
+FileTextureOverride(size_t passIndex, std::string name, std::string path, std::vector<Attribute> attributes = {})
+{
+    FileInputOverride result;
+    result.passIndex = passIndex;
+    result.name = std::move(name);
+    result.path = std::move(path);
+    result.attributes = std::move(attributes);
+    return result;
+}
+
+/// Builds one file-backed output binding for use with \ref IoRuntime.
+inline FileOutputBinding
+FileOutput(size_t passIndex,
+           std::string name,
+           std::string path,
+           std::string format = "rgb32f",
+           int channels = 3,
+           int alphaChannel = -1,
+           int bits = 16,
+           std::vector<Attribute> attributes = {})
+{
+    FileOutputBinding result;
+    result.passIndex = passIndex;
+    result.name = std::move(name);
+    result.path = std::move(path);
+    result.format = std::move(format);
+    result.channels = channels;
+    result.alphaChannel = alphaChannel;
+    result.bits = bits;
+    result.attributes = std::move(attributes);
+    return result;
+}
+
 /// Public IO runtime façade for file-backed inputs and outputs.
 ///
 /// This is the preferred public translation layer for file-oriented workflows.
@@ -130,13 +411,23 @@ public:
     ImageSaveResult
     saveImageFile(const ImageSaveRequest& request) const;
 
+    /// Reads metadata from one file-backed image or container.
+    MetadataReadResult
+    readMetadataFile(const MetadataReadRequest& request) const;
+
+    /// Reads a typed metadata document from one file-backed image or container.
+    MetadataDocumentReadResult
+    readMetadataDocumentFile(const MetadataDocumentReadRequest& request) const;
+
     /// Rewrites file-backed workflow inputs and outputs into explicit host-memory workflow state.
     WorkflowMaterializationResult
-    materializeWorkflow(const Workflow& workflow) const;
+    materializeWorkflow(const Workflow& workflow,
+                        const std::vector<FileInputBinding>& fileInputs = {},
+                        const std::vector<FileOutputBinding>& fileOutputs = {}) const;
 
     /// Rewrites file-backed per-run overrides into explicit host-memory overrides.
     RunSettingsMaterializationResult
-    materializeRunSettings(const RunSettings& settings) const;
+    materializeRunSettings(const RunRequest& request) const;
 
     /// Saves one captured workflow output described by the provided save binding.
     ImageSaveResult
@@ -148,11 +439,18 @@ public:
 
     /// Materializes file-backed workflow state, then prepares it through \ref Session.
     PrepareWorkflowResult
-    prepare(const Session& session, const Workflow& workflow) const;
+    prepare(const Session& session,
+            const Workflow& workflow,
+            const std::vector<FileInputBinding>& fileInputs = {},
+            const std::vector<FileOutputBinding>& fileOutputs = {}) const;
 
     /// Materializes file-backed workflow state, then executes it through \ref Session.
     RunResult
-    run(const Session& session, const Workflow& workflow, const RunSettings& settings = {}) const;
+    run(const Session& session,
+        const Workflow& workflow,
+        const RunRequest& request = {},
+        const std::vector<FileInputBinding>& fileInputs = {},
+        const std::vector<FileOutputBinding>& fileOutputs = {}) const;
 
 private:
     IoRuntimeOptions m_options;
@@ -177,7 +475,7 @@ public:
 
     /// Executes the prepared workflow once after materializing file-backed run settings.
     RunResult
-    run(const RunSettings& settings = {}) const
+    run(const RunRequest& request = {}) const
     {
         if (!m_workflow) {
             RunResult result;
@@ -186,7 +484,7 @@ public:
             return result;
         }
 
-        const RunSettingsMaterializationResult materializedSettings = m_ioRuntime.materializeRunSettings(settings);
+        const RunSettingsMaterializationResult materializedSettings = m_ioRuntime.materializeRunSettings(request);
         if (!materializedSettings.success) {
             RunResult result;
             result.success      = false;
@@ -231,10 +529,21 @@ LoadImageFile(const ImageLoadRequest& request);
 ImageSaveResult
 SaveImageFile(const ImageSaveRequest& request);
 
+/// Reads metadata from one file-backed image or container using a default \ref IoRuntime.
+MetadataReadResult
+ReadMetadataFile(const MetadataReadRequest& request);
+
+/// Reads a typed metadata document from one file-backed image or container using a default \ref IoRuntime.
+MetadataDocumentReadResult
+ReadMetadataDocumentFile(const MetadataDocumentReadRequest& request);
+
 inline PrepareWorkflowResult
-IoRuntime::prepare(const Session& session, const Workflow& workflow) const
+IoRuntime::prepare(const Session& session,
+                   const Workflow& workflow,
+                   const std::vector<FileInputBinding>& fileInputs,
+                   const std::vector<FileOutputBinding>& fileOutputs) const
 {
-    const WorkflowMaterializationResult materializedWorkflow = materializeWorkflow(workflow);
+    const WorkflowMaterializationResult materializedWorkflow = materializeWorkflow(workflow, fileInputs, fileOutputs);
     if (!materializedWorkflow.success) {
         PrepareWorkflowResult result;
         result.success = false;
@@ -258,9 +567,13 @@ IoRuntime::prepare(const Session& session, const Workflow& workflow) const
 }
 
 inline RunResult
-IoRuntime::run(const Session& session, const Workflow& workflow, const RunSettings& settings) const
+IoRuntime::run(const Session& session,
+               const Workflow& workflow,
+               const RunRequest& request,
+               const std::vector<FileInputBinding>& fileInputs,
+               const std::vector<FileOutputBinding>& fileOutputs) const
 {
-    PrepareWorkflowResult preparedResult = prepare(session, workflow);
+    PrepareWorkflowResult preparedResult = prepare(session, workflow, fileInputs, fileOutputs);
     if (!preparedResult.success || !preparedResult.workflow) {
         RunResult result;
         result.success = false;
@@ -269,7 +582,7 @@ IoRuntime::run(const Session& session, const Workflow& workflow, const RunSettin
         return result;
     }
 
-    return preparedResult.workflow->run(settings);
+    return preparedResult.workflow->run(request);
 }
 
 }  // namespace rawgl::io

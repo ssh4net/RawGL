@@ -16,6 +16,47 @@ Each section is labeled by source:
 Single-pass workflows
 =====================
 
+Metadata inspection
+-------------------
+
+Source: ``Script``
+
+Run ``examples/Metadata/ReadMetadata.py`` for a checked-in file-oriented
+metadata example.
+
+It loads a PNG, writes a TIFF copy, reads both preview metadata and a typed
+metadata document, then demonstrates copy-source and explicit metadata writes.
+
+.. code-block:: python
+
+   from pathlib import Path
+
+   import rawgl
+
+   source_path = Path("tests/inputs/EmptyPresetLUT.png")
+   output_path = Path("examples/Metadata/ReadMetadata_python.tif")
+   copied_path = Path("examples/Metadata/ReadMetadata_copy_python.tif")
+
+   image = rawgl.io.load_image(source_path)
+   rawgl.io.save_image(image, output_path, bits=16)
+
+   document = rawgl.io.read_metadata_document(
+       output_path,
+       name_style=rawgl.MetadataNameStyle.oiio,
+       name_policy=rawgl.MetadataNamePolicy.exif_tool_alias,
+   )
+
+   rawgl.io.save_image(
+       image,
+       copied_path,
+       bits=16,
+       metadata_mode=rawgl.MetadataTransferMode.copy_source,
+       source_metadata=document,
+   )
+
+Use this shape when metadata is part of the file-oriented pipeline but not part
+of the shader execution itself.
+
 Image generation
 ----------------
 
@@ -31,7 +72,7 @@ output file.
 
    import rawgl
 
-   result = rawgl.image(
+   result = rawgl.io.image(
        fragment_shader,
        size=512,
        inputs={
@@ -44,8 +85,8 @@ output file.
    if not result.success:
        raise RuntimeError(result.error_message)
 
-Use this shape when the shader generates an image from uniforms alone and does
-not need an input texture.
+Use this shape when the shader generates an image from uniforms alone and the
+workflow still starts or ends with a file.
 
 Related repo files:
 
@@ -71,7 +112,7 @@ pass, and writes one PNG.
    input_path = "tests/inputs/EmptyPresetLUT.png"
    width, height = read_png_size(input_path)
 
-   result = rawgl.image(
+   result = rawgl.io.image(
        fragment_shader,
        size=(width, height),
        inputs={
@@ -91,8 +132,8 @@ pass, and writes one PNG.
 
    image = result.captured_outputs["OutImage::0"]
 
-Use ``rawgl.prepare_image(...)`` instead of ``rawgl.image(...)`` when the same
-shader runs many times with new images or new uniform values.
+Use ``rawgl.io.prepare_image(...)`` instead of ``rawgl.io.image(...)`` when the
+same shader runs many times with new images or new uniform values.
 
 Related repo files:
 
@@ -145,11 +186,11 @@ The same workflow shape is available in Python through ``render_pass(...)``:
            ],
            outputs={
                "OutSample": {
-                   "path": "tests/outputs/mesh_ao_sponge.exr",
                    "format": "rgba32f",
                    "channels": 4,
                    "alpha_channel": 3,
                    "bits": 32,
+                   "capture_to_host": True,
                }
            },
        ),
@@ -157,6 +198,7 @@ The same workflow shape is available in Python through ``render_pass(...)``:
    )
 
    result = rawgl.run_workflow(workflow)
+   rawgl.save_image(result.captured_outputs["OutSample::0"], "tests/outputs/mesh_ao_sponge.exr", bits=32)
 
 Related repo files:
 
@@ -221,7 +263,7 @@ The core execution loop looks like this:
                "time": frame_index / fps,
            }
        )
-       rawgl.save_image(
+       rawgl.io.save_image(
            result.captured_outputs["Color::0"],
            output_dir / f"Bitshift_{frame_index:03d}.png",
            bits=16,
@@ -298,6 +340,7 @@ The same pass-to-pass idea is available in Python with ``pass_output(...)``:
    )
 
    result = rawgl.run_workflow(workflow)
+   rawgl.io.save_image(result.captured_outputs["o_out0::1"], "NormalizeRange_python.png", bits=16)
 
 Related repo files:
 
@@ -352,6 +395,7 @@ The checked-in script follows this shape:
    )
 
    result = rawgl.run_workflow(workflow)
+   rawgl.io.save_image(result.captured_outputs["Composite::2"], "RenderMeshOverBackground_python.png", bits=16)
 
 This is a good fit for:
 

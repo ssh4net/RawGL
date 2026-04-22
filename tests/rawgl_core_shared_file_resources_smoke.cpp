@@ -2,6 +2,7 @@
 // Copyright (c) 2022-2026 Erium Vladlen.
 
 #include "rawgl/rawgl.h"
+#include "rawgl/rawgl_io.h"
 
 #include <OpenImageIO/imageio.h>
 
@@ -77,9 +78,16 @@ compare_images(const std::filesystem::path& pathA, const std::filesystem::path& 
     return true;
 }
 
-rawgl::Workflow
+struct IoWorkflowCase {
+    rawgl::Workflow workflow;
+    std::vector<rawgl::io::FileInputBinding> fileInputs;
+    std::vector<rawgl::io::FileOutputBinding> fileOutputs;
+};
+
+IoWorkflowCase
 make_texture_workflow(const std::filesystem::path& outputPath)
 {
+    IoWorkflowCase result;
     rawgl::Pass pass;
     pass.programKind = rawgl::ShaderProgramKind::vertfrag;
     rawgl::ShaderModuleDefinition vertexModule;
@@ -94,30 +102,18 @@ make_texture_workflow(const std::filesystem::path& outputPath)
     pass.shaderModules.push_back(std::move(fragmentModule));
     pass.sizeX       = 8;
     pass.sizeY       = 8;
-    rawgl::InputBinding input;
-    input.name        = "InSample";
-    input.sourceKind  = rawgl::InputSourceKind::textureFile;
-    input.texturePath = "tests/inputs/EmptyPresetLUT.png";
-    pass.inputs.push_back(std::move(input));
 
-    rawgl::OutputBinding output;
-    output.name         = "OutSample";
-    output.path         = outputPath.string();
-    output.format       = "rgba32f";
-    output.channels     = 4;
-    output.alphaChannel = 3;
-    output.bits         = 16;
-    pass.outputs.push_back(std::move(output));
-
-    rawgl::Workflow workflow;
-    workflow.verbosity = 0;
-    workflow.passes.push_back(std::move(pass));
-    return workflow;
+    result.workflow.verbosity = 0;
+    result.workflow.passes.push_back(std::move(pass));
+    result.fileInputs.push_back(rawgl::io::FileTextureInput(0, "InSample", "tests/inputs/EmptyPresetLUT.png"));
+    result.fileOutputs.push_back(rawgl::io::FileOutput(0, "OutSample", outputPath.string(), "rgba32f", 4, 3, 16));
+    return result;
 }
 
-rawgl::Workflow
+IoWorkflowCase
 make_mesh_workflow(const std::filesystem::path& outputPath)
 {
+    IoWorkflowCase result;
     rawgl::Pass pass;
     pass.programKind = rawgl::ShaderProgramKind::vertfrag;
     rawgl::ShaderModuleDefinition vertexModule;
@@ -138,33 +134,26 @@ make_mesh_workflow(const std::filesystem::path& outputPath)
     mesh.parameters = { { "tris", "true" }, { "rend", "tr" } };
     pass.meshes.push_back(std::move(mesh));
 
-    rawgl::OutputBinding output;
-    output.name         = "OutSample";
-    output.path         = outputPath.string();
-    output.format       = "rgba32f";
-    output.channels     = 4;
-    output.alphaChannel = 3;
-    output.bits         = 16;
-    pass.outputs.push_back(std::move(output));
-
-    rawgl::Workflow workflow;
-    workflow.verbosity = 0;
-    workflow.passes.push_back(std::move(pass));
-    return workflow;
+    result.workflow.verbosity = 0;
+    result.workflow.passes.push_back(std::move(pass));
+    result.fileOutputs.push_back(rawgl::io::FileOutput(0, "OutSample", outputPath.string(), "rgba32f", 4, 3, 16));
+    return result;
 }
 
 bool
 build_and_run(rawgl::Session& session,
-              const rawgl::Workflow& workflow,
+              rawgl::io::IoRuntime& ioRuntime,
+              const IoWorkflowCase& workflowCase,
               const std::filesystem::path& outputPath)
 {
-    rawgl::PrepareResult prepareResult = session.prepare(workflow);
+    rawgl::io::PrepareWorkflowResult prepareResult =
+        ioRuntime.prepare(session, workflowCase.workflow, workflowCase.fileInputs, workflowCase.fileOutputs);
     if (!prepareResult.success || !prepareResult.workflow) {
         std::cerr << "Workflow preparation failed: " << prepareResult.errorMessage << std::endl;
         return false;
     }
 
-    const rawgl::RunResult executionResult = prepareResult.workflow->run(rawgl::RunSettings {});
+    const rawgl::RunResult executionResult = prepareResult.workflow->run(rawgl::io::RunRequest {});
     if (!executionResult.success) {
         std::cerr << "Workflow execution failed: " << executionResult.errorMessage << std::endl;
         return false;
@@ -195,11 +184,12 @@ main()
     std::filesystem::remove(meshOutB, removeError);
 
     rawgl::Session session;
+    rawgl::io::IoRuntime ioRuntime;
 
-    if (!build_and_run(session, make_texture_workflow(texOutA), texOutA)) {
+    if (!build_and_run(session, ioRuntime, make_texture_workflow(texOutA), texOutA)) {
         return 1;
     }
-    if (!build_and_run(session, make_texture_workflow(texOutB), texOutB)) {
+    if (!build_and_run(session, ioRuntime, make_texture_workflow(texOutB), texOutB)) {
         return 1;
     }
     if (!compare_images(texOutA, texOutB)) {
@@ -208,15 +198,16 @@ main()
     }
 
     const rawgl::SessionStats textureStats = session.stats();
-    if (textureStats.textures != 1) {
-        std::cerr << "Expected one shared texture resource, got " << textureStats.textures << std::endl;
+    if (textureStats.textures != 0) {
+        std::cerr << "IO-materialized file inputs should not populate the core shared texture cache, got "
+                  << textureStats.textures << std::endl;
         return 1;
     }
 
-    if (!build_and_run(session, make_mesh_workflow(meshOutA), meshOutA)) {
+    if (!build_and_run(session, ioRuntime, make_mesh_workflow(meshOutA), meshOutA)) {
         return 1;
     }
-    if (!build_and_run(session, make_mesh_workflow(meshOutB), meshOutB)) {
+    if (!build_and_run(session, ioRuntime, make_mesh_workflow(meshOutB), meshOutB)) {
         return 1;
     }
     if (!compare_images(meshOutA, meshOutB)) {

@@ -150,6 +150,8 @@ struct BatchJobHandle::State {
 struct BatchRunner::State {
     struct PrepareTask {
         Workflow workflow;
+        std::vector<io::FileInputBinding> fileInputs;
+        std::vector<io::FileOutputBinding> fileOutputs;
         std::shared_ptr<PrepareWaitState> waitState;
     };
 
@@ -356,10 +358,13 @@ struct BatchRunner::State {
     }
 
     BatchPrepareResult
-    prepare_workflow(const Workflow& workflow)
+    prepare_workflow(const Workflow& workflow,
+                     const std::vector<io::FileInputBinding>& fileInputs,
+                     const std::vector<io::FileOutputBinding>& fileOutputs)
     {
         if (ioRuntime) {
-            const io::WorkflowMaterializationResult materialized = ioRuntime->materializeWorkflow(workflow);
+            const io::WorkflowMaterializationResult materialized =
+                ioRuntime->materializeWorkflow(workflow, fileInputs, fileOutputs);
             if (!materialized.success) {
                 BatchPrepareResult result;
                 result.success = false;
@@ -412,7 +417,10 @@ struct BatchRunner::State {
                     task = GpuTask {};
                     continue;
                 }
-                complete_prepare(task.prepareTask.waitState, prepare_workflow(task.prepareTask.workflow));
+                complete_prepare(task.prepareTask.waitState,
+                                 prepare_workflow(task.prepareTask.workflow,
+                                                  task.prepareTask.fileInputs,
+                                                  task.prepareTask.fileOutputs));
                 task = GpuTask {};
                 continue;
             }
@@ -432,7 +440,8 @@ struct BatchRunner::State {
             RunSettings effectiveSettings = executeTask.request.settings;
             if (executeTask.workflow->ioRuntime) {
                 io::RunSettingsMaterializationResult materialized =
-                    executeTask.workflow->ioRuntime->materializeRunSettings(executeTask.request.settings);
+                    executeTask.workflow->ioRuntime->materializeRunSettings(
+                        io::RunRequest { executeTask.request.settings, executeTask.request.fileInputs });
                 if (!materialized.success) {
                     BatchResult result;
                     result.submitIndex = executeTask.submitIndex;
@@ -606,7 +615,9 @@ BatchRunner::~BatchRunner()
 }
 
 BatchPrepareResult
-BatchRunner::prepare(const Workflow& workflow) const
+BatchRunner::prepare(const Workflow& workflow,
+                     const std::vector<io::FileInputBinding>& fileInputs,
+                     const std::vector<io::FileOutputBinding>& fileOutputs) const
 {
     if (!m_state) {
         BatchPrepareResult result;
@@ -619,6 +630,8 @@ BatchRunner::prepare(const Workflow& workflow) const
     State::GpuTask task;
     task.kind = State::GpuTask::Kind::prepare;
     task.prepareTask.workflow = clone_batch_workflow(workflow);
+    task.prepareTask.fileInputs = fileInputs;
+    task.prepareTask.fileOutputs = fileOutputs;
     task.prepareTask.waitState = waitState;
 
     if (!m_state->gpuQueue.push(std::move(task))) {

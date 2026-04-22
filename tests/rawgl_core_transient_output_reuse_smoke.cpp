@@ -3,11 +3,8 @@
 
 #include "rawgl/rawgl.h"
 
-#include <OpenImageIO/imageio.h>
-
-#include <filesystem>
 #include <iostream>
-#include <memory>
+#include <cstring>
 #include <vector>
 
 namespace {
@@ -24,41 +21,30 @@ make_file_module(const rawgl::ShaderProgramKind programKind, const char* path)
 }
 
 bool
-read_pixel_rgba32f(const std::filesystem::path& path, float pixel[4])
+read_pixel_rgba32f(const rawgl::RunResult& runResult, float pixel[4])
 {
-    std::unique_ptr<OIIO::ImageInput> input = OIIO::ImageInput::open(path.string());
-    if (!input) {
+    const auto captureIt = runResult.capturedOutputs.find("o_out0::1");
+    if (captureIt == runResult.capturedOutputs.end()) {
         return false;
     }
-
-    const OIIO::ImageSpec spec = input->spec();
-    if (spec.width <= 0 || spec.nchannels <= 0) {
+    if (captureIt->second.bytes.size() < sizeof(pixel[0]) * 4u) {
         return false;
     }
-
-    std::vector<float> scanline(static_cast<size_t>(spec.width) * static_cast<size_t>(spec.nchannels), 0.0f);
-    if (!input->read_scanline(0, 0, OIIO::TypeDesc::FLOAT, scanline.data()) || !input->close()) {
-        return false;
-    }
-
-    pixel[0] = scanline[0];
-    pixel[1] = spec.nchannels > 1 ? scanline[1] : pixel[0];
-    pixel[2] = spec.nchannels > 2 ? scanline[2] : pixel[0];
-    pixel[3] = spec.nchannels > 3 ? scanline[3] : 1.0f;
+    std::memcpy(pixel, captureIt->second.bytes.data(), sizeof(pixel[0]) * 4u);
     return true;
 }
 
 bool
-verify_output(const std::filesystem::path& outputPath)
+verify_output(const rawgl::RunResult& runResult)
 {
     float pixel[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    if (!read_pixel_rgba32f(outputPath, pixel)) {
-        std::cerr << "Unable to read output image: " << outputPath << std::endl;
+    if (!read_pixel_rgba32f(runResult, pixel)) {
+        std::cerr << "Unable to read captured output image." << std::endl;
         return false;
     }
 
     if (pixel[0] != 0.25f || pixel[1] != 0.5f || pixel[2] != 0.75f || pixel[3] != 1.0f) {
-        std::cerr << "Unexpected output pixel in " << outputPath << ": [" << pixel[0] << ", " << pixel[1] << ", "
+        std::cerr << "Unexpected captured output pixel: [" << pixel[0] << ", " << pixel[1] << ", "
                   << pixel[2] << ", " << pixel[3] << "]" << std::endl;
         return false;
     }
@@ -67,7 +53,7 @@ verify_output(const std::filesystem::path& outputPath)
 }
 
 rawgl::Workflow
-make_transient_reuse_workflow(const std::filesystem::path& outputPath)
+make_transient_reuse_workflow()
 {
     rawgl::Pass sourcePass;
     sourcePass.programKind              = rawgl::ShaderProgramKind::compute;
@@ -100,14 +86,7 @@ make_transient_reuse_workflow(const std::filesystem::path& outputPath)
     midInput.referencedPassIndex  = 0;
     consumePass.inputs.push_back(std::move(midInput));
 
-    rawgl::OutputBinding finalOutput;
-    finalOutput.name         = "o_out0";
-    finalOutput.path         = outputPath.string();
-    finalOutput.format       = "rgba32f";
-    finalOutput.channels     = 4;
-    finalOutput.alphaChannel = 3;
-    finalOutput.bits         = 16;
-    consumePass.outputs.push_back(std::move(finalOutput));
+    consumePass.outputs.push_back(rawgl::CapturedOutput("o_out0", "rgba32f", 4, 3, 16));
 
     rawgl::Workflow workflow;
     workflow.verbosity = 0;
@@ -121,12 +100,8 @@ make_transient_reuse_workflow(const std::filesystem::path& outputPath)
 int
 main()
 {
-    const std::filesystem::path outputPath = "tests/outputs/rawgl_core_transient_output_reuse_smoke.exr";
-    std::error_code removeError;
-    std::filesystem::remove(outputPath, removeError);
-
     rawgl::Session session;
-    rawgl::PrepareResult prepareResult = session.prepare(make_transient_reuse_workflow(outputPath));
+    rawgl::PrepareResult prepareResult = session.prepare(make_transient_reuse_workflow());
     if (!prepareResult.success || !prepareResult.workflow) {
         std::cerr << "Workflow preparation failed: " << prepareResult.errorMessage << std::endl;
         return 1;
@@ -137,7 +112,7 @@ main()
         std::cerr << "First workflow execution failed: " << firstRun.errorMessage << std::endl;
         return 1;
     }
-    if (!verify_output(outputPath)) {
+    if (!verify_output(firstRun)) {
         return 1;
     }
 
@@ -146,7 +121,7 @@ main()
         std::cerr << "Second workflow execution failed: " << secondRun.errorMessage << std::endl;
         return 1;
     }
-    if (!verify_output(outputPath)) {
+    if (!verify_output(secondRun)) {
         return 1;
     }
 

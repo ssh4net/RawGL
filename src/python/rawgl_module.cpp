@@ -200,7 +200,6 @@ NB_MODULE(_rawgl, module)
         .value("uint_values", rawgl::InputSourceKind::uintValues)
         .value("float_values", rawgl::InputSourceKind::floatValues)
         .value("double_values", rawgl::InputSourceKind::doubleValues)
-        .value("texture_file", rawgl::InputSourceKind::textureFile)
         .value("host_texture", rawgl::InputSourceKind::hostTexture)
         .value("pass_output", rawgl::InputSourceKind::passOutput)
         .value("workflow_texture", rawgl::InputSourceKind::workflowTexture);
@@ -305,7 +304,6 @@ NB_MODULE(_rawgl, module)
         .def_rw("uint_values", &rawgl::InputBinding::uintValues)
         .def_rw("float_values", &rawgl::InputBinding::floatValues)
         .def_rw("double_values", &rawgl::InputBinding::doubleValues)
-        .def_rw("texture_path", &rawgl::InputBinding::texturePath)
         .def_rw("referenced_output_name", &rawgl::InputBinding::referencedOutputName)
         .def_rw("referenced_pass_index", &rawgl::InputBinding::referencedPassIndex)
         .def_rw("workflow_texture_name", &rawgl::InputBinding::workflowTextureName)
@@ -327,7 +325,6 @@ NB_MODULE(_rawgl, module)
     nb::class_<rawgl::OutputBinding>(module, "OutputBinding")
         .def(nb::init<>())
         .def_rw("name", &rawgl::OutputBinding::name)
-        .def_rw("path", &rawgl::OutputBinding::path)
         .def_rw("format", &rawgl::OutputBinding::format)
         .def_rw("channels", &rawgl::OutputBinding::channels)
         .def_rw("alpha_channel", &rawgl::OutputBinding::alphaChannel)
@@ -374,7 +371,6 @@ NB_MODULE(_rawgl, module)
         .def_rw("uint_values", &rawgl::InputOverride::uintValues)
         .def_rw("float_values", &rawgl::InputOverride::floatValues)
         .def_rw("double_values", &rawgl::InputOverride::doubleValues)
-        .def_rw("texture_path", &rawgl::InputOverride::texturePath)
         .def_rw("attributes", &rawgl::InputOverride::attributes)
         .def_rw("uses_array_element", &rawgl::InputOverride::usesArrayElement)
         .def_rw("array_element", &rawgl::InputOverride::arrayElement)
@@ -392,11 +388,16 @@ NB_MODULE(_rawgl, module)
         .def_rw("captured_outputs", &rawgl::RunResult::capturedOutputs)
         .def_rw("captured_counters", &rawgl::RunResult::capturedCounters);
 
+    nb::class_<rawgl::io::RunRequest>(module, "IoRunRequest")
+        .def(nb::init<>())
+        .def_rw("settings", &rawgl::io::RunRequest::settings)
+        .def_rw("file_inputs", &rawgl::io::RunRequest::fileInputs);
+
     nb::class_<rawgl::PreparedWorkflow>(module, "PreparedWorkflow")
         .def("run", &rawgl::PreparedWorkflow::run, nb::arg("settings") = rawgl::RunSettings {});
 
     nb::class_<rawgl::io::PreparedIoWorkflow>(module, "PreparedIoWorkflow")
-        .def("run", &rawgl::io::PreparedIoWorkflow::run, nb::arg("settings") = rawgl::RunSettings {});
+        .def("run", &rawgl::io::PreparedIoWorkflow::run, nb::arg("request") = rawgl::io::RunRequest {});
 
     nb::class_<PythonPrepareResult>(module, "PrepareResult")
         .def(nb::init<>())
@@ -454,6 +455,37 @@ NB_MODULE(_rawgl, module)
              "Prepare and run one workflow in a single call.")
         .def("stats", &rawgl::Session::stats);
 
+    nb::class_<rawgl::io::FileInputBinding>(module, "FileInputBinding")
+        .def(nb::init<>())
+        .def_rw("pass_index", &rawgl::io::FileInputBinding::passIndex)
+        .def_rw("name", &rawgl::io::FileInputBinding::name)
+        .def_rw("path", &rawgl::io::FileInputBinding::path)
+        .def_rw("attributes", &rawgl::io::FileInputBinding::attributes)
+        .def_rw("uses_array_element", &rawgl::io::FileInputBinding::usesArrayElement)
+        .def_rw("array_element", &rawgl::io::FileInputBinding::arrayElement);
+
+    nb::class_<rawgl::io::FileInputOverride>(module, "FileInputOverride")
+        .def(nb::init<>())
+        .def_rw("pass_index", &rawgl::io::FileInputOverride::passIndex)
+        .def_rw("name", &rawgl::io::FileInputOverride::name)
+        .def_rw("path", &rawgl::io::FileInputOverride::path)
+        .def_rw("attributes", &rawgl::io::FileInputOverride::attributes)
+        .def_rw("uses_array_element", &rawgl::io::FileInputOverride::usesArrayElement)
+        .def_rw("array_element", &rawgl::io::FileInputOverride::arrayElement);
+
+    nb::class_<rawgl::io::FileOutputBinding>(module, "FileOutputBinding")
+        .def(nb::init<>())
+        .def_rw("pass_index", &rawgl::io::FileOutputBinding::passIndex)
+        .def_rw("name", &rawgl::io::FileOutputBinding::name)
+        .def_rw("path", &rawgl::io::FileOutputBinding::path)
+        .def_rw("format", &rawgl::io::FileOutputBinding::format)
+        .def_rw("channels", &rawgl::io::FileOutputBinding::channels)
+        .def_rw("alpha_channel", &rawgl::io::FileOutputBinding::alphaChannel)
+        .def_rw("bits", &rawgl::io::FileOutputBinding::bits)
+        .def_rw("attributes", &rawgl::io::FileOutputBinding::attributes)
+        .def_rw("uses_array_element", &rawgl::io::FileOutputBinding::usesArrayElement)
+        .def_rw("array_element", &rawgl::io::FileOutputBinding::arrayElement);
+
     nb::class_<rawgl::io::IoRuntimeOptions>(module, "IoRuntimeOptions")
         .def(nb::init<>())
         .def_rw("decode_worker_count", &rawgl::io::IoRuntimeOptions::decodeWorkerCount)
@@ -476,6 +508,9 @@ NB_MODULE(_rawgl, module)
         .def_rw("attributes", &rawgl::io::ImageSaveRequest::attributes)
         .def_rw("alpha_channel", &rawgl::io::ImageSaveRequest::alphaChannel)
         .def_rw("bits", &rawgl::io::ImageSaveRequest::bits)
+        .def_rw("metadata_mode", &rawgl::io::ImageSaveRequest::metadataMode)
+        .def_rw("source_metadata", &rawgl::io::ImageSaveRequest::sourceMetadata)
+        .def_rw("explicit_metadata", &rawgl::io::ImageSaveRequest::explicitMetadata)
         .def_rw("image", &rawgl::io::ImageSaveRequest::image);
 
     nb::class_<rawgl::io::ImageSaveResult>(module, "ImageSaveResult")
@@ -483,13 +518,152 @@ NB_MODULE(_rawgl, module)
         .def_rw("success", &rawgl::io::ImageSaveResult::success)
         .def_rw("error_message", &rawgl::io::ImageSaveResult::errorMessage);
 
+    nb::enum_<rawgl::io::MetadataTransferMode>(module, "MetadataTransferMode")
+        .value("none", rawgl::io::MetadataTransferMode::None)
+        .value("copy_source", rawgl::io::MetadataTransferMode::CopySource)
+        .value("explicit_only", rawgl::io::MetadataTransferMode::ExplicitOnly)
+        .value("merge_source_and_explicit", rawgl::io::MetadataTransferMode::MergeSourceAndExplicit);
+
+    nb::enum_<rawgl::io::MetadataNameStyle>(module, "MetadataNameStyle")
+        .value("canonical", rawgl::io::MetadataNameStyle::Canonical)
+        .value("xmp_portable", rawgl::io::MetadataNameStyle::XmpPortable)
+        .value("oiio", rawgl::io::MetadataNameStyle::Oiio);
+
+    nb::enum_<rawgl::io::MetadataNamePolicy>(module, "MetadataNamePolicy")
+        .value("spec", rawgl::io::MetadataNamePolicy::Spec)
+        .value("exif_tool_alias", rawgl::io::MetadataNamePolicy::ExifToolAlias);
+
+    nb::enum_<rawgl::io::MetadataKeyKind>(module, "MetadataKeyKind")
+        .value("exif_tag", rawgl::io::MetadataKeyKind::ExifTag)
+        .value("comment", rawgl::io::MetadataKeyKind::Comment)
+        .value("exr_attribute", rawgl::io::MetadataKeyKind::ExrAttribute)
+        .value("iptc_dataset", rawgl::io::MetadataKeyKind::IptcDataset)
+        .value("xmp_property", rawgl::io::MetadataKeyKind::XmpProperty)
+        .value("icc_header_field", rawgl::io::MetadataKeyKind::IccHeaderField)
+        .value("icc_tag", rawgl::io::MetadataKeyKind::IccTag)
+        .value("photoshop_irb", rawgl::io::MetadataKeyKind::PhotoshopIrb)
+        .value("photoshop_irb_field", rawgl::io::MetadataKeyKind::PhotoshopIrbField)
+        .value("geotiff_key", rawgl::io::MetadataKeyKind::GeotiffKey)
+        .value("printim_field", rawgl::io::MetadataKeyKind::PrintImField)
+        .value("bmff_field", rawgl::io::MetadataKeyKind::BmffField)
+        .value("jumbf_field", rawgl::io::MetadataKeyKind::JumbfField)
+        .value("jumbf_cbor_key", rawgl::io::MetadataKeyKind::JumbfCborKey)
+        .value("png_text", rawgl::io::MetadataKeyKind::PngText);
+
+    nb::enum_<rawgl::io::MetadataValueKind>(module, "MetadataValueKind")
+        .value("empty", rawgl::io::MetadataValueKind::Empty)
+        .value("scalar", rawgl::io::MetadataValueKind::Scalar)
+        .value("array", rawgl::io::MetadataValueKind::Array)
+        .value("bytes", rawgl::io::MetadataValueKind::Bytes)
+        .value("text", rawgl::io::MetadataValueKind::Text);
+
+    nb::enum_<rawgl::io::MetadataElementType>(module, "MetadataElementType")
+        .value("u8", rawgl::io::MetadataElementType::U8)
+        .value("i8", rawgl::io::MetadataElementType::I8)
+        .value("u16", rawgl::io::MetadataElementType::U16)
+        .value("i16", rawgl::io::MetadataElementType::I16)
+        .value("u32", rawgl::io::MetadataElementType::U32)
+        .value("i32", rawgl::io::MetadataElementType::I32)
+        .value("u64", rawgl::io::MetadataElementType::U64)
+        .value("i64", rawgl::io::MetadataElementType::I64)
+        .value("f32", rawgl::io::MetadataElementType::F32)
+        .value("f64", rawgl::io::MetadataElementType::F64)
+        .value("u_rational", rawgl::io::MetadataElementType::URational)
+        .value("s_rational", rawgl::io::MetadataElementType::SRational);
+
+    nb::enum_<rawgl::io::MetadataTextEncoding>(module, "MetadataTextEncoding")
+        .value("unknown", rawgl::io::MetadataTextEncoding::Unknown)
+        .value("ascii", rawgl::io::MetadataTextEncoding::Ascii)
+        .value("utf8", rawgl::io::MetadataTextEncoding::Utf8)
+        .value("utf16le", rawgl::io::MetadataTextEncoding::Utf16LE)
+        .value("utf16be", rawgl::io::MetadataTextEncoding::Utf16BE);
+
+    nb::enum_<rawgl::io::MetadataEntryFlags>(module, "MetadataEntryFlags")
+        .value("none", rawgl::io::MetadataEntryFlags::None)
+        .value("deleted", rawgl::io::MetadataEntryFlags::Deleted)
+        .value("dirty", rawgl::io::MetadataEntryFlags::Dirty)
+        .value("derived", rawgl::io::MetadataEntryFlags::Derived)
+        .value("truncated", rawgl::io::MetadataEntryFlags::Truncated)
+        .value("unreadable", rawgl::io::MetadataEntryFlags::Unreadable)
+        .value("contextual_name", rawgl::io::MetadataEntryFlags::ContextualName);
+
+    nb::class_<rawgl::io::MetadataEntry>(module, "MetadataEntry")
+        .def(nb::init<>())
+        .def_rw("key_kind", &rawgl::io::MetadataEntry::keyKind)
+        .def_rw("value_kind", &rawgl::io::MetadataEntry::valueKind)
+        .def_rw("element_type", &rawgl::io::MetadataEntry::elementType)
+        .def_rw("text_encoding", &rawgl::io::MetadataEntry::textEncoding)
+        .def_rw("flags", &rawgl::io::MetadataEntry::flags)
+        .def_rw("count", &rawgl::io::MetadataEntry::count)
+        .def_rw("name", &rawgl::io::MetadataEntry::name)
+        .def_rw("value_text", &rawgl::io::MetadataEntry::valueText);
+
+    nb::class_<rawgl::io::MetadataValue>(module, "MetadataValue")
+        .def(nb::init<>())
+        .def_rw("kind", &rawgl::io::MetadataValue::kind)
+        .def_rw("element_type", &rawgl::io::MetadataValue::elementType)
+        .def_rw("text_encoding", &rawgl::io::MetadataValue::textEncoding)
+        .def_rw("count", &rawgl::io::MetadataValue::count)
+        .def_prop_rw(
+            "bytes",
+            [](const rawgl::io::MetadataValue& value) { return to_python_bytes(value.bytes); },
+            [](rawgl::io::MetadataValue& value, const nb::object& object) { value.bytes = from_python_bytes(object); });
+
+    nb::class_<rawgl::io::MetadataField>(module, "MetadataField")
+        .def(nb::init<>())
+        .def_rw("key_kind", &rawgl::io::MetadataField::keyKind)
+        .def_rw("flags", &rawgl::io::MetadataField::flags)
+        .def_rw("name", &rawgl::io::MetadataField::name)
+        .def_rw("value", &rawgl::io::MetadataField::value);
+
+    nb::class_<rawgl::io::MetadataDocument>(module, "MetadataDocument")
+        .def(nb::init<>())
+        .def_rw("fields", &rawgl::io::MetadataDocument::fields);
+
+    nb::class_<rawgl::io::MetadataReadRequest>(module, "MetadataReadRequest")
+        .def(nb::init<>())
+        .def_rw("path", &rawgl::io::MetadataReadRequest::path)
+        .def_rw("name_style", &rawgl::io::MetadataReadRequest::nameStyle)
+        .def_rw("name_policy", &rawgl::io::MetadataReadRequest::namePolicy)
+        .def_rw("include_makernotes", &rawgl::io::MetadataReadRequest::includeMakernotes)
+        .def_rw("max_value_preview_bytes", &rawgl::io::MetadataReadRequest::maxValuePreviewBytes)
+        .def_rw("max_value_preview_elements", &rawgl::io::MetadataReadRequest::maxValuePreviewElements);
+
+    nb::class_<rawgl::io::MetadataReadResult>(module, "MetadataReadResult")
+        .def(nb::init<>())
+        .def_rw("success", &rawgl::io::MetadataReadResult::success)
+        .def_rw("error_message", &rawgl::io::MetadataReadResult::errorMessage)
+        .def_rw("entries", &rawgl::io::MetadataReadResult::entries);
+
+    nb::class_<rawgl::io::MetadataDocumentReadRequest>(module, "MetadataDocumentReadRequest")
+        .def(nb::init<>())
+        .def_rw("path", &rawgl::io::MetadataDocumentReadRequest::path)
+        .def_rw("name_style", &rawgl::io::MetadataDocumentReadRequest::nameStyle)
+        .def_rw("name_policy", &rawgl::io::MetadataDocumentReadRequest::namePolicy)
+        .def_rw("include_makernotes", &rawgl::io::MetadataDocumentReadRequest::includeMakernotes);
+
+    nb::class_<rawgl::io::MetadataDocumentReadResult>(module, "MetadataDocumentReadResult")
+        .def(nb::init<>())
+        .def_rw("success", &rawgl::io::MetadataDocumentReadResult::success)
+        .def_rw("error_message", &rawgl::io::MetadataDocumentReadResult::errorMessage)
+        .def_rw("document", &rawgl::io::MetadataDocumentReadResult::document);
+
     nb::class_<rawgl::io::IoRuntime>(module, "IoRuntime")
         .def(nb::init<const rawgl::io::IoRuntimeOptions&>(), nb::arg("options") = rawgl::io::IoRuntimeOptions {})
         .def("load_image_file", &rawgl::io::IoRuntime::loadImageFile, nb::arg("request"))
         .def("save_image_file", &rawgl::io::IoRuntime::saveImageFile, nb::arg("request"))
+        .def("read_metadata_file", &rawgl::io::IoRuntime::readMetadataFile, nb::arg("request"))
+        .def("read_metadata_document_file", &rawgl::io::IoRuntime::readMetadataDocumentFile, nb::arg("request"))
         .def("prepare",
-             [](const rawgl::io::IoRuntime& ioRuntime, const rawgl::Session& session, const rawgl::Workflow& workflow) {
-                 rawgl::io::PrepareWorkflowResult prepareResult = ioRuntime.prepare(session, workflow);
+             [](const rawgl::io::IoRuntime& ioRuntime,
+                const rawgl::Session& session,
+                const rawgl::Workflow& workflow,
+                const std::vector<rawgl::io::FileInputBinding>& fileInputs,
+                const std::vector<rawgl::io::FileOutputBinding>& fileOutputs) {
+                 rawgl::io::PrepareWorkflowResult prepareResult = ioRuntime.prepare(session,
+                                                                                   workflow,
+                                                                                   fileInputs,
+                                                                                   fileOutputs);
                  PythonIoPrepareResult result;
                  result.success = prepareResult.success;
                  result.errorMessage = std::move(prepareResult.errorMessage);
@@ -499,15 +673,21 @@ NB_MODULE(_rawgl, module)
                  return result;
              },
              nb::arg("session"),
-             nb::arg("workflow"))
+             nb::arg("workflow"),
+             nb::arg("file_inputs") = std::vector<rawgl::io::FileInputBinding> {},
+             nb::arg("file_outputs") = std::vector<rawgl::io::FileOutputBinding> {})
         .def("run",
              &rawgl::io::IoRuntime::run,
              nb::arg("session"),
              nb::arg("workflow"),
-             nb::arg("settings") = rawgl::RunSettings {});
+             nb::arg("request") = rawgl::io::RunRequest {},
+             nb::arg("file_inputs") = std::vector<rawgl::io::FileInputBinding> {},
+             nb::arg("file_outputs") = std::vector<rawgl::io::FileOutputBinding> {});
 
     module.def("load_image_file", &rawgl::io::LoadImageFile, nb::arg("request"));
     module.def("save_image_file", &rawgl::io::SaveImageFile, nb::arg("request"));
+    module.def("read_metadata_file", &rawgl::io::ReadMetadataFile, nb::arg("request"));
+    module.def("read_metadata_document_file", &rawgl::io::ReadMetadataDocumentFile, nb::arg("request"));
 
     nb::class_<rawgl::batch::BatchRunnerOptions>(module, "BatchRunnerOptions")
         .def(nb::init<>())
@@ -532,7 +712,8 @@ NB_MODULE(_rawgl, module)
 
     nb::class_<rawgl::batch::BatchSubmitRequest>(module, "BatchSubmitRequest")
         .def(nb::init<>())
-        .def_rw("settings", &rawgl::batch::BatchSubmitRequest::settings);
+        .def_rw("settings", &rawgl::batch::BatchSubmitRequest::settings)
+        .def_rw("file_inputs", &rawgl::batch::BatchSubmitRequest::fileInputs);
 
     nb::class_<rawgl::batch::BatchResult>(module, "BatchResult")
         .def(nb::init<>())
@@ -562,8 +743,11 @@ NB_MODULE(_rawgl, module)
              nb::keep_alive<1, 2>(),
              nb::keep_alive<1, 3>())
         .def("prepare",
-             [](const rawgl::batch::BatchRunner& runner, const rawgl::Workflow& workflow) {
-                 rawgl::batch::BatchPrepareResult prepareResult = runner.prepare(workflow);
+             [](const rawgl::batch::BatchRunner& runner,
+                const rawgl::Workflow& workflow,
+                const std::vector<rawgl::io::FileInputBinding>& fileInputs,
+                const std::vector<rawgl::io::FileOutputBinding>& fileOutputs) {
+                 rawgl::batch::BatchPrepareResult prepareResult = runner.prepare(workflow, fileInputs, fileOutputs);
                  PythonBatchPrepareResult result;
                  result.success = prepareResult.success;
                  result.errorMessage = std::move(prepareResult.errorMessage);
@@ -572,7 +756,9 @@ NB_MODULE(_rawgl, module)
                  }
                  return result;
              },
-             nb::arg("workflow"))
+             nb::arg("workflow"),
+             nb::arg("file_inputs") = std::vector<rawgl::io::FileInputBinding> {},
+             nb::arg("file_outputs") = std::vector<rawgl::io::FileOutputBinding> {})
         .def("submit",
              &rawgl::batch::BatchRunner::submit,
              nb::arg("workflow"),

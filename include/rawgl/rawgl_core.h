@@ -13,11 +13,11 @@
 
 namespace rawgl {
 
-/// Transitional graph-oriented public API.
+/// Low-level graph-oriented public API.
 ///
-/// New frontend-facing code should prefer `rawgl/rawgl.h`, which provides the
-/// workflow-oriented façade names introduced during the API redesign.
-/// Command-line entry points live in `rawgl/rawgl_cli.h`.
+/// New frontend-facing code should usually prefer `rawgl/rawgl.h`, which
+/// provides the workflow-oriented façade. Command-line entry points live in
+/// `rawgl/rawgl_cli.h`.
 
 /// Selects the shader program topology for inspection and graph passes.
 enum class ShaderProgramKind {
@@ -202,7 +202,6 @@ enum class GraphInputSourceKind {
     uintValues,
     floatValues,
     doubleValues,
-    textureFile,
     hostTexture,
     passOutput,
     graphTexture,
@@ -223,8 +222,6 @@ struct GraphInputDefinition {
     std::vector<float> floatValues;
     /// Double payload for `doubleValues` sources.
     std::vector<double> doubleValues;
-    /// Texture path for `textureFile` sources.
-    std::string texturePath;
     /// Referenced output name for `passOutput` sources.
     std::string referencedOutputName;
     /// Referenced pass index for `passOutput` sources.
@@ -260,8 +257,6 @@ struct GraphAtomicCounterDefinition {
 struct GraphOutputDefinition {
     /// Shader-visible output name.
     std::string name;
-    /// Optional save path. Empty means transient-only unless persisted by name.
-    std::string path;
     /// RawGL output format token, for example `rgb32f`.
     std::string format = "rgb32f";
     /// Number of color channels to save.
@@ -333,7 +328,6 @@ struct GraphInputOverride {
     std::vector<uint32_t> uintValues;
     std::vector<float> floatValues;
     std::vector<double> doubleValues;
-    std::string texturePath;
     std::vector<GraphAttribute> attributes;
     /// Selects one element of an array-valued target input.
     bool usesArrayElement = false;

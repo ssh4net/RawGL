@@ -25,14 +25,7 @@ main()
     input.sourceKind  = rawgl::InputSourceKind::floatValues;
     input.floatValues = { 10.0f };
     pass.inputs.push_back(std::move(input));
-    rawgl::OutputBinding output;
-    output.name         = "o_out0";
-    output.path         = "tests/outputs/rawgl_core_system_uniform_reject_smoke.exr";
-    output.format       = "rgba32f";
-    output.channels     = 4;
-    output.alphaChannel = 3;
-    output.bits         = 16;
-    pass.outputs.push_back(std::move(output));
+    pass.outputs.push_back(rawgl::CapturedOutput("o_out0", "rgba32f", 4, 3, 16));
 
     rawgl::Workflow workflow;
     workflow.verbosity = 0;

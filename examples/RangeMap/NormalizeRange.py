@@ -88,7 +88,6 @@ workflow = rawgl.build_workflow(
         },
         outputs={
             "o_out0": {
-                "path": str(output_path),
                 "format": "rgba32f",
                 "channels": 4,
                 "alpha_channel": 3,
@@ -111,6 +110,15 @@ if not result.success:
 normalized = result.output_array("o_out0::1")
 if normalized.ndim == 3:
     normalized = normalized[..., 0]
+
+rawgl.io.save_image(
+    result.captured_outputs["o_out0::1"],
+    output_path,
+    bits=16,
+    attributes={
+        "png:compressionLevel": 0,
+    },
+)
 
 print(f"input range: {float(source.min()):.4f} .. {float(source.max()):.4f}")
 print(f"normalized range: {float(normalized.min()):.4f} .. {float(normalized.max()):.4f}")

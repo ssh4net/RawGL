@@ -66,20 +66,15 @@ main()
 
     rawgl::Workflow workflow;
     rawgl::Pass pass;
-    rawgl::InputBinding input;
-    input.name       = "u_src0";
-    input.sourceKind = rawgl::InputSourceKind::textureFile;
-    input.texturePath = inputPath.string();
-    pass.inputs.push_back(input);
-
-    rawgl::OutputBinding output;
-    output.name = "out_color";
-    output.path = materializedOutputPath.string();
-    pass.outputs.push_back(output);
-
     workflow.passes.push_back(pass);
 
-    const rawgl::io::WorkflowMaterializationResult workflowMaterialization = ioRuntime.materializeWorkflow(workflow);
+    std::vector<rawgl::io::FileInputBinding> fileInputs;
+    fileInputs.push_back(rawgl::io::FileTextureInput(0, "u_src0", inputPath.string()));
+    std::vector<rawgl::io::FileOutputBinding> fileOutputs;
+    fileOutputs.push_back(rawgl::io::FileOutput(0, "out_color", materializedOutputPath.string()));
+
+    const rawgl::io::WorkflowMaterializationResult workflowMaterialization =
+        ioRuntime.materializeWorkflow(workflow, fileInputs, fileOutputs);
     if (!workflowMaterialization.success) {
         std::cerr << "Workflow materialization failed: " << workflowMaterialization.errorMessage << std::endl;
         return 1;
@@ -98,13 +93,8 @@ main()
         return 1;
     }
 
-    if (!materializedInput.texturePath.empty()) {
-        std::cerr << "Materialized workflow input still carries a file path." << std::endl;
-        return 1;
-    }
-
     const rawgl::OutputBinding& materializedOutput = workflowMaterialization.workflow.passes[0].outputs[0];
-    if (!materializedOutput.captureToHost || !materializedOutput.path.empty()) {
+    if (!materializedOutput.captureToHost) {
         std::cerr << "Workflow output was not rewritten into captured host output." << std::endl;
         return 1;
     }
@@ -131,15 +121,11 @@ main()
         return 1;
     }
 
-    rawgl::RunSettings settings;
-    rawgl::InputOverride inputOverride;
-    inputOverride.passIndex  = 0;
-    inputOverride.name       = "u_src0";
-    inputOverride.sourceKind = rawgl::InputSourceKind::textureFile;
-    inputOverride.texturePath = inputPath.string();
-    settings.overrides.push_back(inputOverride);
+    rawgl::io::RunRequest runRequest;
+    runRequest.fileInputs.push_back(rawgl::io::FileTextureOverride(0, "u_src0", inputPath.string()));
 
-    const rawgl::io::RunSettingsMaterializationResult settingsMaterialization = ioRuntime.materializeRunSettings(settings);
+    const rawgl::io::RunSettingsMaterializationResult settingsMaterialization =
+        ioRuntime.materializeRunSettings(runRequest);
     if (!settingsMaterialization.success) {
         std::cerr << "Run settings materialization failed: " << settingsMaterialization.errorMessage << std::endl;
         return 1;
@@ -153,11 +139,6 @@ main()
     const rawgl::InputOverride& materializedOverride = settingsMaterialization.settings.overrides[0];
     if (materializedOverride.sourceKind != rawgl::InputSourceKind::hostTexture || !materializedOverride.hostTexture) {
         std::cerr << "Run settings override was not materialized to host texture." << std::endl;
-        return 1;
-    }
-
-    if (!materializedOverride.texturePath.empty()) {
-        std::cerr << "Materialized run settings override still carries a file path." << std::endl;
         return 1;
     }
 

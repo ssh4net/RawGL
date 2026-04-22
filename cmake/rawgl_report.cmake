@@ -166,6 +166,9 @@ function(rawgl_print_config_summary)
     rawgl_path_found(_rawgl_libraw_found "${RAWGL_LIBRAW_INCLUDE_DIR}" "")
     rawgl_report_dependency("libraw" ON "${_rawgl_libraw_found}" "${_rawgl_libraw_found_PROVIDER}")
 
+    rawgl_any_target_found(_rawgl_openmeta_found OpenMeta::openmeta)
+    rawgl_report_dependency("OpenMeta" ON "${_rawgl_openmeta_found}" "${_rawgl_openmeta_found_PROVIDER}")
+
     if(RAWGL_USE_PACKAGED_MINIPLY AND TARGET miniply::miniply)
         rawgl_report_dependency("miniply" ON ON "package target miniply::miniply")
     elseif(RAWGL_MINIPLY_SOURCES OR EXISTS "${RAWGL_MINIPLY_INCLUDE_DIR}/miniply.h")

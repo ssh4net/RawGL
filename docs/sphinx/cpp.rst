@@ -32,7 +32,9 @@ The normal in-memory C++ path is:
    pass.programKind = rawgl::ShaderProgramKind::vertfrag;
    pass.sizeX = 512;
    pass.sizeY = 512;
-   // Fill pass.shaderModules, pass.inputs, pass.outputs...
+   // Fill pass.shaderModules...
+   pass.inputs.push_back(rawgl::HostTextureInput("u_src0", host_image));
+   pass.outputs.push_back(rawgl::CapturedOutput("out_color"));
 
    workflow.passes.push_back(std::move(pass));
 
@@ -77,5 +79,11 @@ That means:
 
 - ``rawgl_core`` should remain useful even without file IO
 - file-backed workflows should move through ``rawgl::io::IoRuntime``
+
+The in-memory helper constructors are:
+
+- ``HostTextureInput(...)``
+- ``HostTextureOverride(...)``
+- ``CapturedOutput(...)``
 
 See :doc:`io` for the file-oriented translation layer.

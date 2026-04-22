@@ -8,6 +8,27 @@ This page shows the shortest usable paths for RawGL.
 
 For fuller workflow patterns, see :doc:`examples`.
 
+Linux note
+----------
+
+Use the explicit libc++ presets when your Linux dependency prefix is built with
+libc++.
+
+The current validated UBc prefix on this system is:
+
+.. code-block:: text
+
+   /mnt/e/UBc/Release
+
+Use it with:
+
+.. code-block:: sh
+
+   export RAWGL_LINUX_PREFIX=/mnt/e/UBc/Release
+   cmake --preset linux-release-python-core-libcxx
+   cmake --build --preset linux-release-python-core-libcxx
+   ctest --test-dir build_linux_release_python_core_libcxx --output-on-failure
+
 Python
 ------
 
@@ -17,7 +38,7 @@ Use the high-level Python helpers for the fastest start.
 
    import rawgl
 
-   result = rawgl.image(
+   result = rawgl.io.image(
        """#version 450 core
    layout(location = 0) in vec2 UV;
    layout(location = 0) out vec3 OutColor;
@@ -33,10 +54,10 @@ Use the high-level Python helpers for the fastest start.
    if not result.success:
        raise RuntimeError(result.error_message)
 
-Start with ``rawgl.image(...)`` for one fullscreen pass.
+Start with ``rawgl.image(...)`` for in-memory or NumPy-driven work.
 
-Use ``output="output.png"`` to write a file. Use ``capture_to_host=True`` to
-read the result back as a NumPy array.
+Use ``rawgl.io.image(...)`` when the workflow is file-oriented. Use
+``capture_to_host=True`` to read the result back as a NumPy array.
 
 CLI
 ---
@@ -85,18 +106,31 @@ control flow.
 .. code-block:: cpp
 
    #include <rawgl/rawgl.h>
+   #include <rawgl/rawgl_io.h>
 
    rawgl::Session session;
-   rawgl::Workflow workflow;
-   // Fill workflow.passes.
+   rawgl::io::IoRuntime io_runtime;
 
-   rawgl::PrepareResult prepared = session.prepare(workflow);
+   rawgl::Workflow workflow;
+   rawgl::Pass pass;
+   workflow.passes.push_back(std::move(pass));
+
+   std::vector<rawgl::io::FileInputBinding> file_inputs;
+   file_inputs.push_back(rawgl::io::FileTextureInput(0, "u_src0", "input.png"));
+
+   std::vector<rawgl::io::FileOutputBinding> file_outputs;
+   file_outputs.push_back(rawgl::io::FileOutput(0, "out_color", "output.png"));
+
+   rawgl::io::PrepareWorkflowResult prepared = io_runtime.prepare(session, workflow, file_inputs, file_outputs);
    if (!prepared.success) {
        // Handle prepared.errorMessage.
    }
 
-   rawgl::RunResult result = prepared.workflow->run({});
+   rawgl::RunResult result = prepared.workflow->run(rawgl::io::RunRequest{});
 
 Create a ``Session``. Build a ``Workflow``. Prepare it. Run it.
 
-Use ``rawgl::io::IoRuntime`` when the workflow needs file loading or saving.
+Use:
+
+- ``rawgl::io::IoRuntime`` for file-backed workflows
+- ``rawgl::HostTextureInput(...)`` and ``rawgl::CapturedOutput(...)`` for in-memory workflows

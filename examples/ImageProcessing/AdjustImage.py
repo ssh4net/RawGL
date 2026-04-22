@@ -40,7 +40,7 @@ def read_png_size(path: Path) -> tuple[int, int]:
 
 width, height = read_png_size(input_path)
 
-result = rawgl.image(
+result = rawgl.io.image(
     fragment_shader,
     size=(width, height),
     inputs={

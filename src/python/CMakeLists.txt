@@ -195,10 +195,18 @@ endif()
 set(_rawgl_py_build_dir "${CMAKE_BINARY_DIR}/python/rawgl")
 file(MAKE_DIRECTORY "${_rawgl_py_build_dir}")
 
-configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/rawgl/__init__.py"
-    "${_rawgl_py_build_dir}/__init__.py"
-    COPYONLY)
+set(_rawgl_py_init_src "${CMAKE_CURRENT_SOURCE_DIR}/rawgl/__init__.py")
+set(_rawgl_py_init_dst "${_rawgl_py_build_dir}/__init__.py")
+
+add_custom_command(
+    OUTPUT "${_rawgl_py_init_dst}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${_rawgl_py_build_dir}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${_rawgl_py_init_src}" "${_rawgl_py_init_dst}"
+    DEPENDS "${_rawgl_py_init_src}"
+    VERBATIM)
+
+add_custom_target(rawgl_python_package_files DEPENDS "${_rawgl_py_init_dst}")
+add_dependencies(rawgl_python rawgl_python_package_files)
 
 set_target_properties(rawgl_python PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${_rawgl_py_build_dir}"

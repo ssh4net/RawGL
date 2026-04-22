@@ -34,13 +34,7 @@ void main()
     pass.workGroupSizeY = 1;
     pass.hasExplicitWorkGroupSize = true;
 
-    rawgl::OutputBinding output;
-    output.name = "o_out0";
-    output.format = "rgba32f";
-    output.channels = 4;
-    output.alphaChannel = 3;
-    output.captureToHost = true;
-    pass.outputs.push_back(output);
+    pass.outputs.push_back(rawgl::CapturedOutput("o_out0", "rgba32f", 4, 3, 16));
 
     rawgl::Workflow workflow;
     workflow.verbosity = 0;
@@ -154,24 +148,17 @@ void main()
     fragmentModule.debugLabel = "rawgl_batch_smoke_fragment";
     pass.shaderModules.push_back(fragmentModule);
 
-    rawgl::InputBinding input;
-    input.name = "u_src0";
-    input.sourceKind = rawgl::InputSourceKind::textureFile;
-    input.texturePath = inputPath.string();
-    pass.inputs.push_back(input);
-
-    rawgl::OutputBinding output;
-    output.name = "out_color";
-    output.path = outputPath.string();
-    pass.outputs.push_back(output);
-
     workflow.passes.push_back(pass);
+    std::vector<rawgl::io::FileInputBinding> fileInputs;
+    fileInputs.push_back(rawgl::io::FileTextureInput(0, "u_src0", inputPath.string()));
+    std::vector<rawgl::io::FileOutputBinding> fileOutputs;
+    fileOutputs.push_back(rawgl::io::FileOutput(0, "out_color", outputPath.string()));
 
     rawgl::Session session;
     rawgl::io::IoRuntime ioRuntime;
     rawgl::batch::BatchRunner runner(session, ioRuntime);
 
-    rawgl::batch::BatchPrepareResult prepareResult = runner.prepare(workflow);
+    rawgl::batch::BatchPrepareResult prepareResult = runner.prepare(workflow, fileInputs, fileOutputs);
     if (!prepareResult.success || !prepareResult.workflow) {
         std::cerr << "Batch IO prepare failed: " << prepareResult.errorMessage << std::endl;
         return false;

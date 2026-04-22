@@ -77,6 +77,38 @@ if(NOT RAWGL_LIBRAW_INCLUDE_DIR)
     message(FATAL_ERROR "libraw headers were not found. Set CMAKE_PREFIX_PATH or RAWGL_WINDOWS_DEPS_ROOT so libraw/libraw.h is available.")
 endif()
 
+find_package(OpenMeta CONFIG QUIET)
+find_path(RAWGL_OPENMETA_INCLUDE_DIR
+    NAMES openmeta/simple_meta.h
+    HINTS
+        "${RAWGL_LINUX_PREFIX}"
+        "${RAWGL_WINDOWS_DEPS_ROOT}"
+    PATH_SUFFIXES
+        include
+        src/include)
+find_library(RAWGL_OPENMETA_LIBRARY
+    NAMES openmeta openmetad libopenmeta
+    HINTS
+        "${RAWGL_LINUX_PREFIX}"
+        "${RAWGL_WINDOWS_DEPS_ROOT}"
+    PATH_SUFFIXES
+        lib
+        build
+        Release
+        Debug
+        bld/Release
+        bld/Debug)
+set(RAWGL_HAS_OPENMETA OFF)
+if(NOT TARGET OpenMeta::openmeta AND RAWGL_OPENMETA_INCLUDE_DIR AND RAWGL_OPENMETA_LIBRARY)
+    add_library(OpenMeta::openmeta UNKNOWN IMPORTED)
+    set_target_properties(OpenMeta::openmeta PROPERTIES
+        IMPORTED_LOCATION "${RAWGL_OPENMETA_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${RAWGL_OPENMETA_INCLUDE_DIR}")
+endif()
+if(TARGET OpenMeta::openmeta)
+    set(RAWGL_HAS_OPENMETA ON)
+endif()
+
 if(NOT WIN32)
     find_library(RAWGL_HARFBUZZ_LIBRARY
         NAMES harfbuzz libharfbuzz

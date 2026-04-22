@@ -17,12 +17,16 @@ namespace {
 struct GraphTranslationState {
     Pass* currentPass = nullptr;
     InputBinding* currentInput = nullptr;
-    OutputBinding* currentOutput = nullptr;
+    io::FileInputBinding* currentFileInput = nullptr;
+    io::FileOutputBinding* currentOutput = nullptr;
     ShaderInterface currentShaderInterface;
     std::string previousFormat = "rgb32f";
     int previousChannels       = 3;
     int previousAlphaChannel   = -1;
     int previousBits           = 16;
+    size_t currentPassIndex    = 0;
+    std::vector<io::FileInputBinding> fileInputs;
+    std::vector<io::FileOutputBinding> fileOutputs;
 };
 
 static ShaderInterface
@@ -45,7 +49,6 @@ to_input_source_kind(const GraphInputSourceKind sourceKind)
     case GraphInputSourceKind::uintValues: return InputSourceKind::uintValues;
     case GraphInputSourceKind::floatValues: return InputSourceKind::floatValues;
     case GraphInputSourceKind::doubleValues: return InputSourceKind::doubleValues;
-    case GraphInputSourceKind::textureFile: return InputSourceKind::textureFile;
     case GraphInputSourceKind::hostTexture: return InputSourceKind::hostTexture;
     case GraphInputSourceKind::passOutput: return InputSourceKind::passOutput;
     case GraphInputSourceKind::graphTexture: return InputSourceKind::workflowTexture;
@@ -185,7 +188,9 @@ translate_pass_declaration(const CommandLineParsedOption& option,
 
     workflow.passes.push_back(std::move(pass));
     state.currentPass   = &workflow.passes.back();
+    state.currentPassIndex = workflow.passes.size() - 1u;
     state.currentInput  = nullptr;
+    state.currentFileInput = nullptr;
     state.currentOutput = nullptr;
 }
 
@@ -306,10 +311,11 @@ translate_input_option(const CommandLineParsedOption& option, GraphTranslationSt
 
     InputBinding input;
     input.name = option.value[0];
+    io::FileInputBinding fileInput;
+    fileInput.passIndex = state.currentPassIndex;
+    fileInput.name = option.value[0];
 
     if (shaderUniform->glType == GL_SAMPLER_2D || shaderUniform->glType == GL_IMAGE_2D) {
-        input.sourceKind = InputSourceKind::textureFile;
-
         for (size_t i = 1; i < option.value.size(); ++i) {
             const std::string& token = option.value[i];
 
@@ -327,18 +333,30 @@ translate_input_option(const CommandLineParsedOption& option, GraphTranslationSt
                 hres attrResult = hres::OK;
                 probeInput.eval_tex_attr(attrResult, token, option.value[i + 1]);
                 if (attrResult == hres::OK) {
-                    input.attributes.push_back(Attribute { token, option.value[i + 1] });
+                    fileInput.attributes.push_back(Attribute { token, option.value[i + 1] });
                     ++i;
                     continue;
                 }
             }
 
-            input.texturePath = token;
+            fileInput.path = token;
         }
 
-        if (input.sourceKind == InputSourceKind::textureFile && input.texturePath.empty()) {
+        if (input.sourceKind == InputSourceKind::passOutput) {
+            state.currentPass->inputs.push_back(std::move(input));
+            state.currentInput = &state.currentPass->inputs.back();
+            state.currentFileInput = nullptr;
+            return;
+        }
+
+        if (fileInput.path.empty()) {
             throw std::runtime_error("in (" + option.value[0] + "): texture path not found");
         }
+
+        state.fileInputs.push_back(std::move(fileInput));
+        state.currentInput = nullptr;
+        state.currentFileInput = &state.fileInputs.back();
+        return;
     } else {
         GraphInputSourceKind graphSourceKind = GraphInputSourceKind::intValues;
         uint8_t fieldCount = 0;
@@ -372,6 +390,7 @@ translate_input_option(const CommandLineParsedOption& option, GraphTranslationSt
 
     state.currentPass->inputs.push_back(std::move(input));
     state.currentInput = &state.currentPass->inputs.back();
+    state.currentFileInput = nullptr;
 }
 
 static void
@@ -400,12 +419,18 @@ static void
 translate_input_attribute_option(const CommandLineParsedOption& option, GraphTranslationState& state)
 {
     if (!state.currentInput) {
-        throw std::runtime_error("in_attr: no preceding input declaration.");
+        if (!state.currentFileInput) {
+            throw std::runtime_error("in_attr: no preceding input declaration.");
+        }
+        if (option.value.size() < 2) {
+            throw std::runtime_error("in_attr: must have 2 parameters.");
+        }
+        state.currentFileInput->attributes.push_back(Attribute { option.value[0], option.value[1] });
+        return;
     }
     if (option.value.size() < 2) {
         throw std::runtime_error("in_attr: must have 2 parameters.");
     }
-
     state.currentInput->attributes.push_back(Attribute { option.value[0], option.value[1] });
 }
 
@@ -421,7 +446,8 @@ translate_output_option(const CommandLineParsedOption& option, GraphTranslationS
             throw std::runtime_error("out: must have 2 parameters.");
         }
 
-        OutputBinding output;
+        io::FileOutputBinding output;
+        output.passIndex    = state.currentPassIndex;
         output.name         = option.value[0];
         output.path         = option.value[1];
         output.format       = state.previousFormat;
@@ -429,8 +455,8 @@ translate_output_option(const CommandLineParsedOption& option, GraphTranslationS
         output.alphaChannel = state.previousAlphaChannel;
         output.bits         = state.previousBits;
 
-        state.currentPass->outputs.push_back(std::move(output));
-        state.currentOutput = &state.currentPass->outputs.back();
+        state.fileOutputs.push_back(std::move(output));
+        state.currentOutput = &state.fileOutputs.back();
         return;
     }
 
@@ -472,18 +498,18 @@ translate_output_option(const CommandLineParsedOption& option, GraphTranslationS
 
 }  // namespace
 
-Workflow
-BuildWorkflowFromCommandLine(const CommandLineRequest& request, const ShaderInterfaceInspector& inspectShaderInterface)
+CliWorkflow
+BuildCliWorkflowFromCommandLine(const CommandLineRequest& request, const ShaderInterfaceInspector& inspectShaderInterface)
 {
     const CommandLineParsedArguments parsedArguments = ParseCommandLineArguments(request.argc, request.argv);
 
-    Workflow workflow;
-    workflow.verbosity = parsedArguments.verbosity;
+    CliWorkflow result;
+    result.workflow.verbosity = parsedArguments.verbosity;
 
     GraphTranslationState state;
     for (const CommandLineParsedOption& option : parsedArguments.options) {
         if (option.string_key == "pass_vertfrag" || option.string_key == "pass_comp") {
-            translate_pass_declaration(option, workflow, inspectShaderInterface, state);
+            translate_pass_declaration(option, result.workflow, inspectShaderInterface, state);
             continue;
         }
 
@@ -511,7 +537,15 @@ BuildWorkflowFromCommandLine(const CommandLineRequest& request, const ShaderInte
         translate_output_option(option, state);
     }
 
-    return workflow;
+    result.fileInputs = std::move(state.fileInputs);
+    result.fileOutputs = std::move(state.fileOutputs);
+    return result;
+}
+
+Workflow
+BuildWorkflowFromCommandLine(const CommandLineRequest& request, const ShaderInterfaceInspector& inspectShaderInterface)
+{
+    return BuildCliWorkflowFromCommandLine(request, inspectShaderInterface).workflow;
 }
 
 }  // namespace rawgl
