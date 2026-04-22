@@ -5,8 +5,11 @@
 
 #include "gl_utils.h"
 #include "image_io.h"
+#include "jpg_backend.h"
 #include "log.h"
 #include "path_utils.h"
+#include "png_backend.h"
+#include "tiff_backend.h"
 #include "timer.h"
 
 #include <OpenImageIO/imageio.h>
@@ -66,11 +69,10 @@ static ImageBackendKind
 select_decode_backend(const ImageCodecFamily codec)
 {
     switch (codec) {
-    case ImageCodecFamily::Jpeg:
-    case ImageCodecFamily::Png:
-    case ImageCodecFamily::Tiff:
-    case ImageCodecFamily::Exr:
-        return ImageBackendKind::OiioFallback;
+    case ImageCodecFamily::Jpeg: return ImageBackendKind::NativeJpegTurbo;
+    case ImageCodecFamily::Png: return ImageBackendKind::NativePng;
+    case ImageCodecFamily::Tiff: return ImageBackendKind::NativeTiff;
+    case ImageCodecFamily::Exr: return ImageBackendKind::OiioFallback;
     case ImageCodecFamily::Unknown:
     case ImageCodecFamily::Bmp:
     case ImageCodecFamily::Tga:
@@ -86,11 +88,10 @@ static ImageBackendKind
 select_encode_backend(const ImageCodecFamily codec)
 {
     switch (codec) {
-    case ImageCodecFamily::Jpeg:
-    case ImageCodecFamily::Png:
-    case ImageCodecFamily::Tiff:
-    case ImageCodecFamily::Exr:
-        return ImageBackendKind::OiioFallback;
+    case ImageCodecFamily::Jpeg: return ImageBackendKind::NativeJpegTurbo;
+    case ImageCodecFamily::Png: return ImageBackendKind::NativePng;
+    case ImageCodecFamily::Tiff: return ImageBackendKind::NativeTiff;
+    case ImageCodecFamily::Exr: return ImageBackendKind::OiioFallback;
     case ImageCodecFamily::Unknown:
     case ImageCodecFamily::Bmp:
     case ImageCodecFamily::Tga:
@@ -324,9 +325,30 @@ decode_image_file(const std::string& path, const std::map<std::string, std::stri
 
     switch (backend) {
     case ImageBackendKind::OiioFallback: return decode_image_file_oiio(path, attributes);
-    case ImageBackendKind::NativeJpegTurbo:
-    case ImageBackendKind::NativePng:
-    case ImageBackendKind::NativeTiff:
+    case ImageBackendKind::NativeJpegTurbo: {
+        DecodedImageData result = decode_jpg_file(path);
+        if (result.success) {
+            return result;
+        }
+        LOG(warning) << "Native JPEG decode failed for " << path << ", falling back to OIIO: " << result.errorMessage;
+        return decode_image_file_oiio(path, attributes);
+    }
+    case ImageBackendKind::NativePng: {
+        DecodedImageData result = decode_png_file(path);
+        if (result.success) {
+            return result;
+        }
+        LOG(warning) << "Native PNG decode failed for " << path << ", falling back to OIIO: " << result.errorMessage;
+        return decode_image_file_oiio(path, attributes);
+    }
+    case ImageBackendKind::NativeTiff: {
+        DecodedImageData result = decode_tiff_file(path);
+        if (result.success) {
+            return result;
+        }
+        LOG(warning) << "Native TIFF decode failed for " << path << ", falling back to OIIO: " << result.errorMessage;
+        return decode_image_file_oiio(path, attributes);
+    }
     case ImageBackendKind::NativeOpenExr:
     default:
         return decode_image_file_oiio(path, attributes);
@@ -359,9 +381,30 @@ encode_image_file(const std::string& path,
     switch (backend) {
     case ImageBackendKind::OiioFallback:
         return encode_image_file_oiio(path, attributes, alphaChannel, image, settings, errorMessage);
-    case ImageBackendKind::NativeJpegTurbo:
-    case ImageBackendKind::NativePng:
-    case ImageBackendKind::NativeTiff:
+    case ImageBackendKind::NativeJpegTurbo: {
+        std::string nativeErrorMessage;
+        if (encode_jpg_file(path, attributes, alphaChannel, image, nativeErrorMessage)) {
+            return true;
+        }
+        LOG(warning) << "Native JPEG write failed for " << path << ", falling back to OIIO: " << nativeErrorMessage;
+        return encode_image_file_oiio(path, attributes, alphaChannel, image, settings, errorMessage);
+    }
+    case ImageBackendKind::NativePng: {
+        std::string nativeErrorMessage;
+        if (encode_png_file(path, attributes, alphaChannel, image, settings, nativeErrorMessage)) {
+            return true;
+        }
+        LOG(warning) << "Native PNG write failed for " << path << ", falling back to OIIO: " << nativeErrorMessage;
+        return encode_image_file_oiio(path, attributes, alphaChannel, image, settings, errorMessage);
+    }
+    case ImageBackendKind::NativeTiff: {
+        std::string nativeErrorMessage;
+        if (encode_tiff_file(path, attributes, alphaChannel, image, settings, nativeErrorMessage)) {
+            return true;
+        }
+        LOG(warning) << "Native TIFF write failed for " << path << ", falling back to OIIO: " << nativeErrorMessage;
+        return encode_image_file_oiio(path, attributes, alphaChannel, image, settings, errorMessage);
+    }
     case ImageBackendKind::NativeOpenExr:
     default:
         return encode_image_file_oiio(path, attributes, alphaChannel, image, settings, errorMessage);

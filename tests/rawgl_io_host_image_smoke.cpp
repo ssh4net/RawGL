@@ -3,6 +3,7 @@
 
 #include "rawgl/rawgl_io.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <iostream>
 
@@ -10,11 +11,16 @@ int
 main()
 {
     const std::filesystem::path inputPath = "tests/inputs/EmptyPresetLUT.png";
+    const std::filesystem::path jpegInputPath = "tests/inputs/sky.jpg";
     const std::filesystem::path outputPath = "tests/outputs/rawgl_io_host_image_smoke.png";
+    const std::filesystem::path jpegOutputPath = "tests/outputs/rawgl_io_host_image_smoke.jpg";
+    const std::filesystem::path tiffOutputPath = "tests/outputs/rawgl_io_host_image_smoke.tif";
     const std::filesystem::path materializedOutputPath = "tests/outputs/rawgl_io_materialized_output_smoke.png";
 
     std::error_code removeError;
     std::filesystem::remove(outputPath, removeError);
+    std::filesystem::remove(jpegOutputPath, removeError);
+    std::filesystem::remove(tiffOutputPath, removeError);
     std::filesystem::remove(materializedOutputPath, removeError);
 
     rawgl::io::ImageLoadRequest loadRequest;
@@ -29,6 +35,7 @@ main()
     rawgl::io::ImageSaveRequest saveRequest;
     saveRequest.path  = outputPath.string();
     saveRequest.bits  = 8;
+    saveRequest.attributes.push_back({ "png:compressionLevel", "0" });
     saveRequest.image = loadResult.image;
 
     const rawgl::io::ImageSaveResult saveResult = rawgl::io::SaveImageFile(saveRequest);
@@ -59,6 +66,93 @@ main()
 
     if (reloadResult.image.bytes.empty() || loadResult.image.bytes.empty()) {
         std::cerr << "Loaded image bytes are empty." << std::endl;
+        return 1;
+    }
+
+    rawgl::io::ImageLoadRequest jpegLoadRequest;
+    jpegLoadRequest.path = jpegInputPath.string();
+
+    const rawgl::io::ImageLoadResult jpegLoadResult = rawgl::io::LoadImageFile(jpegLoadRequest);
+    if (!jpegLoadResult.success) {
+        std::cerr << "JPEG load failed: " << jpegLoadResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    rawgl::io::ImageSaveRequest jpegSaveRequest;
+    jpegSaveRequest.path = jpegOutputPath.string();
+    jpegSaveRequest.bits = 8;
+    jpegSaveRequest.attributes.push_back({ "jpeg:quality", "100" });
+    jpegSaveRequest.attributes.push_back({ "jpeg:progressive", "true" });
+    jpegSaveRequest.image = jpegLoadResult.image;
+
+    const rawgl::io::ImageSaveResult jpegSaveResult = rawgl::io::SaveImageFile(jpegSaveRequest);
+    if (!jpegSaveResult.success) {
+        std::cerr << "JPEG save failed: " << jpegSaveResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    if (!std::filesystem::exists(jpegOutputPath)) {
+        std::cerr << "Expected JPEG output was not created: " << jpegOutputPath << std::endl;
+        return 1;
+    }
+
+    rawgl::io::ImageLoadRequest jpegReloadRequest;
+    jpegReloadRequest.path = jpegOutputPath.string();
+
+    const rawgl::io::ImageLoadResult jpegReloadResult = rawgl::io::LoadImageFile(jpegReloadRequest);
+    if (!jpegReloadResult.success) {
+        std::cerr << "JPEG reload failed: " << jpegReloadResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    if (jpegReloadResult.image.width != jpegLoadResult.image.width
+        || jpegReloadResult.image.height != jpegLoadResult.image.height) {
+        std::cerr << "Reloaded JPEG dimensions differ from source." << std::endl;
+        return 1;
+    }
+
+    if (jpegReloadResult.image.channels != 3 || jpegReloadResult.image.bytes.empty()) {
+        std::cerr << "Reloaded JPEG shape is unexpected." << std::endl;
+        return 1;
+    }
+
+    rawgl::io::ImageSaveRequest tiffSaveRequest;
+    tiffSaveRequest.path = tiffOutputPath.string();
+    tiffSaveRequest.bits = 16;
+    tiffSaveRequest.attributes.push_back({ "tiff:compression", "ZIP" });
+    tiffSaveRequest.image = jpegLoadResult.image;
+
+    const rawgl::io::ImageSaveResult tiffSaveResult = rawgl::io::SaveImageFile(tiffSaveRequest);
+    if (!tiffSaveResult.success) {
+        std::cerr << "TIFF save failed: " << tiffSaveResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    if (!std::filesystem::exists(tiffOutputPath)) {
+        std::cerr << "Expected TIFF output was not created: " << tiffOutputPath << std::endl;
+        return 1;
+    }
+
+    rawgl::io::ImageLoadRequest tiffReloadRequest;
+    tiffReloadRequest.path = tiffOutputPath.string();
+
+    const rawgl::io::ImageLoadResult tiffReloadResult = rawgl::io::LoadImageFile(tiffReloadRequest);
+    if (!tiffReloadResult.success) {
+        std::cerr << "TIFF reload failed: " << tiffReloadResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    if (tiffReloadResult.image.width != jpegLoadResult.image.width
+        || tiffReloadResult.image.height != jpegLoadResult.image.height
+        || tiffReloadResult.image.channels != 3) {
+        std::cerr << "Reloaded TIFF dimensions differ from source." << std::endl;
+        return 1;
+    }
+
+    const size_t expectedTiffByteCount = static_cast<size_t>(tiffReloadResult.image.width)
+                                         * static_cast<size_t>(tiffReloadResult.image.height) * 3u * sizeof(uint16_t);
+    if (tiffReloadResult.image.bytes.size() != expectedTiffByteCount) {
+        std::cerr << "Reloaded TIFF byte size is unexpected." << std::endl;
         return 1;
     }
 

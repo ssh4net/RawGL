@@ -1,5 +1,15 @@
 find_package(OpenGL REQUIRED COMPONENTS OpenGL GLX)
 find_package(X11 REQUIRED)
+find_package(PNG CONFIG QUIET)
+if(NOT TARGET PNG::PNG)
+    find_package(PNG QUIET)
+endif()
+find_package(libjpeg-turbo CONFIG QUIET)
+find_package(JPEG QUIET)
+find_package(TIFF CONFIG QUIET)
+if(NOT TARGET TIFF::TIFF AND NOT TARGET TIFF::tiff)
+    find_package(TIFF QUIET)
+endif()
 find_package(OpenEXR CONFIG REQUIRED)
 find_package(BZip2 QUIET)
 find_package(fmt CONFIG QUIET)
@@ -166,6 +176,70 @@ find_package(glew CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(OpenImageIO CONFIG REQUIRED)
 find_package(miniply CONFIG QUIET)
+
+if(TARGET PNG::png_static AND NOT TARGET PNG::PNG)
+    add_library(PNG::PNG INTERFACE IMPORTED)
+    set_target_properties(PNG::PNG PROPERTIES
+        INTERFACE_LINK_LIBRARIES "PNG::png_static")
+elseif(PNG_FOUND AND NOT TARGET PNG::PNG)
+    add_library(PNG::PNG INTERFACE IMPORTED)
+    if(PNG_INCLUDE_DIRS)
+        set_target_properties(PNG::PNG PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${PNG_INCLUDE_DIRS}")
+    elseif(PNG_PNG_INCLUDE_DIR)
+        set_target_properties(PNG::PNG PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${PNG_PNG_INCLUDE_DIR}")
+    endif()
+    if(PNG_LIBRARIES)
+        set_target_properties(PNG::PNG PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${PNG_LIBRARIES}")
+    elseif(PNG_LIBRARY)
+        set_target_properties(PNG::PNG PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${PNG_LIBRARY}")
+    endif()
+endif()
+if(TARGET libjpeg-turbo::jpeg-static AND NOT TARGET JPEG::JPEG)
+    add_library(JPEG::JPEG INTERFACE IMPORTED)
+    set_target_properties(JPEG::JPEG PROPERTIES
+        INTERFACE_LINK_LIBRARIES "libjpeg-turbo::jpeg-static")
+elseif(JPEG_FOUND AND NOT TARGET JPEG::JPEG)
+    add_library(JPEG::JPEG INTERFACE IMPORTED)
+    if(JPEG_INCLUDE_DIRS)
+        set_target_properties(JPEG::JPEG PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${JPEG_INCLUDE_DIRS}")
+    elseif(JPEG_INCLUDE_DIR)
+        set_target_properties(JPEG::JPEG PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${JPEG_INCLUDE_DIR}")
+    endif()
+    if(JPEG_LIBRARIES)
+        set_target_properties(JPEG::JPEG PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${JPEG_LIBRARIES}")
+    elseif(JPEG_LIBRARY)
+        set_target_properties(JPEG::JPEG PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${JPEG_LIBRARY}")
+    endif()
+endif()
+if(TARGET TIFF::tiff AND NOT TARGET TIFF::TIFF)
+    add_library(TIFF::TIFF INTERFACE IMPORTED)
+    set_target_properties(TIFF::TIFF PROPERTIES
+        INTERFACE_LINK_LIBRARIES "TIFF::tiff")
+elseif(TIFF_FOUND AND NOT TARGET TIFF::TIFF)
+    add_library(TIFF::TIFF INTERFACE IMPORTED)
+    if(TIFF_INCLUDE_DIR)
+        set_target_properties(TIFF::TIFF PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${TIFF_INCLUDE_DIR}")
+    elseif(TIFF_INCLUDE_DIRS)
+        set_target_properties(TIFF::TIFF PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${TIFF_INCLUDE_DIRS}")
+    endif()
+    if(TIFF_LIBRARY)
+        set_target_properties(TIFF::TIFF PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${TIFF_LIBRARY}")
+    elseif(TIFF_LIBRARIES)
+        set_target_properties(TIFF::TIFF PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${TIFF_LIBRARIES}")
+    endif()
+endif()
 
 set(RAWGL_OPENGL_LOADER_TARGET libglew_static)
 set(RAWGL_GLFW_TARGET glfw)

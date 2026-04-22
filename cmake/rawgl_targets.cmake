@@ -27,7 +27,10 @@ set(RAWGL_IO_SOURCES
     src/io/image_io.cpp
     src/io/io_facade.cpp
     src/io/io_runtime.cpp
+    src/io/jpg_backend.cpp
     src/io/metadata_reader.cpp
+    src/io/png_backend.cpp
+    src/io/tiff_backend.cpp
     src/io/texture_loader.cpp
     src/io/output_writer.cpp)
 
@@ -131,6 +134,15 @@ target_compile_definitions(rawgl_io PRIVATE
 if(RAWGL_HAS_OPENMETA)
     target_compile_definitions(rawgl_io PRIVATE RAWGL_HAS_OPENMETA=1)
 endif()
+if(TARGET PNG::PNG)
+    target_compile_definitions(rawgl_io PRIVATE RAWGL_HAS_LIBPNG=1)
+endif()
+if(TARGET JPEG::JPEG)
+    target_compile_definitions(rawgl_io PRIVATE RAWGL_HAS_LIBJPEG=1)
+endif()
+if(TARGET TIFF::TIFF)
+    target_compile_definitions(rawgl_io PRIVATE RAWGL_HAS_LIBTIFF=1)
+endif()
 
 target_compile_definitions(rawgl_batch PRIVATE
     _CRT_SECURE_NO_WARNINGS
@@ -176,6 +188,16 @@ target_link_libraries(rawgl_io PUBLIC
     rawgl_support
     ${RAWGL_OPENGL_LOADER_TARGET}
     ${RAWGL_OIIO_TARGETS})
+
+if(TARGET PNG::PNG)
+    target_link_libraries(rawgl_io PUBLIC PNG::PNG)
+endif()
+if(TARGET JPEG::JPEG)
+    target_link_libraries(rawgl_io PUBLIC JPEG::JPEG)
+endif()
+if(TARGET TIFF::TIFF)
+    target_link_libraries(rawgl_io PUBLIC TIFF::TIFF)
+endif()
 
 if(RAWGL_HAS_OPENMETA)
     target_link_libraries(rawgl_io PUBLIC OpenMeta::openmeta)

@@ -138,6 +138,9 @@ That lets RawGL expose real format controls directly:
 
 - JPEG quality, progressive mode, chroma subsampling, lossless JPEG paths when
   supported, ICC packet handling
+  - future extension: high-bit-depth JPEG via newer `libjpeg-turbo`
+    (`12-bit` lossy/lossless and `16-bit` lossless where the deployed library
+    version supports it)
 - PNG bit depth, interlace, compression, filter policy, gamma/CICP/sRGB policy
 - TIFF compression, tiling/strips, predictor, planar layout, sample format,
   BigTIFF policy
@@ -213,6 +216,8 @@ Add:
 
 3. Add native JPEG read/write next, with explicit quality and progressive
    control.
+   High-bit-depth JPEG should stay a follow-up item after the baseline `8-bit`
+   path is stable.
 
 4. Add native TIFF write in parallel with the JPEG/TIFF metadata work.
 

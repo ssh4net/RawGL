@@ -281,6 +281,8 @@ Current weaknesses:
    - `texture_loader.cpp` and `output_writer.cpp` do not depend on OIIO types
    - JPEG, TIFF, PNG, and OpenEXR can be replaced one family at a time without changing higher-level call sites
    - RawGL owns output-setting selection for the supported native families
+   - high-bit-depth JPEG remains an explicit follow-up item on top of the
+     native `libjpeg-turbo` path, not a reason to keep the generic OIIO route
 
 16. Add explicit built-in system uniform support.
 
