@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
-import struct
 
 import rawgl
 
 
-input_path = Path(__file__).resolve().parents[2] / "tests/inputs/EmptyPresetLUT.png"
+input_path = Path(__file__).resolve().parents[2] / "tests/inputs/sky.jpg"
 output_path = Path(__file__).with_name("AdjustImage_python.png")
 gain = 1.20
 gamma_value = 1.10
@@ -29,16 +28,9 @@ void main()
 """
 
 
-def read_png_size(path: Path) -> tuple[int, int]:
-    with path.open("rb") as stream:
-        header = stream.read(24)
-    if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n":
-        raise RuntimeError(f"{path} is not a readable PNG file")
-    width, height = struct.unpack(">II", header[16:24])
-    return int(width), int(height)
-
-
-width, height = read_png_size(input_path)
+loaded = rawgl.io.load_image(input_path)
+width = loaded.width
+height = loaded.height
 
 result = rawgl.io.image(
     fragment_shader,

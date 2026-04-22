@@ -4,10 +4,8 @@
 #include "texture_loader.h"
 
 #include "gl_utils.h"
-#include "image_io.h"
+#include "image_backend.h"
 
-#include <cstdlib>
-#include <cstring>
 #include <stdexcept>
 
 namespace rawgl::io {
@@ -32,7 +30,7 @@ to_host_image_data(const LoadedTextureData& texture)
 }
 
 static void
-resolve_texture_storage(LoadedTextureData& texture, const OIIO::TypeDesc format)
+resolve_texture_storage(LoadedTextureData& texture, const ImageComponentType componentType)
 {
     const GLenum formats[5][4] = {
         { GL_R8, GL_RG8, GL_RGB8, GL_RGBA8 },
@@ -46,46 +44,31 @@ resolve_texture_storage(LoadedTextureData& texture, const OIIO::TypeDesc format)
         throw std::runtime_error("Unsupported image channel count");
     }
 
-    switch (format.basetype) {
-    case OIIO::TypeDesc::UINT8:
+    switch (componentType) {
+    case ImageComponentType::U8:
         texture.internalFormat = formats[0][texture.channels - 1];
         texture.type           = GL_UNSIGNED_BYTE;
         break;
-    case OIIO::TypeDesc::UINT16:
+    case ImageComponentType::U16:
         texture.internalFormat = formats[1][texture.channels - 1];
         texture.type           = GL_UNSIGNED_SHORT;
         break;
-    case OIIO::TypeDesc::UINT32:
+    case ImageComponentType::U32:
         texture.internalFormat = formats[2][texture.channels - 1];
         texture.type           = GL_UNSIGNED_INT;
         break;
-    case OIIO::TypeDesc::HALF:
+    case ImageComponentType::F16:
         texture.internalFormat = formats[3][texture.channels - 1];
         texture.type           = GL_HALF_FLOAT;
         break;
-    case OIIO::TypeDesc::FLOAT:
+    case ImageComponentType::F32:
         texture.internalFormat = formats[4][texture.channels - 1];
         texture.type           = GL_FLOAT;
         break;
+    case ImageComponentType::F64:
+    case ImageComponentType::Unknown:
     default: throw std::runtime_error("Unsupported image type");
     }
-}
-
-static size_t
-byte_size_for_oiio_format(const OIIO::TypeDesc format)
-{
-    switch (format.basetype) {
-    case OIIO::TypeDesc::UINT8: return 1u;
-    case OIIO::TypeDesc::UINT16:
-    case OIIO::TypeDesc::HALF: return 2u;
-    case OIIO::TypeDesc::UINT32:
-    case OIIO::TypeDesc::FLOAT: return 4u;
-    case OIIO::TypeDesc::UINT64:
-    case OIIO::TypeDesc::DOUBLE: return 8u;
-    default: break;
-    }
-
-    return 0u;
 }
 
 }  // namespace
@@ -94,37 +77,30 @@ LoadedTextureData
 load_texture_file_data(const std::string& path, const std::map<std::string, std::string>& attributes)
 {
     LoadedTextureData texture;
-    void* pixelData = nullptr;
-    OIIO::TypeDesc format;
-
-    if (!image_utils::load_image(path,
-                                 attributes,
-                                 texture.width,
-                                 texture.height,
-                                 pixelData,
-                                 texture.channels,
-                                 texture.alphaChannel,
-                                 format)) {
+    const DecodedImageData decoded = decode_image_file(path, attributes);
+    if (!decoded.success) {
         return texture;
     }
 
-    resolve_texture_storage(texture, format);
+    texture.width = decoded.width;
+    texture.height = decoded.height;
+    texture.channels = decoded.channels;
+    texture.alphaChannel = decoded.alphaChannel;
 
-    const size_t bytesPerComponent = byte_size_for_oiio_format(format);
+    resolve_texture_storage(texture, decoded.componentType);
+
+    const size_t bytesPerComponent = byte_size_for_image_component(decoded.componentType);
     if (bytesPerComponent == 0u) {
-        if (pixelData != nullptr) {
-            free(pixelData);
-        }
         throw std::runtime_error("Unsupported image type");
     }
 
     const size_t byteCount = static_cast<size_t>(texture.width) * static_cast<size_t>(texture.height)
                              * static_cast<size_t>(texture.channels) * bytesPerComponent;
-    texture.bytes.resize(byteCount);
-    if (pixelData != nullptr && byteCount > 0u) {
-        std::memcpy(texture.bytes.data(), pixelData, byteCount);
-        free(pixelData);
+    if (decoded.bytes.size() != byteCount) {
+        throw std::runtime_error("Decoded image byte size mismatch");
     }
+
+    texture.bytes = decoded.bytes;
 
     texture.valid = true;
     return texture;

@@ -40,8 +40,6 @@ def main() -> int:
             return fail("rawgl.io does not expose Runtime")
         if getattr(rawgl.io, "MetadataNameStyle", None) is None:
             return fail("rawgl.io does not expose MetadataNameStyle")
-        if getattr(rawgl.io, "MetadataTransferMode", None) is None:
-            return fail("rawgl.io does not expose MetadataTransferMode")
         if not hasattr(rawgl.io, "read_metadata"):
             return fail("rawgl.io does not expose read_metadata()")
         if not hasattr(rawgl.io, "read_metadata_document"):

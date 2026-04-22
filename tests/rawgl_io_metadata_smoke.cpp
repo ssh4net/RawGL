@@ -9,15 +9,11 @@
 int
 main()
 {
-    const std::filesystem::path inputPath = "tests/inputs/EmptyPresetLUT.png";
+    const std::filesystem::path inputPath = "tests/inputs/sky.jpg";
     const std::filesystem::path outputPath = "tests/outputs/rawgl_io_metadata_smoke.tif";
-    const std::filesystem::path copiedPath = "tests/outputs/rawgl_io_metadata_copy_smoke.tif";
-    const std::filesystem::path explicitPath = "tests/outputs/rawgl_io_metadata_explicit_smoke.tif";
 
     std::error_code removeError;
     std::filesystem::remove(outputPath, removeError);
-    std::filesystem::remove(copiedPath, removeError);
-    std::filesystem::remove(explicitPath, removeError);
 
     rawgl::io::ImageLoadRequest loadRequest;
     loadRequest.path = inputPath.string();
@@ -45,7 +41,7 @@ main()
     }
 
     rawgl::io::MetadataDocumentReadRequest documentRequest;
-    documentRequest.path = outputPath.string();
+    documentRequest.path = inputPath.string();
     documentRequest.nameStyle = rawgl::io::MetadataNameStyle::Oiio;
     documentRequest.namePolicy = rawgl::io::MetadataNamePolicy::ExifToolAlias;
 
@@ -61,7 +57,7 @@ main()
     }
 
     rawgl::io::MetadataReadRequest metadataRequest;
-    metadataRequest.path = outputPath.string();
+    metadataRequest.path = inputPath.string();
     metadataRequest.nameStyle = rawgl::io::MetadataNameStyle::Oiio;
     metadataRequest.namePolicy = rawgl::io::MetadataNamePolicy::ExifToolAlias;
 
@@ -103,88 +99,6 @@ main()
 
     if (!foundDateTime) {
         std::cerr << "Date/time metadata entry was not exported." << std::endl;
-        return 1;
-    }
-
-    rawgl::io::ImageSaveRequest copiedSaveRequest;
-    copiedSaveRequest.path = copiedPath.string();
-    copiedSaveRequest.bits = 16;
-    copiedSaveRequest.image = loadResult.image;
-    copiedSaveRequest.metadataMode = rawgl::io::MetadataTransferMode::CopySource;
-    copiedSaveRequest.sourceMetadata = std::make_shared<rawgl::io::MetadataDocument>(documentResult.document);
-
-    const rawgl::io::ImageSaveResult copiedSaveResult = rawgl::io::SaveImageFile(copiedSaveRequest);
-    if (!copiedSaveResult.success) {
-        std::cerr << "Copy-source metadata save failed: " << copiedSaveResult.errorMessage << std::endl;
-        return 1;
-    }
-
-    rawgl::io::MetadataReadRequest copiedMetadataRequest;
-    copiedMetadataRequest.path = copiedPath.string();
-    copiedMetadataRequest.nameStyle = rawgl::io::MetadataNameStyle::Oiio;
-    copiedMetadataRequest.namePolicy = rawgl::io::MetadataNamePolicy::ExifToolAlias;
-    const rawgl::io::MetadataReadResult copiedMetadataResult = rawgl::io::ReadMetadataFile(copiedMetadataRequest);
-    if (!copiedMetadataResult.success) {
-        std::cerr << "Copied metadata read failed: " << copiedMetadataResult.errorMessage << std::endl;
-        return 1;
-    }
-
-    bool copiedDateTime = false;
-    for (const rawgl::io::MetadataEntry& entry : copiedMetadataResult.entries) {
-        if ((entry.name == "DateTime" || entry.name == "ModifyDate") && !entry.valueText.empty()) {
-            copiedDateTime = true;
-        }
-    }
-
-    if (!copiedDateTime) {
-        std::cerr << "Copy-source save did not preserve a date/time metadata entry." << std::endl;
-        return 1;
-    }
-
-    auto explicitDocument = std::make_shared<rawgl::io::MetadataDocument>();
-    rawgl::io::MetadataField softwareField;
-    softwareField.keyKind = rawgl::io::MetadataKeyKind::ExifTag;
-    softwareField.name = "Software";
-    softwareField.value.kind = rawgl::io::MetadataValueKind::Text;
-    softwareField.value.textEncoding = rawgl::io::MetadataTextEncoding::Utf8;
-    const std::string softwareValue = "RawGL metadata smoke";
-    softwareField.value.count = static_cast<uint32_t>(softwareValue.size());
-    softwareField.value.bytes.assign(reinterpret_cast<const std::byte*>(softwareValue.data()),
-                                     reinterpret_cast<const std::byte*>(softwareValue.data() + softwareValue.size()));
-    explicitDocument->fields.push_back(std::move(softwareField));
-
-    rawgl::io::ImageSaveRequest explicitSaveRequest;
-    explicitSaveRequest.path = explicitPath.string();
-    explicitSaveRequest.bits = 16;
-    explicitSaveRequest.image = loadResult.image;
-    explicitSaveRequest.metadataMode = rawgl::io::MetadataTransferMode::ExplicitOnly;
-    explicitSaveRequest.explicitMetadata = explicitDocument;
-
-    const rawgl::io::ImageSaveResult explicitSaveResult = rawgl::io::SaveImageFile(explicitSaveRequest);
-    if (!explicitSaveResult.success) {
-        std::cerr << "Explicit metadata save failed: " << explicitSaveResult.errorMessage << std::endl;
-        return 1;
-    }
-
-    rawgl::io::MetadataReadRequest explicitMetadataRequest;
-    explicitMetadataRequest.path = explicitPath.string();
-    explicitMetadataRequest.nameStyle = rawgl::io::MetadataNameStyle::Oiio;
-    explicitMetadataRequest.namePolicy = rawgl::io::MetadataNamePolicy::ExifToolAlias;
-    const rawgl::io::MetadataReadResult explicitMetadataResult = rawgl::io::ReadMetadataFile(explicitMetadataRequest);
-    if (!explicitMetadataResult.success) {
-        std::cerr << "Explicit metadata read failed: " << explicitMetadataResult.errorMessage << std::endl;
-        return 1;
-    }
-
-    bool foundSoftware = false;
-    for (const rawgl::io::MetadataEntry& entry : explicitMetadataResult.entries) {
-        if (entry.name == "Software" && entry.valueText == softwareValue) {
-            foundSoftware = true;
-        }
-    }
-
-    if (!foundSoftware) {
-        std::cerr << "Explicit metadata save did not export Software correctly." << std::endl;
         return 1;
     }
 

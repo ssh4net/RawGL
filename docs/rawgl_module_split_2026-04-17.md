@@ -15,6 +15,7 @@ Related notes:
 - [rawgl_public_api_redesign_2026-04-16.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_public_api_redesign_2026-04-16.md)
 - [rawgl_type_support_and_python_binding_plan_2026-04-15.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_type_support_and_python_binding_plan_2026-04-15.md)
 - [rawgl_batch_design_2026-04-18.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_batch_design_2026-04-18.md)
+- [rawgl_native_image_io_backend_plan_2026-04-22.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_native_image_io_backend_plan_2026-04-22.md)
 
 ## 1. Problem statement
 
@@ -79,7 +80,7 @@ Owns:
 
 - image file decode
 - image file encode
-- OpenImageIO and related codec dependencies
+- native codec backends and temporary fallback codec dependencies
 - file metadata and codec attribute handling
 - optional raw photo decode behavior
 - proxy/cache generation

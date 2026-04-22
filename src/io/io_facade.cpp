@@ -3,7 +3,6 @@
 
 #include "rawgl/rawgl_io.h"
 
-#include "metadata_internal.h"
 #include "output_writer.h"
 #include "texture_loader.h"
 
@@ -45,72 +44,15 @@ build_output_capture_key(const OutputSaveBinding& outputSave)
     return stream.str();
 }
 
-static bool
-append_metadata_attributes(const ImageSaveRequest& request,
-                           std::map<std::string, std::string>* attributes,
-                           std::string* errorMessage)
-{
-    if (!attributes || !errorMessage) {
-        return false;
-    }
-
-    switch (request.metadataMode) {
-    case MetadataTransferMode::None: return true;
-    case MetadataTransferMode::CopySource:
-        if (!request.sourceMetadata) {
-            *errorMessage = "metadata transfer requested CopySource without source metadata";
-            return false;
-        }
-        return flatten_metadata_document_to_oiio_attributes(*request.sourceMetadata, attributes, errorMessage);
-    case MetadataTransferMode::ExplicitOnly:
-        if (!request.explicitMetadata) {
-            *errorMessage = "metadata transfer requested ExplicitOnly without explicit metadata";
-            return false;
-        }
-        return flatten_metadata_document_to_oiio_attributes(*request.explicitMetadata, attributes, errorMessage);
-    case MetadataTransferMode::MergeSourceAndExplicit: {
-        if (!request.sourceMetadata && !request.explicitMetadata) {
-            *errorMessage = "metadata transfer requested MergeSourceAndExplicit without metadata";
-            return false;
-        }
-        if (request.sourceMetadata
-            && !flatten_metadata_document_to_oiio_attributes(*request.sourceMetadata, attributes, errorMessage)) {
-            return false;
-        }
-        if (request.explicitMetadata) {
-            std::map<std::string, std::string> explicitAttributes;
-            if (!flatten_metadata_document_to_oiio_attributes(*request.explicitMetadata, &explicitAttributes, errorMessage)) {
-                return false;
-            }
-            for (const auto& attribute : explicitAttributes) {
-                (*attributes)[attribute.first] = attribute.second;
-            }
-        }
-        return true;
-    }
-    }
-
-    return true;
-}
-
 static ImageSaveResult
 save_image_file_impl(const ImageSaveRequest& request)
 {
     ImageSaveResult result;
 
     try {
-        std::map<std::string, std::string> attributes;
-        if (!append_metadata_attributes(request, &attributes, &result.errorMessage)) {
-            return result;
-        }
-        const std::map<std::string, std::string> requestAttributes = to_attribute_map(request.attributes);
-        for (const auto& attribute : requestAttributes) {
-            attributes[attribute.first] = attribute.second;
-        }
-
         OutputWriteRequest writeRequest;
         writeRequest.path         = request.path;
-        writeRequest.attributes   = std::move(attributes);
+        writeRequest.attributes   = to_attribute_map(request.attributes);
         writeRequest.alphaChannel = request.alphaChannel;
         writeRequest.bits         = request.bits;
         writeRequest.image        = &request.image;

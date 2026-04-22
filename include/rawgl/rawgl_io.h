@@ -40,30 +40,16 @@ struct ImageLoadResult {
     HostImageData image;
 };
 
-/// Metadata transfer policy applied during file-backed save.
-enum class MetadataTransferMode : uint8_t {
-    None,
-    CopySource,
-    ExplicitOnly,
-    MergeSourceAndExplicit,
-};
-
 /// Describes one file-backed image save request.
 struct ImageSaveRequest {
     /// Destination image path.
     std::string path;
-    /// Writer attributes such as OpenImageIO metadata.
+    /// Codec-specific writer hints.
     std::vector<Attribute> attributes;
     /// Explicit alpha channel, or -1 to use \ref HostImageData::alphaChannel.
     int alphaChannel = -1;
     /// Preferred output bit depth when the target format supports it.
     int bits = 16;
-    /// Metadata transfer policy applied before backend write.
-    MetadataTransferMode metadataMode = MetadataTransferMode::None;
-    /// Metadata copied from a previous file-backed read when transfer is requested.
-    std::shared_ptr<struct MetadataDocument> sourceMetadata;
-    /// Explicit caller-provided metadata written or merged during save.
-    std::shared_ptr<struct MetadataDocument> explicitMetadata;
     /// Source host-memory image payload.
     HostImageData image;
 };

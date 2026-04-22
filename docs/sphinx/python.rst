@@ -125,14 +125,12 @@ This is the intended integration point for pipelines built around:
 Metadata
 --------
 
-Metadata readback is file-oriented and lives under ``rawgl.io``.
+Metadata inspection is file-oriented and lives under ``rawgl.io``.
 
 Current Python metadata support includes:
 
 - ``rawgl.io.read_metadata(...)`` for preview-oriented inspection
-- ``rawgl.io.read_metadata_document(...)`` for typed transfer and editing
-- ``rawgl.io.save_image(..., metadata_mode=...)`` for metadata-preserving or
-  explicit metadata writes
+- ``rawgl.io.read_metadata_document(...)`` for typed metadata reads
 - ``rawgl.MetadataReadRequest`` and ``rawgl.IoRuntime.read_metadata_file(...)``
   for explicit preview control
 - ``rawgl.MetadataDocumentReadRequest`` and
@@ -141,27 +139,20 @@ Current Python metadata support includes:
 
 This path requires an OpenMeta-enabled build of RawGL.
 
-Typical round-trip shape:
+Current save helpers do not preserve source metadata.
+Save-side transfer is deferred until RawGL has native format-family metadata
+writers instead of the removed OIIO-attribute bridge.
+
+Typical inspection shape:
 
 .. code-block:: python
 
    import rawgl
 
-   image = rawgl.io.load_image("input.png")
-   rawgl.io.save_image(image, "stage.tif", bits=16)
-
    document = rawgl.io.read_metadata_document(
-       "stage.tif",
+       "input.png",
        name_style=rawgl.MetadataNameStyle.oiio,
        name_policy=rawgl.MetadataNamePolicy.exif_tool_alias,
-   )
-
-   rawgl.io.save_image(
-       image,
-       "copy.tif",
-       bits=16,
-       metadata_mode=rawgl.MetadataTransferMode.copy_source,
-       source_metadata=document,
    )
 
 Prepared workflows

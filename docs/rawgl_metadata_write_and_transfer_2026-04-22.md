@@ -1,28 +1,28 @@
-# RawGL Metadata Write and Transfer Design
+# RawGL Metadata Read and Native-Write Plan
 
 Date: 2026-04-22
 
-Purpose: define the metadata write and transfer model in `rawgl_io`, without letting OpenMeta types become the public API.
+Purpose: define the current metadata boundary in `rawgl_io` after removing the
+OIIO-attribute-based transfer path, and describe the native-write direction
+needed later.
 
 Related notes:
 
 - [rawgl_module_split_2026-04-17.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_module_split_2026-04-17.md)
 - [rawgl_public_api_redesign_2026-04-16.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_public_api_redesign_2026-04-16.md)
+- [rawgl_native_metadata_write_jpeg_tiff_2026-04-22.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_native_metadata_write_jpeg_tiff_2026-04-22.md)
 
 ## 1. Current state
 
-Current public metadata support is file-oriented and includes both preview
-inspection and typed transfer:
+Current public metadata support is file-oriented and read-only:
 
 - `rawgl::io::ReadMetadataFile(...)`
 - `rawgl::io::IoRuntime::readMetadataFile(...)`
 - `rawgl::io::ReadMetadataDocumentFile(...)`
 - `rawgl::io::IoRuntime::readMetadataDocumentFile(...)`
-- metadata-aware `SaveImageFile(...)` through `ImageSaveRequest`
 - Python:
   - `rawgl.io.read_metadata(...)`
   - `rawgl.io.read_metadata_document(...)`
-  - `rawgl.io.save_image(..., metadata_mode=...)`
   - `rawgl.MetadataReadRequest`
   - `rawgl.IoRuntime.read_metadata_file(...)`
   - `rawgl.MetadataDocumentReadRequest`
@@ -34,8 +34,6 @@ Current exported types:
 - `MetadataValue`
 - `MetadataField`
 - `MetadataDocument`
-- `MetadataTransferMode`
-
 Current strengths:
 
 - RawGL owns the public type names
@@ -44,10 +42,10 @@ Current strengths:
 
 Current limitation:
 
-- `MetadataEntry` is still a read-preview type
+- save helpers do not preserve source metadata
+- there are no native format-family metadata writers yet
 - there are no helper APIs for in-place metadata mutation
 - there are no selective removal helpers yet
-- source/load integration is still explicit instead of automatic
 
 ## 2. Boundary rule
 
@@ -63,9 +61,10 @@ Reason:
 - keeping metadata out of `HostImageData` avoids dragging file semantics into the memory-first execution layer
 - Vulkan and future backends do not benefit from mixing metadata into the execution payload model
 
-## 3. Public model needed for writes
+## 3. Public model kept for future native writers
 
-Before adding write support, RawGL needs a typed metadata model that is separate from the current read-preview type.
+Before adding write support again, RawGL needs to keep a typed metadata model
+that is separate from the current read-preview type.
 
 Recommended split:
 
@@ -94,59 +93,24 @@ Recommended split:
   - ordered collection of `MetadataField`
   - represents one transferable metadata set
 
-This keeps the read-preview surface simple while giving writes a non-lossy public model.
+This keeps the read-preview surface simple while preserving a RawGL-owned typed
+model for future native writers.
 
-## 4. Transfer model
+## 4. Why the transfer path was removed
 
-Write support should not be only "save these explicit fields".
+The removed transfer path flattened metadata into OIIO-style string
+attributes before write.
 
-Real workflows need these policies:
+That was not a usable long-term model because it:
 
-- `none`
-  - write the image without metadata transfer
+- lost native container structure too early
+- made EXIF/IPTC/XMP/ICC all look like one flat attribute map
+- depended on writer-specific reinterpretation of those attributes
+- produced misleading results for metadata preservation
 
-- `copy_source`
-  - preserve metadata from a source document when possible
+So the current API no longer claims metadata-preserving save.
 
-- `explicit_only`
-  - write only the explicitly supplied metadata fields
-
-- `merge_source_and_explicit`
-  - start from source metadata, then override or add explicit fields
-
-Recommended public enum:
-
-- `MetadataTransferMode`
-
-Recommended initial values:
-
-- `none`
-- `copy_source`
-- `explicit_only`
-- `merge_source_and_explicit`
-
-## 5. Save-side API shape
-
-Do not add a completely separate metadata writer API first.
-
-The useful first step is to extend `ImageSaveRequest`, because metadata writes are usually part of saving an image file.
-
-Recommended future fields on `ImageSaveRequest`:
-
-- `MetadataTransferMode metadataMode`
-- `std::shared_ptr<const MetadataDocument> sourceMetadata`
-- `std::shared_ptr<const MetadataDocument> explicitMetadata`
-
-Meaning:
-
-- `sourceMetadata`
-  - metadata carried from an earlier load or explicit read
-- `explicitMetadata`
-  - metadata the caller wants to add, override, or replace
-
-This keeps the save path explicit without forcing metadata into `HostImageData`.
-
-## 6. Load-side API shape
+## 5. Load-side API shape
 
 Do not force every `LoadImageFile(...)` call to decode metadata by default.
 
@@ -162,15 +126,7 @@ Recommended future option:
 
 - optional metadata capture on image load through a separate request flag or a parallel helper result
 
-But the first write-capable transfer path does not require that. The caller can already do:
-
-1. `LoadImageFile(...)`
-2. `ReadMetadataFile(...)`
-3. `SaveImageFile(...)` with transfer policy
-
-That is enough to productize the first round-trip path.
-
-## 7. Name model
+## 6. Name model
 
 For writes, names should not rely on the current preview/export alias settings.
 
@@ -188,7 +144,7 @@ So:
 - write/edit:
   - canonical field identity
 
-## 8. Phase plan
+## 7. Phase plan
 
 ### Phase 1
 
@@ -205,18 +161,19 @@ Done:
 - add `MetadataValue`
 - add `MetadataField`
 - add `MetadataDocument`
-- extend `ImageSaveRequest` with transfer policy and metadata pointers
-- implement metadata-preserving save in `rawgl_io`
+- keep typed metadata reads in `rawgl_io`
+- remove the OIIO-attribute-based metadata transfer path
 
 ### Phase 3
 
 After that:
 
+- native metadata write per format family
+- passthrough of native blocks where source and destination support them
 - explicit metadata mutation helpers
 - selective removal helpers
-- better source/load integration for round-trip workflows
 
-## 9. Non-goals for the next step
+## 8. Non-goals for the next step
 
 The next metadata step should not try to do all of these at once:
 
@@ -226,4 +183,5 @@ The next metadata step should not try to do all of these at once:
 - embedding metadata into `rawgl_core`
 - exposing OpenMeta-native objects in the public API
 
-The next step only needs to make metadata round-trip and explicit override possible through `rawgl_io`.
+The next step should not reintroduce metadata transfer through generic OIIO
+attributes. The next usable write path has to be native per format family.

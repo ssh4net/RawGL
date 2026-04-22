@@ -508,21 +508,12 @@ NB_MODULE(_rawgl, module)
         .def_rw("attributes", &rawgl::io::ImageSaveRequest::attributes)
         .def_rw("alpha_channel", &rawgl::io::ImageSaveRequest::alphaChannel)
         .def_rw("bits", &rawgl::io::ImageSaveRequest::bits)
-        .def_rw("metadata_mode", &rawgl::io::ImageSaveRequest::metadataMode)
-        .def_rw("source_metadata", &rawgl::io::ImageSaveRequest::sourceMetadata)
-        .def_rw("explicit_metadata", &rawgl::io::ImageSaveRequest::explicitMetadata)
         .def_rw("image", &rawgl::io::ImageSaveRequest::image);
 
     nb::class_<rawgl::io::ImageSaveResult>(module, "ImageSaveResult")
         .def(nb::init<>())
         .def_rw("success", &rawgl::io::ImageSaveResult::success)
         .def_rw("error_message", &rawgl::io::ImageSaveResult::errorMessage);
-
-    nb::enum_<rawgl::io::MetadataTransferMode>(module, "MetadataTransferMode")
-        .value("none", rawgl::io::MetadataTransferMode::None)
-        .value("copy_source", rawgl::io::MetadataTransferMode::CopySource)
-        .value("explicit_only", rawgl::io::MetadataTransferMode::ExplicitOnly)
-        .value("merge_source_and_explicit", rawgl::io::MetadataTransferMode::MergeSourceAndExplicit);
 
     nb::enum_<rawgl::io::MetadataNameStyle>(module, "MetadataNameStyle")
         .value("canonical", rawgl::io::MetadataNameStyle::Canonical)

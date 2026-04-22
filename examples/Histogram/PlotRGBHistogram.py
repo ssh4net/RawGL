@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
-import struct
 import time
 
 import numpy as np
@@ -13,8 +12,8 @@ except ImportError:
     plt = None
 
 
-input_path = Path(__file__).resolve().parents[2] / "tests/inputs/EmptyPresetLUT.png"
-plot_path = Path(__file__).with_name("EmptyPresetLUT_histogram.png")
+input_path = Path(__file__).resolve().parents[2] / "tests/inputs/sky.jpg"
+plot_path = Path(__file__).with_name("sky_histogram.png")
 
 
 histogram_shader = """#version 450 core
@@ -44,15 +43,6 @@ void main()
 """
 
 
-def read_png_size(path: Path) -> tuple[int, int]:
-    with path.open("rb") as stream:
-        header = stream.read(24)
-    if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n":
-        raise RuntimeError(f"{path} is not a readable PNG file")
-    width, height = struct.unpack(">II", header[16:24])
-    return int(width), int(height)
-
-
 def counter_array(result, name: str) -> np.ndarray:
     return np.asarray(result.counter_array(name), dtype=np.int32)
 
@@ -61,7 +51,10 @@ def print_timing(label: str, value: float) -> None:
     print(f"{label:>24}: {value * 1000.0:8.2f} ms")
 
 
-width, height = read_png_size(input_path)
+loaded = rawgl.io.load_image(input_path)
+width = loaded.width
+height = loaded.height
+source_input = rawgl.host_image_to_array(loaded)
 session = rawgl.Session()
 
 prepare_t0 = time.perf_counter()
@@ -70,7 +63,7 @@ prepared = session.prepare_compute(
     size=(width, height),
     workgroup_size=(16, 16),
     inputs={
-        "u_src0": str(input_path),
+        "u_src0": source_input,
     },
     counters={
         "histogram_r": {"initial_value": 0, "array_elements": range(256)},

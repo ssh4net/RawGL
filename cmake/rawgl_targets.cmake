@@ -23,6 +23,7 @@ set(RAWGL_CORE_SOURCES
 list(APPEND RAWGL_CORE_SOURCES ${RAWGL_MINIPLY_SOURCES})
 
 set(RAWGL_IO_SOURCES
+    src/io/image_backend.cpp
     src/io/image_io.cpp
     src/io/io_facade.cpp
     src/io/io_runtime.cpp

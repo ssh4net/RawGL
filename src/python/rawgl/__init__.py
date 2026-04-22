@@ -300,9 +300,6 @@ def save_image(
     bits=16,
     alpha_channel=None,
     attributes=None,
-    metadata_mode=None,
-    source_metadata=None,
-    explicit_metadata=None,
     io_runtime=None,
 ):
     """Save one HostImageData or NumPy image to disk through rawgl.io."""
@@ -327,12 +324,6 @@ def save_image(
     request.bits = int(bits)
     request.alpha_channel = -1 if alpha_channel is None else int(alpha_channel)
     request.attributes = _coerce_attributes(attributes)
-    if metadata_mode is not None:
-        request.metadata_mode = metadata_mode
-    if source_metadata is not None:
-        request.source_metadata = source_metadata
-    if explicit_metadata is not None:
-        request.explicit_metadata = explicit_metadata
     request.image = host_image
 
     result = io_runtime.save_image_file(request)
@@ -1977,7 +1968,6 @@ class _IoNamespace:
     def __init__(self):
         self.Runtime = globals().get("IoRuntime")
         self.RuntimeOptions = globals().get("IoRuntimeOptions")
-        self.MetadataTransferMode = globals().get("MetadataTransferMode")
         self.MetadataNameStyle = globals().get("MetadataNameStyle")
         self.MetadataNamePolicy = globals().get("MetadataNamePolicy")
         self.MetadataKeyKind = globals().get("MetadataKeyKind")
@@ -2013,9 +2003,6 @@ class _IoNamespace:
         bits=16,
         alpha_channel=None,
         attributes=None,
-        metadata_mode=None,
-        source_metadata=None,
-        explicit_metadata=None,
         io_runtime=None,
     ):
         return save_image(
@@ -2024,9 +2011,6 @@ class _IoNamespace:
             bits=bits,
             alpha_channel=alpha_channel,
             attributes=attributes,
-            metadata_mode=metadata_mode,
-            source_metadata=source_metadata,
-            explicit_metadata=explicit_metadata,
             io_runtime=self._resolve_runtime(io_runtime),
         )
 

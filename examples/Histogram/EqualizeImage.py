@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
-import struct
 import time
 
 import numpy as np
 import rawgl
 
-try:
-    import matplotlib.pyplot as plt
-except ImportError:
-    plt = None
 
-
-input_path = Path(__file__).resolve().parents[2] / "tests/inputs/EmptyPresetLUT.png"
+input_path = Path(__file__).resolve().parents[2] / "tests/inputs/sky.jpg"
+output_path = Path(__file__).with_name("EqualizeImage_python.jpg")
 
 
 histogram_shader = """#version 450 core
@@ -60,15 +55,6 @@ void main()
 """
 
 
-def read_png_size(path: Path) -> tuple[int, int]:
-    with path.open("rb") as stream:
-        header = stream.read(24)
-    if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n":
-        raise RuntimeError(f"{path} is not a readable PNG file")
-    width, height = struct.unpack(">II", header[16:24])
-    return int(width), int(height)
-
-
 def print_timing(label: str, value: float) -> None:
     print(f"{label:>24}: {value * 1000.0:8.2f} ms")
 
@@ -85,12 +71,13 @@ def normalize_loaded_image(array: np.ndarray) -> np.ndarray:
 
 
 source_input = str(input_path)
-width, height = read_png_size(input_path)
+loaded_image = rawgl.io.load_image(input_path)
+width = loaded_image.width
+height = loaded_image.height
 load_t0 = time.perf_counter()
-if plt is not None:
-    loaded = normalize_loaded_image(plt.imread(input_path))
-    source_input = loaded
-    height, width = loaded.shape[:2]
+loaded = normalize_loaded_image(rawgl.host_image_to_array(loaded_image))
+source_input = loaded
+height, width = loaded.shape[:2]
 load_t1 = time.perf_counter()
 
 session = rawgl.Session()
@@ -157,18 +144,22 @@ if equalized_array.ndim == 3:
     equalized_array = equalized_array[..., 0]
 extract_t1 = time.perf_counter()
 
+save_t0 = time.perf_counter()
+preview_rgb = np.repeat(equalized_array[..., np.newaxis], 3, axis=2)
+preview_u8 = np.clip(preview_rgb * 255.0 + 0.5, 0.0, 255.0).astype(np.uint8)
+rawgl.io.save_image(preview_u8, output_path, bits=8)
+save_t1 = time.perf_counter()
+
 print(f"input image: {input_path}")
 print(f"image size: {width} x {height}")
-if plt is not None:
-    print_timing("load to numpy", load_t1 - load_t0)
-else:
-    print("load to numpy: matplotlib not installed, using file-path input instead")
+print_timing("load to numpy", load_t1 - load_t0)
 print_timing("prepare histogram", hist_prepare_t1 - hist_prepare_t0)
 print_timing("run histogram", hist_run_t1 - hist_run_t0)
 print_timing("build equalization lut", lut_t1 - lut_t0)
 print_timing("prepare equalizer", apply_prepare_t1 - apply_prepare_t0)
 print_timing("run equalizer", apply_run_t1 - apply_run_t0)
 print_timing("extract numpy output", extract_t1 - extract_t0)
+print_timing("save preview image", save_t1 - save_t0)
 print_timing(
     "total",
     (hist_prepare_t1 - hist_prepare_t0)
@@ -176,7 +167,9 @@ print_timing(
     + (lut_t1 - lut_t0)
     + (apply_prepare_t1 - apply_prepare_t0)
     + (apply_run_t1 - apply_run_t0)
-    + (extract_t1 - extract_t0),
+    + (extract_t1 - extract_t0)
+    + (save_t1 - save_t0),
 )
 print(f"equalized array shape: {equalized_array.shape}, dtype: {equalized_array.dtype}")
 print(f"equalized range: {float(equalized_array.min()):.4f} .. {float(equalized_array.max()):.4f}")
+print(f"equalized preview: {output_path}")

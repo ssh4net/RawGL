@@ -88,20 +88,24 @@ Use metadata readback when:
 - the metadata inspection step should stay separate from workflow execution
 - you want the file boundary to remain explicit
 
-Current support includes both preview reads and typed transfer documents.
+Current support includes preview reads and typed metadata documents for
+inspection.
 
 Python exposes the same path through:
 
 - ``rawgl.io.read_metadata(...)``
 - ``rawgl.io.read_metadata_document(...)``
-- ``rawgl.io.save_image(..., metadata_mode=...)``
 - ``rawgl.MetadataReadRequest``
 - ``rawgl.IoRuntime.read_metadata_file(...)``
 
 Use the preview path when you want printable metadata entries.
 
-Use the typed document path when you need to preserve, merge, or replace
-metadata during a later save.
+Use the typed document path when you want a RawGL-owned typed representation of
+the metadata families that were read.
+
+Current save helpers do not preserve source metadata. Native metadata write and
+transfer are deferred until `rawgl_io` has format-family-aware writers instead
+of the removed OIIO-attribute bridge.
 
 When to prefer IoRuntime
 ------------------------

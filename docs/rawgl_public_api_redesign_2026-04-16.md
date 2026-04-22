@@ -10,6 +10,9 @@ Related architectural notes:
 - [rawgl_module_split_2026-04-17.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_module_split_2026-04-17.md)
 - [rawgl_batch_design_2026-04-18.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_batch_design_2026-04-18.md)
 - [rawgl_metadata_write_and_transfer_2026-04-22.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_metadata_write_and_transfer_2026-04-22.md)
+  - metadata inspection is active; native metadata write is deferred
+- [rawgl_native_metadata_write_jpeg_tiff_2026-04-22.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_native_metadata_write_jpeg_tiff_2026-04-22.md)
+- [rawgl_native_image_io_backend_plan_2026-04-22.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_native_image_io_backend_plan_2026-04-22.md)
 
 ## 1. Current problem
 

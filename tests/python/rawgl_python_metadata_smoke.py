@@ -21,13 +21,9 @@ def _find_entry(entries, *names):
 
 
 def main() -> int:
-    input_path = Path("tests/inputs/EmptyPresetLUT.png")
+    input_path = Path("tests/inputs/sky.jpg")
     output_path = Path("tests/outputs/rawgl_python_metadata_smoke.tif")
-    copied_path = Path("tests/outputs/rawgl_python_metadata_copy_smoke.tif")
-    explicit_path = Path("tests/outputs/rawgl_python_metadata_explicit_smoke.tif")
     output_path.unlink(missing_ok=True)
-    copied_path.unlink(missing_ok=True)
-    explicit_path.unlink(missing_ok=True)
 
     image = rawgl.io.load_image(input_path)
     rawgl.io.save_image(image, output_path, bits=16)
@@ -60,48 +56,6 @@ def main() -> int:
     if not document.fields:
         return fail("rawgl.io.read_metadata_document() returned no fields")
 
-    rawgl.io.save_image(
-        image,
-        copied_path,
-        bits=16,
-        metadata_mode=rawgl.MetadataTransferMode.copy_source,
-        source_metadata=document,
-    )
-    copied_entries = rawgl.io.read_metadata(
-        copied_path,
-        name_style=rawgl.MetadataNameStyle.oiio,
-        name_policy=rawgl.MetadataNamePolicy.exif_tool_alias,
-    )
-    copied_datetime = _find_entry(copied_entries, "DateTime", "ModifyDate")
-    if copied_datetime is None or not copied_datetime.value_text:
-        return fail("copy-source metadata save did not preserve a date/time entry")
-
-    explicit_document = rawgl.MetadataDocument()
-    software_field = rawgl.MetadataField()
-    software_field.key_kind = rawgl.MetadataKeyKind.exif_tag
-    software_field.name = "Software"
-    software_field.value.kind = rawgl.MetadataValueKind.text
-    software_field.value.text_encoding = rawgl.MetadataTextEncoding.utf8
-    software_field.value.count = len(b"RawGL python metadata smoke")
-    software_field.value.bytes = b"RawGL python metadata smoke"
-    explicit_document.fields = [software_field]
-
-    rawgl.io.save_image(
-        image,
-        explicit_path,
-        bits=16,
-        metadata_mode=rawgl.MetadataTransferMode.explicit_only,
-        explicit_metadata=explicit_document,
-    )
-    explicit_entries = rawgl.io.read_metadata(
-        explicit_path,
-        name_style=rawgl.MetadataNameStyle.oiio,
-        name_policy=rawgl.MetadataNamePolicy.exif_tool_alias,
-    )
-    software_entry = _find_entry(explicit_entries, "Software")
-    if software_entry is None or software_entry.value_text != "RawGL python metadata smoke":
-        return fail("explicit metadata save did not export Software correctly")
-
     io_runtime = rawgl.IoRuntime()
     request = rawgl.MetadataReadRequest()
     request.path = str(output_path)
@@ -117,8 +71,6 @@ def main() -> int:
         return fail("rawgl.io does not expose MetadataReadRequest")
     if getattr(rawgl.io, "MetadataDocumentReadRequest", None) is None:
         return fail("rawgl.io does not expose MetadataDocumentReadRequest")
-    if getattr(rawgl.io, "MetadataTransferMode", None) is None:
-        return fail("rawgl.io does not expose MetadataTransferMode")
 
     return 0
 

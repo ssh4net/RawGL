@@ -235,6 +235,13 @@ Current weaknesses:
    Design note:
    - [rawgl_public_api_redesign_2026-04-16.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_public_api_redesign_2026-04-16.md)
    - [rawgl_metadata_write_and_transfer_2026-04-22.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_metadata_write_and_transfer_2026-04-22.md)
+   - [rawgl_native_metadata_write_jpeg_tiff_2026-04-22.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_native_metadata_write_jpeg_tiff_2026-04-22.md)
+   - [rawgl_native_image_io_backend_plan_2026-04-22.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_native_image_io_backend_plan_2026-04-22.md)
+
+   Status note:
+   - OpenMeta is currently a read/inspection dependency in `rawgl_io`.
+   - The OIIO-attribute-based metadata transfer path was removed.
+   - Native metadata write is deferred until `rawgl_io` has format-family-aware writers.
 
    Acceptance:
    - The public header exposes workflow-facing engine concepts rather than internal graph/runtime planning types.
@@ -258,6 +265,22 @@ Current weaknesses:
      - `rawgl_io` may depend on `rawgl_core` public types
      - `rawgl_batch` depends on `rawgl_core` and may integrate with `rawgl_io`
    - CLI and Python keep compatibility through frontend-level shims during the migration.
+
+15.4 Add a format-family native image IO backend model under `rawgl_io`.
+
+   Design note:
+   - [rawgl_native_image_io_backend_plan_2026-04-22.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_native_image_io_backend_plan_2026-04-22.md)
+
+   Status note:
+   - the first seam is now [src/io/image_backend.h](/mnt/w/VisualStudio/RawGL/src/io/image_backend.h) and [src/io/image_backend.cpp](/mnt/w/VisualStudio/RawGL/src/io/image_backend.cpp)
+   - `texture_loader.cpp` and `output_writer.cpp` should only depend on that RawGL-owned seam
+   - OIIO may remain as a fallback backend temporarily, but it is no longer the target long-term image IO shape
+
+   Acceptance:
+   - `rawgl_io` chooses image backends by format family rather than by one generic file layer
+   - `texture_loader.cpp` and `output_writer.cpp` do not depend on OIIO types
+   - JPEG, TIFF, PNG, and OpenEXR can be replaced one family at a time without changing higher-level call sites
+   - RawGL owns output-setting selection for the supported native families
 
 16. Add explicit built-in system uniform support.
 
