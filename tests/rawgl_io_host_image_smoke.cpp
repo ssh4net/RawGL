@@ -4,12 +4,18 @@
 #include "rawgl/rawgl_io.h"
 
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <iostream>
 
 #if __has_include(<tiffio.h>)
 #include <tiffio.h>
 #define RAWGL_TEST_HAS_TIFFIO 1
+#endif
+
+#if __has_include(<OpenEXR/ImfTiledInputFile.h>)
+#include <OpenEXR/ImfTiledInputFile.h>
+#define RAWGL_TEST_HAS_OPENEXR 1
 #endif
 
 int
@@ -20,6 +26,7 @@ main()
     const std::filesystem::path outputPath = "tests/outputs/rawgl_io_host_image_smoke.png";
     const std::filesystem::path jpegOutputPath = "tests/outputs/rawgl_io_host_image_smoke.jpg";
     const std::filesystem::path tiffOutputPath = "tests/outputs/rawgl_io_host_image_smoke.tif";
+    const std::filesystem::path tiffBigOutputPath = "tests/outputs/rawgl_io_host_image_smoke_big.tif";
     const std::filesystem::path exrOutputPath = "tests/outputs/rawgl_io_host_image_smoke.exr";
     const std::filesystem::path materializedOutputPath = "tests/outputs/rawgl_io_materialized_output_smoke.png";
 
@@ -27,6 +34,7 @@ main()
     std::filesystem::remove(outputPath, removeError);
     std::filesystem::remove(jpegOutputPath, removeError);
     std::filesystem::remove(tiffOutputPath, removeError);
+    std::filesystem::remove(tiffBigOutputPath, removeError);
     std::filesystem::remove(exrOutputPath, removeError);
     std::filesystem::remove(materializedOutputPath, removeError);
 
@@ -191,10 +199,93 @@ main()
     }
 #endif
 
+    rawgl::io::ImageSaveRequest tiffBigSaveRequest;
+    tiffBigSaveRequest.path = tiffBigOutputPath.string();
+    tiffBigSaveRequest.bits = 32;
+    tiffBigSaveRequest.attributes.push_back({ "tiff:compression", "ZIP" });
+    tiffBigSaveRequest.attributes.push_back({ "tiff:predictor", "float" });
+    tiffBigSaveRequest.attributes.push_back({ "tiff:rowsPerStrip", "17" });
+    tiffBigSaveRequest.attributes.push_back({ "tiff:bigTiff", "true" });
+    tiffBigSaveRequest.image = jpegLoadResult.image;
+
+    const rawgl::io::ImageSaveResult tiffBigSaveResult = rawgl::io::SaveImageFile(tiffBigSaveRequest);
+    if (!tiffBigSaveResult.success) {
+        std::cerr << "BigTIFF save failed: " << tiffBigSaveResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    if (!std::filesystem::exists(tiffBigOutputPath)) {
+        std::cerr << "Expected BigTIFF output was not created: " << tiffBigOutputPath << std::endl;
+        return 1;
+    }
+
+    rawgl::io::ImageLoadRequest tiffBigReloadRequest;
+    tiffBigReloadRequest.path = tiffBigOutputPath.string();
+
+    const rawgl::io::ImageLoadResult tiffBigReloadResult = rawgl::io::LoadImageFile(tiffBigReloadRequest);
+    if (!tiffBigReloadResult.success) {
+        std::cerr << "BigTIFF reload failed: " << tiffBigReloadResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    if (tiffBigReloadResult.image.width != jpegLoadResult.image.width
+        || tiffBigReloadResult.image.height != jpegLoadResult.image.height
+        || tiffBigReloadResult.image.channels != 3) {
+        std::cerr << "Reloaded BigTIFF dimensions differ from source." << std::endl;
+        return 1;
+    }
+
+    const size_t expectedBigTiffByteCount = static_cast<size_t>(tiffBigReloadResult.image.width)
+                                            * static_cast<size_t>(tiffBigReloadResult.image.height) * 3u
+                                            * sizeof(float);
+    if (tiffBigReloadResult.image.bytes.size() != expectedBigTiffByteCount) {
+        std::cerr << "Reloaded BigTIFF byte size is unexpected." << std::endl;
+        return 1;
+    }
+
+#if defined(RAWGL_TEST_HAS_TIFFIO)
+    TIFF* bigTif = TIFFOpen(tiffBigOutputPath.string().c_str(), "r");
+    if (bigTif == nullptr) {
+        std::cerr << "Failed to reopen BigTIFF for layout verification." << std::endl;
+        return 1;
+    }
+
+    if (TIFFIsTiled(bigTif) != 0) {
+        TIFFClose(bigTif);
+        std::cerr << "BigTIFF output unexpectedly used tiles." << std::endl;
+        return 1;
+    }
+
+    if (TIFFIsBigTIFF(bigTif) == 0) {
+        TIFFClose(bigTif);
+        std::cerr << "TIFF output was not written as BigTIFF." << std::endl;
+        return 1;
+    }
+
+    uint32_t rowsPerStrip = 0u;
+    uint16_t predictor = 0u;
+    TIFFGetField(bigTif, TIFFTAG_ROWSPERSTRIP, &rowsPerStrip);
+    TIFFGetFieldDefaulted(bigTif, TIFFTAG_PREDICTOR, &predictor);
+    TIFFClose(bigTif);
+
+    if (rowsPerStrip != 17u) {
+        std::cerr << "BigTIFF rows-per-strip is unexpected." << std::endl;
+        return 1;
+    }
+
+    if (predictor != PREDICTOR_FLOATINGPOINT) {
+        std::cerr << "BigTIFF predictor is unexpected." << std::endl;
+        return 1;
+    }
+#endif
+
     rawgl::io::ImageSaveRequest exrSaveRequest;
     exrSaveRequest.path = exrOutputPath.string();
     exrSaveRequest.bits = 16;
     exrSaveRequest.attributes.push_back({ "openexr:compression", "zip" });
+    exrSaveRequest.attributes.push_back({ "openexr:tiled", "true" });
+    exrSaveRequest.attributes.push_back({ "openexr:tileWidth", "64" });
+    exrSaveRequest.attributes.push_back({ "openexr:tileHeight", "32" });
     exrSaveRequest.image = jpegLoadResult.image;
 
     const rawgl::io::ImageSaveResult exrSaveResult = rawgl::io::SaveImageFile(exrSaveRequest);
@@ -230,6 +321,23 @@ main()
         std::cerr << "Reloaded OpenEXR byte size is unexpected." << std::endl;
         return 1;
     }
+
+#if defined(RAWGL_TEST_HAS_OPENEXR)
+    try {
+        OPENEXR_IMF_NAMESPACE::TiledInputFile exrInput(exrOutputPath.string().c_str());
+        if (exrInput.levelMode() != OPENEXR_IMF_NAMESPACE::ONE_LEVEL) {
+            std::cerr << "OpenEXR tile level mode is unexpected." << std::endl;
+            return 1;
+        }
+        if (exrInput.tileXSize() != 64u || exrInput.tileYSize() != 32u) {
+            std::cerr << "OpenEXR tile geometry is unexpected." << std::endl;
+            return 1;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to reopen OpenEXR for tile verification: " << e.what() << std::endl;
+        return 1;
+    }
+#endif
 
     rawgl::io::IoRuntime ioRuntime;
 

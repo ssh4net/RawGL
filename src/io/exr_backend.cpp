@@ -22,6 +22,9 @@
 #include <OpenEXR/ImfHeader.h>
 #include <OpenEXR/ImfInputFile.h>
 #include <OpenEXR/ImfOutputFile.h>
+#include <OpenEXR/ImfTileDescription.h>
+#include <OpenEXR/ImfTiledInputFile.h>
+#include <OpenEXR/ImfTiledOutputFile.h>
 #endif
 
 namespace rawgl::io {
@@ -98,12 +101,92 @@ apply_exr_writer_attributes(OPENEXR_IMF_NAMESPACE::Header& header,
 }
 
 static bool
-has_exr_tile_request(const std::map<std::string, std::string>& attributes)
+parse_bool_attribute(const std::map<std::string, std::string>& attributes, const char* key, bool& value)
 {
-    return find_attribute_value(attributes, "openexr:tiled") != nullptr
-        || find_attribute_value(attributes, "openexr:tileWidth") != nullptr
-        || find_attribute_value(attributes, "openexr:tileHeight") != nullptr
-        || find_attribute_value(attributes, "openexr:tileLength") != nullptr;
+    const std::string* attribute = find_attribute_value(attributes, key);
+    if (!attribute) {
+        return false;
+    }
+
+    const std::string normalized = to_lower_copy(*attribute);
+    value = normalized == "1" || normalized == "true" || normalized == "on" || normalized == "yes";
+    return true;
+}
+
+static bool
+parse_positive_u32_attribute(const std::map<std::string, std::string>& attributes,
+                             const char* key,
+                             bool& present,
+                             uint32_t& value,
+                             std::string& errorMessage)
+{
+    const std::string* attribute = find_attribute_value(attributes, key);
+    if (!attribute) {
+        present = false;
+        value = 0u;
+        return true;
+    }
+
+    const int parsedValue = std::atoi(attribute->c_str());
+    if (parsedValue <= 0) {
+        errorMessage = "invalid positive OpenEXR tile dimension";
+        return false;
+    }
+
+    present = true;
+    value = static_cast<uint32_t>(parsedValue);
+    return true;
+}
+
+static bool
+resolve_exr_tile_layout(const std::map<std::string, std::string>& attributes,
+                        bool& useTiles,
+                        uint32_t& tileWidth,
+                        uint32_t& tileHeight,
+                        std::string& errorMessage)
+{
+    bool tiledValue = false;
+    const bool hasTiledAttr = parse_bool_attribute(attributes, "openexr:tiled", tiledValue);
+
+    bool hasTileWidth = false;
+    uint32_t requestedTileWidth = 0u;
+    if (!parse_positive_u32_attribute(
+            attributes, "openexr:tileWidth", hasTileWidth, requestedTileWidth, errorMessage)) {
+        return false;
+    }
+
+    bool hasTileHeight = false;
+    uint32_t requestedTileHeight = 0u;
+    if (!parse_positive_u32_attribute(
+            attributes, "openexr:tileHeight", hasTileHeight, requestedTileHeight, errorMessage)) {
+        return false;
+    }
+
+    if (!hasTileHeight) {
+        if (!parse_positive_u32_attribute(
+                attributes, "openexr:tileLength", hasTileHeight, requestedTileHeight, errorMessage)) {
+            return false;
+        }
+    }
+
+    useTiles = (hasTiledAttr && tiledValue) || hasTileWidth || hasTileHeight;
+    if (!useTiles) {
+        tileWidth = 0u;
+        tileHeight = 0u;
+        return true;
+    }
+
+    constexpr uint32_t defaultTileSize = 64u;
+    tileWidth = hasTileWidth ? requestedTileWidth
+                             : (hasTileHeight ? requestedTileHeight : defaultTileSize);
+    tileHeight = hasTileHeight ? requestedTileHeight : tileWidth;
+
+    if (tileWidth == 0u || tileHeight == 0u) {
+        errorMessage = "invalid OpenEXR tile dimensions";
+        return false;
+    }
+
+    return true;
 }
 
 static bool
@@ -212,6 +295,68 @@ resolve_exr_component_type(const OPENEXR_IMF_NAMESPACE::ChannelList& channelList
     }
 
     return false;
+}
+
+static bool
+prepare_exr_decode_target(const OPENEXR_IMF_NAMESPACE::Header& header,
+                          IMATH_NAMESPACE::Box2i& dataWindow,
+                          std::vector<std::string>& selectedNames,
+                          OPENEXR_IMF_NAMESPACE::PixelType& pixelType,
+                          DecodedImageData& result,
+                          std::string& errorMessage)
+{
+    dataWindow = header.dataWindow();
+    const int width = dataWindow.max.x - dataWindow.min.x + 1;
+    const int height = dataWindow.max.y - dataWindow.min.y + 1;
+    if (width <= 0 || height <= 0) {
+        errorMessage = "invalid OpenEXR data window";
+        return false;
+    }
+
+    int alphaChannel = -1;
+    if (!select_exr_channels(header.channels(), selectedNames, alphaChannel, errorMessage)) {
+        return false;
+    }
+
+    ImageComponentType componentType = ImageComponentType::Unknown;
+    if (!resolve_exr_component_type(header.channels(), selectedNames, pixelType, componentType)) {
+        errorMessage = "unsupported OpenEXR channel type";
+        return false;
+    }
+
+    const size_t bytesPerComponent = byte_size_for_image_component(componentType);
+    if (bytesPerComponent == 0u) {
+        errorMessage = "unsupported OpenEXR component type";
+        return false;
+    }
+
+    result.width = width;
+    result.height = height;
+    result.channels = static_cast<int>(selectedNames.size());
+    result.alphaChannel = alphaChannel;
+    result.componentType = componentType;
+    result.bytes.resize(
+        static_cast<size_t>(width) * static_cast<size_t>(height) * selectedNames.size() * bytesPerComponent);
+    return true;
+}
+
+static OPENEXR_IMF_NAMESPACE::FrameBuffer
+build_exr_interleaved_frame_buffer(const IMATH_NAMESPACE::Box2i& dataWindow,
+                                   const std::vector<std::string>& selectedNames,
+                                   OPENEXR_IMF_NAMESPACE::PixelType pixelType,
+                                   size_t bytesPerComponent,
+                                   std::byte* bytes)
+{
+    OPENEXR_IMF_NAMESPACE::FrameBuffer frameBuffer;
+    const size_t xStride = selectedNames.size() * bytesPerComponent;
+    const size_t yStride = static_cast<size_t>(dataWindow.max.x - dataWindow.min.x + 1) * xStride;
+    for (size_t channelIndex = 0; channelIndex < selectedNames.size(); ++channelIndex) {
+        char* base = reinterpret_cast<char*>(bytes + channelIndex * bytesPerComponent);
+        frameBuffer.insert(selectedNames[channelIndex],
+                           OPENEXR_IMF_NAMESPACE::Slice::Make(pixelType, base, dataWindow, xStride, yStride));
+    }
+
+    return frameBuffer;
 }
 
 static float
@@ -413,54 +558,36 @@ decode_exr_file(const std::string& path)
     try {
         OPENEXR_IMF_NAMESPACE::InputFile file(path.c_str());
         const OPENEXR_IMF_NAMESPACE::Header& header = file.header();
-        const IMATH_NAMESPACE::Box2i dataWindow = header.dataWindow();
-        const int width = dataWindow.max.x - dataWindow.min.x + 1;
-        const int height = dataWindow.max.y - dataWindow.min.y + 1;
-        if (width <= 0 || height <= 0) {
-            result.errorMessage = "invalid OpenEXR data window";
-            return result;
-        }
-
+        IMATH_NAMESPACE::Box2i dataWindow;
         std::vector<std::string> selectedNames;
-        int alphaChannel = -1;
         std::string errorMessage;
-        if (!select_exr_channels(header.channels(), selectedNames, alphaChannel, errorMessage)) {
+        OPENEXR_IMF_NAMESPACE::PixelType pixelType = OPENEXR_IMF_NAMESPACE::NUM_PIXELTYPES;
+        if (!prepare_exr_decode_target(header, dataWindow, selectedNames, pixelType, result, errorMessage)) {
             result.errorMessage = errorMessage;
             return result;
         }
 
-        OPENEXR_IMF_NAMESPACE::PixelType pixelType = OPENEXR_IMF_NAMESPACE::NUM_PIXELTYPES;
-        ImageComponentType componentType = ImageComponentType::Unknown;
-        if (!resolve_exr_component_type(header.channels(), selectedNames, pixelType, componentType)) {
-            result.errorMessage = "unsupported OpenEXR channel type";
-            return result;
-        }
-
-        const size_t bytesPerComponent = byte_size_for_image_component(componentType);
+        const size_t bytesPerComponent = byte_size_for_image_component(result.componentType);
         if (bytesPerComponent == 0u) {
             result.errorMessage = "unsupported OpenEXR component type";
             return result;
         }
 
-        result.width = width;
-        result.height = height;
-        result.channels = static_cast<int>(selectedNames.size());
-        result.alphaChannel = alphaChannel;
-        result.componentType = componentType;
-        result.bytes.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * selectedNames.size() * bytesPerComponent);
+        OPENEXR_IMF_NAMESPACE::FrameBuffer frameBuffer =
+            build_exr_interleaved_frame_buffer(dataWindow, selectedNames, pixelType, bytesPerComponent, result.bytes.data());
 
-        OPENEXR_IMF_NAMESPACE::FrameBuffer frameBuffer;
-        const size_t xStride = selectedNames.size() * bytesPerComponent;
-        const size_t yStride = static_cast<size_t>(width) * xStride;
-        for (size_t channelIndex = 0; channelIndex < selectedNames.size(); ++channelIndex) {
-            char* base = reinterpret_cast<char*>(result.bytes.data() + channelIndex * bytesPerComponent);
-            frameBuffer.insert(selectedNames[channelIndex],
-                               OPENEXR_IMF_NAMESPACE::Slice::Make(
-                                   pixelType, base, dataWindow, xStride, yStride));
+        if (header.hasTileDescription()) {
+            OPENEXR_IMF_NAMESPACE::TiledInputFile tiledFile(path.c_str());
+            if (tiledFile.levelMode() != OPENEXR_IMF_NAMESPACE::ONE_LEVEL) {
+                result.errorMessage = "native OpenEXR decode supports only one-level tiled images yet";
+                return result;
+            }
+            tiledFile.setFrameBuffer(frameBuffer);
+            tiledFile.readTiles(0, tiledFile.numXTiles(0) - 1, 0, tiledFile.numYTiles(0) - 1, 0);
+        } else {
+            file.setFrameBuffer(frameBuffer);
+            file.readPixels(dataWindow.min.y, dataWindow.max.y);
         }
-
-        file.setFrameBuffer(frameBuffer);
-        file.readPixels(dataWindow.min.y, dataWindow.max.y);
 
         result.success = true;
         return result;
@@ -488,13 +615,15 @@ encode_exr_file(const std::string& path,
     errorMessage = "OpenEXR support is not available";
     return false;
 #else
-    if (has_exr_tile_request(attributes)) {
-        errorMessage = "native OpenEXR write does not support tiled output yet";
+    OPENEXR_IMF_NAMESPACE::Compression compression = default_exr_compression();
+    if (!parse_exr_compression(attributes, compression, errorMessage)) {
         return false;
     }
 
-    OPENEXR_IMF_NAMESPACE::Compression compression = default_exr_compression();
-    if (!parse_exr_compression(attributes, compression, errorMessage)) {
+    bool useTiles = false;
+    uint32_t tileWidth = 0u;
+    uint32_t tileHeight = 0u;
+    if (!resolve_exr_tile_layout(attributes, useTiles, tileWidth, tileHeight, errorMessage)) {
         return false;
     }
 
@@ -509,6 +638,10 @@ encode_exr_file(const std::string& path,
     try {
         OPENEXR_IMF_NAMESPACE::Header header(image.width, image.height);
         header.compression() = compression;
+        if (useTiles) {
+            header.setTileDescription(OPENEXR_IMF_NAMESPACE::TileDescription(
+                tileWidth, tileHeight, OPENEXR_IMF_NAMESPACE::ONE_LEVEL, OPENEXR_IMF_NAMESPACE::ROUND_DOWN));
+        }
         apply_exr_writer_attributes(header, attributes);
 
         OPENEXR_IMF_NAMESPACE::PixelType pixelType = OPENEXR_IMF_NAMESPACE::FLOAT;
@@ -525,25 +658,26 @@ encode_exr_file(const std::string& path,
             header.channels().insert(channelNames[channelIndex], OPENEXR_IMF_NAMESPACE::Channel(pixelType));
         }
 
-        OPENEXR_IMF_NAMESPACE::FrameBuffer frameBuffer;
         const size_t bytesPerComponent = byte_size_for_image_component(settings.componentType);
-        const size_t xStride = static_cast<size_t>(outputChannels) * bytesPerComponent;
-        const size_t yStride = static_cast<size_t>(image.width) * xStride;
+        std::vector<std::string> selectedNames;
+        selectedNames.reserve(static_cast<size_t>(outputChannels));
         for (int channelIndex = 0; channelIndex < outputChannels; ++channelIndex) {
-            char* base = reinterpret_cast<char*>(encodedBytes.data() + static_cast<size_t>(channelIndex) * bytesPerComponent);
-            frameBuffer.insert(channelNames[channelIndex],
-                               OPENEXR_IMF_NAMESPACE::Slice::Make(pixelType,
-                                                                  base,
-                                                                  IMATH_NAMESPACE::Box2i(
-                                                                      IMATH_NAMESPACE::V2i(0, 0),
-                                                                      IMATH_NAMESPACE::V2i(image.width - 1, image.height - 1)),
-                                                                  xStride,
-                                                                  yStride));
+            selectedNames.emplace_back(channelNames[channelIndex]);
         }
+        const IMATH_NAMESPACE::Box2i dataWindow(
+            IMATH_NAMESPACE::V2i(0, 0), IMATH_NAMESPACE::V2i(image.width - 1, image.height - 1));
+        OPENEXR_IMF_NAMESPACE::FrameBuffer frameBuffer =
+            build_exr_interleaved_frame_buffer(dataWindow, selectedNames, pixelType, bytesPerComponent, encodedBytes.data());
 
-        OPENEXR_IMF_NAMESPACE::OutputFile output(path.c_str(), header);
-        output.setFrameBuffer(frameBuffer);
-        output.writePixels(image.height);
+        if (useTiles) {
+            OPENEXR_IMF_NAMESPACE::TiledOutputFile output(path.c_str(), header);
+            output.setFrameBuffer(frameBuffer);
+            output.writeTiles(0, output.numXTiles(0) - 1, 0, output.numYTiles(0) - 1, 0);
+        } else {
+            OPENEXR_IMF_NAMESPACE::OutputFile output(path.c_str(), header);
+            output.setFrameBuffer(frameBuffer);
+            output.writePixels(image.height);
+        }
         return true;
     } catch (const std::exception& e) {
         errorMessage = e.what();

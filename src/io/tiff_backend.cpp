@@ -129,6 +129,7 @@ parse_positive_u32_attribute(const std::map<std::string, std::string>& attribute
                              const char* key,
                              bool& present,
                              uint32_t& value,
+                             const char* invalidValueMessage,
                              std::string& errorMessage)
 {
     const std::string* attribute = find_attribute_value(attributes, key);
@@ -140,13 +141,115 @@ parse_positive_u32_attribute(const std::map<std::string, std::string>& attribute
 
     const int parsedValue = std::atoi(attribute->c_str());
     if (parsedValue <= 0) {
-        errorMessage = "invalid positive TIFF tile dimension";
+        errorMessage = invalidValueMessage;
         return false;
     }
 
     present = true;
     value = static_cast<uint32_t>(parsedValue);
     return true;
+}
+
+static bool
+parse_tiff_predictor(const std::map<std::string, std::string>& attributes,
+                     const ImageComponentType componentType,
+                     const uint16_t compression,
+                     uint16_t& predictor,
+                     std::string& errorMessage)
+{
+    const std::string* value = find_attribute_value(attributes, "tiff:predictor");
+    if (!value) {
+        predictor = PREDICTOR_NONE;
+        return true;
+    }
+
+    const std::string normalized = to_lower_copy(*value);
+    if (normalized == "1" || normalized == "none") {
+        predictor = PREDICTOR_NONE;
+    } else if (normalized == "2" || normalized == "horizontal" || normalized == "horizontal_differencing") {
+        predictor = PREDICTOR_HORIZONTAL;
+    } else if (
+        normalized == "3" || normalized == "float" || normalized == "floatingpoint"
+        || normalized == "floating_point") {
+        predictor = PREDICTOR_FLOATINGPOINT;
+    } else {
+        errorMessage = "unsupported TIFF predictor mode";
+        return false;
+    }
+
+    if (predictor == PREDICTOR_NONE) {
+        return true;
+    }
+
+    if (compression != COMPRESSION_LZW
+#if defined(COMPRESSION_ADOBE_DEFLATE)
+        && compression != COMPRESSION_ADOBE_DEFLATE
+#endif
+        && compression != COMPRESSION_DEFLATE) {
+        errorMessage = "TIFF predictor requires LZW or Deflate compression";
+        return false;
+    }
+
+    if (predictor == PREDICTOR_FLOATINGPOINT && componentType != ImageComponentType::F32) {
+        errorMessage = "floating-point TIFF predictor requires 32-bit float output";
+        return false;
+    }
+
+    if (predictor == PREDICTOR_HORIZONTAL && componentType == ImageComponentType::F32) {
+        errorMessage = "horizontal TIFF predictor is not supported for 32-bit float output";
+        return false;
+    }
+
+    return true;
+}
+
+static bool
+resolve_tiff_strip_layout(const std::map<std::string, std::string>& attributes,
+                          TIFF* tif,
+                          const bool useTiles,
+                          uint32_t& rowsPerStrip,
+                          std::string& errorMessage)
+{
+    bool hasRowsPerStrip = false;
+    uint32_t requestedRowsPerStrip = 0u;
+    if (!parse_positive_u32_attribute(attributes,
+                                      "tiff:rowsPerStrip",
+                                      hasRowsPerStrip,
+                                      requestedRowsPerStrip,
+                                      "invalid positive TIFF rows-per-strip value",
+                                      errorMessage)) {
+        return false;
+    }
+
+    if (useTiles) {
+        if (hasRowsPerStrip) {
+            errorMessage = "tiff:rowsPerStrip is not valid for tiled TIFF output";
+            return false;
+        }
+        rowsPerStrip = 0u;
+        return true;
+    }
+
+    rowsPerStrip = TIFFDefaultStripSize(tif, hasRowsPerStrip ? requestedRowsPerStrip : 0u);
+    if (rowsPerStrip == 0u) {
+        errorMessage = "invalid TIFF rows-per-strip geometry";
+        return false;
+    }
+
+    return true;
+}
+
+static bool
+should_force_bigtiff(const std::map<std::string, std::string>& attributes)
+{
+    bool forceBigTiff = false;
+    if (parse_bool_attribute(attributes, "tiff:bigTiff", forceBigTiff)) {
+        return forceBigTiff;
+    }
+    if (parse_bool_attribute(attributes, "tiff:bigtiff", forceBigTiff)) {
+        return forceBigTiff;
+    }
+    return false;
 }
 
 static float
@@ -300,20 +403,35 @@ resolve_tiff_tile_layout(const std::map<std::string, std::string>& attributes,
     bool hasTileWidth = false;
     uint32_t requestedTileWidth = 0u;
     if (!parse_positive_u32_attribute(
-            attributes, "tiff:tileWidth", hasTileWidth, requestedTileWidth, errorMessage)) {
+            attributes,
+            "tiff:tileWidth",
+            hasTileWidth,
+            requestedTileWidth,
+            "invalid positive TIFF tile width",
+            errorMessage)) {
         return false;
     }
 
     bool hasTileLength = false;
     uint32_t requestedTileLength = 0u;
     if (!parse_positive_u32_attribute(
-            attributes, "tiff:tileLength", hasTileLength, requestedTileLength, errorMessage)) {
+            attributes,
+            "tiff:tileLength",
+            hasTileLength,
+            requestedTileLength,
+            "invalid positive TIFF tile length",
+            errorMessage)) {
         return false;
     }
 
     if (!hasTileLength) {
         if (!parse_positive_u32_attribute(
-                attributes, "tiff:tileHeight", hasTileLength, requestedTileLength, errorMessage)) {
+                attributes,
+                "tiff:tileHeight",
+                hasTileLength,
+                requestedTileLength,
+                "invalid positive TIFF tile height",
+                errorMessage)) {
             return false;
         }
     }
@@ -759,9 +877,15 @@ encode_tiff_file(const std::string& path,
         return false;
     }
 
+    uint16_t predictor = PREDICTOR_NONE;
+    if (!parse_tiff_predictor(attributes, settings.componentType, compression, predictor, errorMessage)) {
+        return false;
+    }
+
     bool useTiles = false;
     uint32_t tileWidth = 0u;
     uint32_t tileLength = 0u;
+    uint32_t rowsPerStrip = 0u;
     int outputChannels = 0;
     int resolvedAlphaChannel = -1;
     std::array<int, 4> sourceChannelMap = { 0, 1, 2, 3 };
@@ -777,7 +901,8 @@ encode_tiff_file(const std::string& path,
         return false;
     }
 
-    TIFF* tif = TIFFOpen(path.c_str(), "w");
+    const char* openMode = should_force_bigtiff(attributes) ? "w8" : "w";
+    TIFF* tif = TIFFOpen(path.c_str(), openMode);
     if (tif == nullptr) {
         errorMessage = "can't open TIFF file for writing";
         return false;
@@ -825,6 +950,16 @@ encode_tiff_file(const std::string& path,
     if (useTiles) {
         TIFFSetField(tif, TIFFTAG_TILEWIDTH, tileWidth);
         TIFFSetField(tif, TIFFTAG_TILELENGTH, tileLength);
+    } else {
+        if (!resolve_tiff_strip_layout(attributes, tif, useTiles, rowsPerStrip, errorMessage)) {
+            TIFFClose(tif);
+            return false;
+        }
+        TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, rowsPerStrip);
+    }
+
+    if (predictor != PREDICTOR_NONE) {
+        TIFFSetField(tif, TIFFTAG_PREDICTOR, predictor);
     }
 
     if (resolvedAlphaChannel >= 0) {
@@ -879,9 +1014,6 @@ encode_tiff_file(const std::string& path,
             }
         }
     } else {
-        const uint16_t rowsPerStrip = TIFFDefaultStripSize(tif, 0u);
-        TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, rowsPerStrip);
-
         for (int row = 0; row < image.height; ++row) {
             std::byte* rowData = encodedBytes.data() + static_cast<size_t>(row) * rowBytes;
             if (TIFFWriteScanline(tif, rowData, static_cast<uint32_t>(row), 0) != 1) {

@@ -7,6 +7,8 @@
 
 #include <rawgl/rawgl_io.h>
 
+#include "metadata_storage.h"
+
 namespace rawgl::io {
 
 MetadataReadResult
@@ -14,5 +16,18 @@ read_metadata_file_impl(const MetadataReadRequest& request);
 
 MetadataDocumentReadResult
 read_metadata_document_file_impl(const MetadataDocumentReadRequest& request);
+
+struct ImageMetadataApplyResult {
+    bool success = false;
+    std::string errorMessage;
+};
+
+ImageMetadataApplyResult
+apply_source_metadata_to_tiff_file_impl(const MetadataDocument& document,
+                                        const std::string& path);
+
+ImageMetadataApplyResult
+apply_source_metadata_to_jpeg_file_impl(const MetadataDocument& document,
+                                        const std::string& path);
 
 }  // namespace rawgl::io

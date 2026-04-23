@@ -30,6 +30,7 @@ set(RAWGL_IO_SOURCES
     src/io/io_runtime.cpp
     src/io/jpg_backend.cpp
     src/io/metadata_reader.cpp
+    src/io/openmeta_bridge.cpp
     src/io/png_backend.cpp
     src/io/tiff_backend.cpp
     src/io/texture_loader.cpp

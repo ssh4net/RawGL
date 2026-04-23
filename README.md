@@ -21,7 +21,9 @@ Export for this moment limited to JPG, PNG, TIFF, TGA, HDR, EXR
 * Compression jpeg:100
 * jpeg:subsampling
 * openexr:dwaCompressionLevel 1.0
+* openexr:tiled 1, openexr:tileWidth 64, openexr:tileHeight 64
 * png:compressionLevel 6
+* tiff:predictor horizontal, tiff:rowsPerStrip 64, tiff:bigTiff 1
 * raw:ColorSpace ProPhoto-linear
 * raw:Demosaic AHD-Mod
 * etc.\

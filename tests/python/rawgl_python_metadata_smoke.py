@@ -29,36 +29,52 @@ def main() -> int:
     rawgl.io.save_image(image, output_path, bits=16)
 
     entries = rawgl.io.read_metadata(
-        output_path,
+        input_path,
         name_style=rawgl.MetadataNameStyle.oiio,
         name_policy=rawgl.MetadataNamePolicy.exif_tool_alias,
     )
     if not entries:
         return fail("rawgl.io.read_metadata() returned no metadata entries")
 
-    width_entry = _find_entry(entries, "ImageWidth")
-    if width_entry is None or width_entry.value_text != str(image.width):
-        return fail("rawgl.io.read_metadata() did not export ImageWidth correctly")
+    make_entry = _find_entry(entries, "Make", "Exif:Make")
+    if make_entry is None or make_entry.value_text != "Canon":
+        return fail("rawgl.io.read_metadata() did not export Make correctly")
 
-    height_entry = _find_entry(entries, "ImageLength", "ImageHeight")
-    if height_entry is None or height_entry.value_text != str(image.height):
-        return fail("rawgl.io.read_metadata() did not export image height correctly")
+    model_entry = _find_entry(entries, "Model", "Exif:Model")
+    if model_entry is None or not model_entry.value_text:
+        return fail("rawgl.io.read_metadata() did not export Model correctly")
 
-    datetime_entry = _find_entry(entries, "DateTime", "ModifyDate")
+    datetime_entry = _find_entry(entries, "DateTimeOriginal", "Exif:DateTimeOriginal")
     if datetime_entry is None or not datetime_entry.value_text:
         return fail("rawgl.io.read_metadata() did not export a date/time entry")
 
     document = rawgl.io.read_metadata_document(
-        output_path,
+        input_path,
         name_style=rawgl.MetadataNameStyle.oiio,
         name_policy=rawgl.MetadataNamePolicy.exif_tool_alias,
     )
     if not document.fields:
         return fail("rawgl.io.read_metadata_document() returned no fields")
 
+    output_entries = rawgl.io.read_metadata(
+        output_path,
+        name_style=rawgl.MetadataNameStyle.oiio,
+        name_policy=rawgl.MetadataNamePolicy.exif_tool_alias,
+    )
+    if not output_entries:
+        return fail("rawgl.io.read_metadata() returned no metadata entries for saved TIFF")
+
+    output_width_entry = _find_entry(output_entries, "ImageWidth")
+    if output_width_entry is None or output_width_entry.value_text != str(image.width):
+        return fail("saved TIFF metadata did not export ImageWidth correctly")
+
+    output_height_entry = _find_entry(output_entries, "ImageLength", "ImageHeight")
+    if output_height_entry is None or output_height_entry.value_text != str(image.height):
+        return fail("saved TIFF metadata did not export image height correctly")
+
     io_runtime = rawgl.IoRuntime()
     request = rawgl.MetadataReadRequest()
-    request.path = str(output_path)
+    request.path = str(input_path)
     request.name_style = rawgl.MetadataNameStyle.oiio
     request.name_policy = rawgl.MetadataNamePolicy.exif_tool_alias
     result = io_runtime.read_metadata_file(request)
