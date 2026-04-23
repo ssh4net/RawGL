@@ -1,0 +1,555 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2022-2026 Erium Vladlen.
+
+#include "exr_backend.h"
+
+#include "gl_utils.h"
+
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+#include <vector>
+
+#if defined(RAWGL_HAS_OPENEXR)
+#include <Imath/half.h>
+#include <OpenEXR/ImfChannelList.h>
+#include <OpenEXR/ImfCompression.h>
+#include <OpenEXR/ImfFrameBuffer.h>
+#include <OpenEXR/ImfHeader.h>
+#include <OpenEXR/ImfInputFile.h>
+#include <OpenEXR/ImfOutputFile.h>
+#endif
+
+namespace rawgl::io {
+namespace {
+
+#if defined(RAWGL_HAS_OPENEXR)
+static char
+to_lower_ascii(const unsigned char c)
+{
+    return static_cast<char>(std::tolower(c));
+}
+
+static std::string
+to_lower_copy(const std::string& value)
+{
+    std::string result = value;
+    std::transform(result.begin(), result.end(), result.begin(), to_lower_ascii);
+    return result;
+}
+
+static const std::string*
+find_attribute_value(const std::map<std::string, std::string>& attributes, const char* key)
+{
+    const auto it = attributes.find(key);
+    if (it == attributes.end()) {
+        return nullptr;
+    }
+    return &it->second;
+}
+
+static OPENEXR_IMF_NAMESPACE::Compression
+default_exr_compression()
+{
+    return OPENEXR_IMF_NAMESPACE::ZIP_COMPRESSION;
+}
+
+static bool
+parse_exr_compression(const std::map<std::string, std::string>& attributes,
+                      OPENEXR_IMF_NAMESPACE::Compression& compression,
+                      std::string& errorMessage)
+{
+    const std::string* value = find_attribute_value(attributes, "openexr:compression");
+    if (!value) {
+        value = find_attribute_value(attributes, "compression");
+    }
+    if (!value) {
+        value = find_attribute_value(attributes, "oiio:Compression");
+    }
+    if (!value) {
+        compression = default_exr_compression();
+        return true;
+    }
+
+    const std::string normalized = to_lower_copy(*value);
+    OPENEXR_IMF_NAMESPACE::Compression parsed = OPENEXR_IMF_NAMESPACE::NUM_COMPRESSION_METHODS;
+    OPENEXR_IMF_NAMESPACE::getCompressionIdFromName(normalized, parsed);
+    if (!OPENEXR_IMF_NAMESPACE::isValidCompression(static_cast<int>(parsed))) {
+        errorMessage = "unsupported OpenEXR compression mode";
+        return false;
+    }
+
+    compression = parsed;
+    return true;
+}
+
+static void
+apply_exr_writer_attributes(OPENEXR_IMF_NAMESPACE::Header& header,
+                            const std::map<std::string, std::string>& attributes)
+{
+    const std::string* dwaLevel = find_attribute_value(attributes, "openexr:dwaCompressionLevel");
+    if (dwaLevel) {
+        header.dwaCompressionLevel() = static_cast<float>(std::atof(dwaLevel->c_str()));
+    }
+}
+
+static bool
+has_exr_tile_request(const std::map<std::string, std::string>& attributes)
+{
+    return find_attribute_value(attributes, "openexr:tiled") != nullptr
+        || find_attribute_value(attributes, "openexr:tileWidth") != nullptr
+        || find_attribute_value(attributes, "openexr:tileHeight") != nullptr
+        || find_attribute_value(attributes, "openexr:tileLength") != nullptr;
+}
+
+static bool
+select_exr_channels(const OPENEXR_IMF_NAMESPACE::ChannelList& channelList,
+                    std::vector<std::string>& selectedNames,
+                    int& alphaChannel,
+                    std::string& errorMessage)
+{
+    selectedNames.clear();
+    alphaChannel = -1;
+
+    const OPENEXR_IMF_NAMESPACE::Channel* channelR = channelList.findChannel("R");
+    const OPENEXR_IMF_NAMESPACE::Channel* channelG = channelList.findChannel("G");
+    const OPENEXR_IMF_NAMESPACE::Channel* channelB = channelList.findChannel("B");
+    const OPENEXR_IMF_NAMESPACE::Channel* channelA = channelList.findChannel("A");
+    const OPENEXR_IMF_NAMESPACE::Channel* channelY = channelList.findChannel("Y");
+
+    if (channelR && channelG && channelB) {
+        selectedNames.push_back("R");
+        selectedNames.push_back("G");
+        selectedNames.push_back("B");
+        if (channelA) {
+            selectedNames.push_back("A");
+            alphaChannel = 3;
+        }
+    } else if (channelY) {
+        selectedNames.push_back("Y");
+        if (channelA) {
+            selectedNames.push_back("A");
+            alphaChannel = 1;
+        }
+    } else {
+        for (OPENEXR_IMF_NAMESPACE::ChannelList::ConstIterator it = channelList.begin(); it != channelList.end(); ++it) {
+            selectedNames.push_back(it.name());
+            if (selectedNames.size() == 4u) {
+                break;
+            }
+        }
+
+        if (selectedNames.empty()) {
+            errorMessage = "OpenEXR file has no channels";
+            return false;
+        }
+
+        for (size_t index = 0; index < selectedNames.size(); ++index) {
+            if (selectedNames[index] == "A") {
+                alphaChannel = static_cast<int>(index);
+                break;
+            }
+        }
+    }
+
+    for (const std::string& channelName : selectedNames) {
+        const OPENEXR_IMF_NAMESPACE::Channel* channel = channelList.findChannel(channelName);
+        if (!channel) {
+            errorMessage = "OpenEXR channel selection failed";
+            return false;
+        }
+        if (channel->xSampling != 1 || channel->ySampling != 1) {
+            errorMessage = "native OpenEXR decode does not support subsampled channels yet";
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool
+resolve_exr_component_type(const OPENEXR_IMF_NAMESPACE::ChannelList& channelList,
+                           const std::vector<std::string>& selectedNames,
+                           OPENEXR_IMF_NAMESPACE::PixelType& pixelType,
+                           ImageComponentType& componentType)
+{
+    if (selectedNames.empty()) {
+        return false;
+    }
+
+    OPENEXR_IMF_NAMESPACE::PixelType firstType = OPENEXR_IMF_NAMESPACE::NUM_PIXELTYPES;
+    for (const std::string& channelName : selectedNames) {
+        const OPENEXR_IMF_NAMESPACE::Channel* channel = channelList.findChannel(channelName);
+        if (!channel) {
+            return false;
+        }
+        if (firstType == OPENEXR_IMF_NAMESPACE::NUM_PIXELTYPES) {
+            firstType = channel->type;
+        } else if (channel->type != firstType) {
+            firstType = OPENEXR_IMF_NAMESPACE::FLOAT;
+            break;
+        }
+    }
+
+    if (firstType == OPENEXR_IMF_NAMESPACE::HALF) {
+        pixelType = OPENEXR_IMF_NAMESPACE::HALF;
+        componentType = ImageComponentType::F16;
+        return true;
+    }
+    if (firstType == OPENEXR_IMF_NAMESPACE::FLOAT) {
+        pixelType = OPENEXR_IMF_NAMESPACE::FLOAT;
+        componentType = ImageComponentType::F32;
+        return true;
+    }
+    if (firstType == OPENEXR_IMF_NAMESPACE::UINT) {
+        pixelType = OPENEXR_IMF_NAMESPACE::UINT;
+        componentType = ImageComponentType::U32;
+        return true;
+    }
+
+    return false;
+}
+
+static float
+half_to_float(const uint16_t value)
+{
+    const uint32_t sign = static_cast<uint32_t>(value & 0x8000u) << 16u;
+    uint32_t exponent = static_cast<uint32_t>(value & 0x7c00u) >> 10u;
+    uint32_t mantissa = static_cast<uint32_t>(value & 0x03ffu);
+
+    uint32_t bits = 0u;
+    if (exponent == 0u) {
+        if (mantissa != 0u) {
+            exponent = 1u;
+            while ((mantissa & 0x0400u) == 0u) {
+                mantissa <<= 1u;
+                --exponent;
+            }
+            mantissa &= 0x03ffu;
+            bits = sign | ((exponent + 112u) << 23u) | (mantissa << 13u);
+        } else {
+            bits = sign;
+        }
+    } else if (exponent == 31u) {
+        bits = sign | 0x7f800000u | (mantissa << 13u);
+    } else {
+        bits = sign | ((exponent + 112u) << 23u) | (mantissa << 13u);
+    }
+
+    float result = 0.0f;
+    std::memcpy(&result, &bits, sizeof(result));
+    return result;
+}
+
+static float
+read_source_sample_as_float(const HostImageData& image, const size_t sampleIndex, bool& supported)
+{
+    supported = true;
+
+    switch (image.glType) {
+    case GL_UNSIGNED_BYTE: {
+        const uint8_t value = reinterpret_cast<const uint8_t*>(image.bytes.data())[sampleIndex];
+        return static_cast<float>(value) / 255.0f;
+    }
+    case GL_UNSIGNED_SHORT: {
+        uint16_t value = 0u;
+        std::memcpy(&value, image.bytes.data() + sampleIndex * sizeof(uint16_t), sizeof(value));
+        return static_cast<float>(value) / 65535.0f;
+    }
+    case GL_HALF_FLOAT: {
+        uint16_t value = 0u;
+        std::memcpy(&value, image.bytes.data() + sampleIndex * sizeof(uint16_t), sizeof(value));
+        return half_to_float(value);
+    }
+    case GL_FLOAT: {
+        float value = 0.0f;
+        std::memcpy(&value, image.bytes.data() + sampleIndex * sizeof(float), sizeof(value));
+        return value;
+    }
+    default: break;
+    }
+
+    supported = false;
+    return 0.0f;
+}
+
+static bool
+resolve_exr_output_layout(const HostImageData& image,
+                          const int explicitAlphaChannel,
+                          int& outputChannels,
+                          int& resolvedAlphaChannel,
+                          std::array<int, 4>& sourceChannelMap,
+                          std::array<const char*, 4>& channelNames,
+                          std::string& errorMessage)
+{
+    if (image.width <= 0 || image.height <= 0 || image.channels < 1 || image.channels > 4) {
+        errorMessage = "invalid host image dimensions or channel count for OpenEXR";
+        return false;
+    }
+
+    outputChannels = image.channels;
+    resolvedAlphaChannel = explicitAlphaChannel >= 0 ? explicitAlphaChannel : image.alphaChannel;
+    if ((image.channels == 2 || image.channels == 4) && resolvedAlphaChannel < 0) {
+        resolvedAlphaChannel = image.channels - 1;
+    }
+    if (resolvedAlphaChannel >= image.channels) {
+        errorMessage = "invalid OpenEXR alpha channel index";
+        return false;
+    }
+
+    if (image.channels == 1) {
+        sourceChannelMap = { 0, 0, 0, 0 };
+        channelNames = { "Y", nullptr, nullptr, nullptr };
+        return true;
+    }
+    if (image.channels == 2 && resolvedAlphaChannel >= 0) {
+        const int valueChannel = resolvedAlphaChannel == 0 ? 1 : 0;
+        sourceChannelMap = { valueChannel, resolvedAlphaChannel, 0, 0 };
+        channelNames = { "Y", "A", nullptr, nullptr };
+        return true;
+    }
+    if (image.channels == 3 && resolvedAlphaChannel < 0) {
+        sourceChannelMap = { 0, 1, 2, 0 };
+        channelNames = { "R", "G", "B", nullptr };
+        return true;
+    }
+    if (image.channels == 4 && resolvedAlphaChannel >= 0) {
+        int nextChannel = 0;
+        for (int sourceChannel = 0; sourceChannel < image.channels; ++sourceChannel) {
+            if (sourceChannel == resolvedAlphaChannel) {
+                continue;
+            }
+            sourceChannelMap[nextChannel++] = sourceChannel;
+        }
+        sourceChannelMap[3] = resolvedAlphaChannel;
+        channelNames = { "R", "G", "B", "A" };
+        return true;
+    }
+
+    errorMessage = "native OpenEXR write supports only Y, YA, RGB, and RGBA layouts";
+    return false;
+}
+
+static bool
+convert_host_image_to_exr_bytes(const HostImageData& image,
+                                const ImageEncodeSettings& settings,
+                                const int explicitAlphaChannel,
+                                int& outputChannels,
+                                std::array<const char*, 4>& channelNames,
+                                std::vector<std::byte>& bytes,
+                                std::string& errorMessage)
+{
+    int resolvedAlphaChannel = -1;
+    std::array<int, 4> sourceChannelMap = { 0, 1, 2, 3 };
+    if (!resolve_exr_output_layout(
+            image, explicitAlphaChannel, outputChannels, resolvedAlphaChannel, sourceChannelMap, channelNames, errorMessage)) {
+        return false;
+    }
+
+    const size_t pixelCount = static_cast<size_t>(image.width) * static_cast<size_t>(image.height);
+    const size_t sampleCount = pixelCount * static_cast<size_t>(outputChannels);
+
+    if (settings.componentType == ImageComponentType::F16) {
+        bytes.resize(sampleCount * sizeof(IMATH_NAMESPACE::half));
+        IMATH_NAMESPACE::half* destination = reinterpret_cast<IMATH_NAMESPACE::half*>(bytes.data());
+        for (size_t pixelIndex = 0; pixelIndex < pixelCount; ++pixelIndex) {
+            for (int destinationChannel = 0; destinationChannel < outputChannels; ++destinationChannel) {
+                const size_t sampleIndex = pixelIndex * static_cast<size_t>(image.channels)
+                                           + static_cast<size_t>(sourceChannelMap[destinationChannel]);
+                bool supported = false;
+                const float value = read_source_sample_as_float(image, sampleIndex, supported);
+                if (!supported) {
+                    errorMessage = "unsupported host image type for native OpenEXR write";
+                    return false;
+                }
+                destination[pixelIndex * static_cast<size_t>(outputChannels) + static_cast<size_t>(destinationChannel)]
+                    = IMATH_NAMESPACE::half(value);
+            }
+        }
+        return true;
+    }
+
+    if (settings.componentType == ImageComponentType::F32) {
+        bytes.resize(sampleCount * sizeof(float));
+        float* destination = reinterpret_cast<float*>(bytes.data());
+        for (size_t pixelIndex = 0; pixelIndex < pixelCount; ++pixelIndex) {
+            for (int destinationChannel = 0; destinationChannel < outputChannels; ++destinationChannel) {
+                const size_t sampleIndex = pixelIndex * static_cast<size_t>(image.channels)
+                                           + static_cast<size_t>(sourceChannelMap[destinationChannel]);
+                bool supported = false;
+                const float value = read_source_sample_as_float(image, sampleIndex, supported);
+                if (!supported) {
+                    errorMessage = "unsupported host image type for native OpenEXR write";
+                    return false;
+                }
+                destination[pixelIndex * static_cast<size_t>(outputChannels) + static_cast<size_t>(destinationChannel)]
+                    = value;
+            }
+        }
+        return true;
+    }
+
+    errorMessage = "native OpenEXR write currently supports only half and float output";
+    return false;
+}
+#endif
+
+}  // namespace
+
+DecodedImageData
+decode_exr_file(const std::string& path)
+{
+    DecodedImageData result;
+
+#if !defined(RAWGL_HAS_OPENEXR)
+    (void)path;
+    result.errorMessage = "OpenEXR support is not available";
+    return result;
+#else
+    try {
+        OPENEXR_IMF_NAMESPACE::InputFile file(path.c_str());
+        const OPENEXR_IMF_NAMESPACE::Header& header = file.header();
+        const IMATH_NAMESPACE::Box2i dataWindow = header.dataWindow();
+        const int width = dataWindow.max.x - dataWindow.min.x + 1;
+        const int height = dataWindow.max.y - dataWindow.min.y + 1;
+        if (width <= 0 || height <= 0) {
+            result.errorMessage = "invalid OpenEXR data window";
+            return result;
+        }
+
+        std::vector<std::string> selectedNames;
+        int alphaChannel = -1;
+        std::string errorMessage;
+        if (!select_exr_channels(header.channels(), selectedNames, alphaChannel, errorMessage)) {
+            result.errorMessage = errorMessage;
+            return result;
+        }
+
+        OPENEXR_IMF_NAMESPACE::PixelType pixelType = OPENEXR_IMF_NAMESPACE::NUM_PIXELTYPES;
+        ImageComponentType componentType = ImageComponentType::Unknown;
+        if (!resolve_exr_component_type(header.channels(), selectedNames, pixelType, componentType)) {
+            result.errorMessage = "unsupported OpenEXR channel type";
+            return result;
+        }
+
+        const size_t bytesPerComponent = byte_size_for_image_component(componentType);
+        if (bytesPerComponent == 0u) {
+            result.errorMessage = "unsupported OpenEXR component type";
+            return result;
+        }
+
+        result.width = width;
+        result.height = height;
+        result.channels = static_cast<int>(selectedNames.size());
+        result.alphaChannel = alphaChannel;
+        result.componentType = componentType;
+        result.bytes.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * selectedNames.size() * bytesPerComponent);
+
+        OPENEXR_IMF_NAMESPACE::FrameBuffer frameBuffer;
+        const size_t xStride = selectedNames.size() * bytesPerComponent;
+        const size_t yStride = static_cast<size_t>(width) * xStride;
+        for (size_t channelIndex = 0; channelIndex < selectedNames.size(); ++channelIndex) {
+            char* base = reinterpret_cast<char*>(result.bytes.data() + channelIndex * bytesPerComponent);
+            frameBuffer.insert(selectedNames[channelIndex],
+                               OPENEXR_IMF_NAMESPACE::Slice::Make(
+                                   pixelType, base, dataWindow, xStride, yStride));
+        }
+
+        file.setFrameBuffer(frameBuffer);
+        file.readPixels(dataWindow.min.y, dataWindow.max.y);
+
+        result.success = true;
+        return result;
+    } catch (const std::exception& e) {
+        result.errorMessage = e.what();
+        return result;
+    }
+#endif
+}
+
+bool
+encode_exr_file(const std::string& path,
+                const std::map<std::string, std::string>& attributes,
+                int alphaChannel,
+                const HostImageData& image,
+                const ImageEncodeSettings& settings,
+                std::string& errorMessage)
+{
+#if !defined(RAWGL_HAS_OPENEXR)
+    (void)path;
+    (void)attributes;
+    (void)alphaChannel;
+    (void)image;
+    (void)settings;
+    errorMessage = "OpenEXR support is not available";
+    return false;
+#else
+    if (has_exr_tile_request(attributes)) {
+        errorMessage = "native OpenEXR write does not support tiled output yet";
+        return false;
+    }
+
+    OPENEXR_IMF_NAMESPACE::Compression compression = default_exr_compression();
+    if (!parse_exr_compression(attributes, compression, errorMessage)) {
+        return false;
+    }
+
+    int outputChannels = 0;
+    std::array<const char*, 4> channelNames = { nullptr, nullptr, nullptr, nullptr };
+    std::vector<std::byte> encodedBytes;
+    if (!convert_host_image_to_exr_bytes(
+            image, settings, alphaChannel, outputChannels, channelNames, encodedBytes, errorMessage)) {
+        return false;
+    }
+
+    try {
+        OPENEXR_IMF_NAMESPACE::Header header(image.width, image.height);
+        header.compression() = compression;
+        apply_exr_writer_attributes(header, attributes);
+
+        OPENEXR_IMF_NAMESPACE::PixelType pixelType = OPENEXR_IMF_NAMESPACE::FLOAT;
+        if (settings.componentType == ImageComponentType::F16) {
+            pixelType = OPENEXR_IMF_NAMESPACE::HALF;
+        } else if (settings.componentType == ImageComponentType::F32) {
+            pixelType = OPENEXR_IMF_NAMESPACE::FLOAT;
+        } else {
+            errorMessage = "unsupported OpenEXR output component type";
+            return false;
+        }
+
+        for (int channelIndex = 0; channelIndex < outputChannels; ++channelIndex) {
+            header.channels().insert(channelNames[channelIndex], OPENEXR_IMF_NAMESPACE::Channel(pixelType));
+        }
+
+        OPENEXR_IMF_NAMESPACE::FrameBuffer frameBuffer;
+        const size_t bytesPerComponent = byte_size_for_image_component(settings.componentType);
+        const size_t xStride = static_cast<size_t>(outputChannels) * bytesPerComponent;
+        const size_t yStride = static_cast<size_t>(image.width) * xStride;
+        for (int channelIndex = 0; channelIndex < outputChannels; ++channelIndex) {
+            char* base = reinterpret_cast<char*>(encodedBytes.data() + static_cast<size_t>(channelIndex) * bytesPerComponent);
+            frameBuffer.insert(channelNames[channelIndex],
+                               OPENEXR_IMF_NAMESPACE::Slice::Make(pixelType,
+                                                                  base,
+                                                                  IMATH_NAMESPACE::Box2i(
+                                                                      IMATH_NAMESPACE::V2i(0, 0),
+                                                                      IMATH_NAMESPACE::V2i(image.width - 1, image.height - 1)),
+                                                                  xStride,
+                                                                  yStride));
+        }
+
+        OPENEXR_IMF_NAMESPACE::OutputFile output(path.c_str(), header);
+        output.setFrameBuffer(frameBuffer);
+        output.writePixels(image.height);
+        return true;
+    } catch (const std::exception& e) {
+        errorMessage = e.what();
+        return false;
+    }
+#endif
+}
+
+}  // namespace rawgl::io

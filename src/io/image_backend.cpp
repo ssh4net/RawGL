@@ -4,6 +4,7 @@
 #include "image_backend.h"
 
 #include "gl_utils.h"
+#include "exr_backend.h"
 #include "image_io.h"
 #include "jpg_backend.h"
 #include "log.h"
@@ -72,7 +73,7 @@ select_decode_backend(const ImageCodecFamily codec)
     case ImageCodecFamily::Jpeg: return ImageBackendKind::NativeJpegTurbo;
     case ImageCodecFamily::Png: return ImageBackendKind::NativePng;
     case ImageCodecFamily::Tiff: return ImageBackendKind::NativeTiff;
-    case ImageCodecFamily::Exr: return ImageBackendKind::OiioFallback;
+    case ImageCodecFamily::Exr: return ImageBackendKind::NativeOpenExr;
     case ImageCodecFamily::Unknown:
     case ImageCodecFamily::Bmp:
     case ImageCodecFamily::Tga:
@@ -91,7 +92,7 @@ select_encode_backend(const ImageCodecFamily codec)
     case ImageCodecFamily::Jpeg: return ImageBackendKind::NativeJpegTurbo;
     case ImageCodecFamily::Png: return ImageBackendKind::NativePng;
     case ImageCodecFamily::Tiff: return ImageBackendKind::NativeTiff;
-    case ImageCodecFamily::Exr: return ImageBackendKind::OiioFallback;
+    case ImageCodecFamily::Exr: return ImageBackendKind::NativeOpenExr;
     case ImageCodecFamily::Unknown:
     case ImageCodecFamily::Bmp:
     case ImageCodecFamily::Tga:
@@ -349,7 +350,14 @@ decode_image_file(const std::string& path, const std::map<std::string, std::stri
         LOG(warning) << "Native TIFF decode failed for " << path << ", falling back to OIIO: " << result.errorMessage;
         return decode_image_file_oiio(path, attributes);
     }
-    case ImageBackendKind::NativeOpenExr:
+    case ImageBackendKind::NativeOpenExr: {
+        DecodedImageData result = decode_exr_file(path);
+        if (result.success) {
+            return result;
+        }
+        LOG(warning) << "Native OpenEXR decode failed for " << path << ", falling back to OIIO: " << result.errorMessage;
+        return decode_image_file_oiio(path, attributes);
+    }
     default:
         return decode_image_file_oiio(path, attributes);
     }
@@ -405,7 +413,14 @@ encode_image_file(const std::string& path,
         LOG(warning) << "Native TIFF write failed for " << path << ", falling back to OIIO: " << nativeErrorMessage;
         return encode_image_file_oiio(path, attributes, alphaChannel, image, settings, errorMessage);
     }
-    case ImageBackendKind::NativeOpenExr:
+    case ImageBackendKind::NativeOpenExr: {
+        std::string nativeErrorMessage;
+        if (encode_exr_file(path, attributes, alphaChannel, image, settings, nativeErrorMessage)) {
+            return true;
+        }
+        LOG(warning) << "Native OpenEXR write failed for " << path << ", falling back to OIIO: " << nativeErrorMessage;
+        return encode_image_file_oiio(path, attributes, alphaChannel, image, settings, errorMessage);
+    }
     default:
         return encode_image_file_oiio(path, attributes, alphaChannel, image, settings, errorMessage);
     }

@@ -23,6 +23,7 @@ set(RAWGL_CORE_SOURCES
 list(APPEND RAWGL_CORE_SOURCES ${RAWGL_MINIPLY_SOURCES})
 
 set(RAWGL_IO_SOURCES
+    src/io/exr_backend.cpp
     src/io/image_backend.cpp
     src/io/image_io.cpp
     src/io/io_facade.cpp
@@ -143,6 +144,9 @@ endif()
 if(TARGET TIFF::TIFF)
     target_compile_definitions(rawgl_io PRIVATE RAWGL_HAS_LIBTIFF=1)
 endif()
+if(TARGET OpenEXR::OpenEXR)
+    target_compile_definitions(rawgl_io PRIVATE RAWGL_HAS_OPENEXR=1)
+endif()
 
 target_compile_definitions(rawgl_batch PRIVATE
     _CRT_SECURE_NO_WARNINGS
@@ -197,6 +201,9 @@ if(TARGET JPEG::JPEG)
 endif()
 if(TARGET TIFF::TIFF)
     target_link_libraries(rawgl_io PUBLIC TIFF::TIFF)
+endif()
+if(TARGET OpenEXR::OpenEXR)
+    target_link_libraries(rawgl_io PUBLIC OpenEXR::OpenEXR)
 endif()
 
 if(RAWGL_HAS_OPENMETA)

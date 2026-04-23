@@ -7,6 +7,11 @@
 #include <filesystem>
 #include <iostream>
 
+#if __has_include(<tiffio.h>)
+#include <tiffio.h>
+#define RAWGL_TEST_HAS_TIFFIO 1
+#endif
+
 int
 main()
 {
@@ -15,12 +20,14 @@ main()
     const std::filesystem::path outputPath = "tests/outputs/rawgl_io_host_image_smoke.png";
     const std::filesystem::path jpegOutputPath = "tests/outputs/rawgl_io_host_image_smoke.jpg";
     const std::filesystem::path tiffOutputPath = "tests/outputs/rawgl_io_host_image_smoke.tif";
+    const std::filesystem::path exrOutputPath = "tests/outputs/rawgl_io_host_image_smoke.exr";
     const std::filesystem::path materializedOutputPath = "tests/outputs/rawgl_io_materialized_output_smoke.png";
 
     std::error_code removeError;
     std::filesystem::remove(outputPath, removeError);
     std::filesystem::remove(jpegOutputPath, removeError);
     std::filesystem::remove(tiffOutputPath, removeError);
+    std::filesystem::remove(exrOutputPath, removeError);
     std::filesystem::remove(materializedOutputPath, removeError);
 
     rawgl::io::ImageLoadRequest loadRequest;
@@ -120,6 +127,9 @@ main()
     tiffSaveRequest.path = tiffOutputPath.string();
     tiffSaveRequest.bits = 16;
     tiffSaveRequest.attributes.push_back({ "tiff:compression", "ZIP" });
+    tiffSaveRequest.attributes.push_back({ "tiff:tiled", "true" });
+    tiffSaveRequest.attributes.push_back({ "tiff:tileWidth", "256" });
+    tiffSaveRequest.attributes.push_back({ "tiff:tileLength", "128" });
     tiffSaveRequest.image = jpegLoadResult.image;
 
     const rawgl::io::ImageSaveResult tiffSaveResult = rawgl::io::SaveImageFile(tiffSaveRequest);
@@ -153,6 +163,71 @@ main()
                                          * static_cast<size_t>(tiffReloadResult.image.height) * 3u * sizeof(uint16_t);
     if (tiffReloadResult.image.bytes.size() != expectedTiffByteCount) {
         std::cerr << "Reloaded TIFF byte size is unexpected." << std::endl;
+        return 1;
+    }
+
+#if defined(RAWGL_TEST_HAS_TIFFIO)
+    TIFF* tif = TIFFOpen(tiffOutputPath.string().c_str(), "r");
+    if (tif == nullptr) {
+        std::cerr << "Failed to reopen TIFF for layout verification." << std::endl;
+        return 1;
+    }
+
+    if (TIFFIsTiled(tif) == 0) {
+        TIFFClose(tif);
+        std::cerr << "TIFF output is not tiled." << std::endl;
+        return 1;
+    }
+
+    uint32_t tileWidth = 0u;
+    uint32_t tileLength = 0u;
+    TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tileWidth);
+    TIFFGetField(tif, TIFFTAG_TILELENGTH, &tileLength);
+    TIFFClose(tif);
+
+    if (tileWidth != 256u || tileLength != 128u) {
+        std::cerr << "TIFF tile geometry is unexpected." << std::endl;
+        return 1;
+    }
+#endif
+
+    rawgl::io::ImageSaveRequest exrSaveRequest;
+    exrSaveRequest.path = exrOutputPath.string();
+    exrSaveRequest.bits = 16;
+    exrSaveRequest.attributes.push_back({ "openexr:compression", "zip" });
+    exrSaveRequest.image = jpegLoadResult.image;
+
+    const rawgl::io::ImageSaveResult exrSaveResult = rawgl::io::SaveImageFile(exrSaveRequest);
+    if (!exrSaveResult.success) {
+        std::cerr << "OpenEXR save failed: " << exrSaveResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    if (!std::filesystem::exists(exrOutputPath)) {
+        std::cerr << "Expected OpenEXR output was not created: " << exrOutputPath << std::endl;
+        return 1;
+    }
+
+    rawgl::io::ImageLoadRequest exrReloadRequest;
+    exrReloadRequest.path = exrOutputPath.string();
+
+    const rawgl::io::ImageLoadResult exrReloadResult = rawgl::io::LoadImageFile(exrReloadRequest);
+    if (!exrReloadResult.success) {
+        std::cerr << "OpenEXR reload failed: " << exrReloadResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    if (exrReloadResult.image.width != jpegLoadResult.image.width
+        || exrReloadResult.image.height != jpegLoadResult.image.height
+        || exrReloadResult.image.channels != 3) {
+        std::cerr << "Reloaded OpenEXR dimensions differ from source." << std::endl;
+        return 1;
+    }
+
+    const size_t expectedExrByteCount = static_cast<size_t>(exrReloadResult.image.width)
+                                        * static_cast<size_t>(exrReloadResult.image.height) * 3u * sizeof(uint16_t);
+    if (exrReloadResult.image.bytes.size() != expectedExrByteCount) {
+        std::cerr << "Reloaded OpenEXR byte size is unexpected." << std::endl;
         return 1;
     }
 

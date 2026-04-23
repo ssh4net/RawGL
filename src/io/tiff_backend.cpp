@@ -111,6 +111,44 @@ has_unassociated_alpha_hint(const std::map<std::string, std::string>& attributes
     return true;
 }
 
+static bool
+parse_bool_attribute(const std::map<std::string, std::string>& attributes, const char* key, bool& value)
+{
+    const std::string* attribute = find_attribute_value(attributes, key);
+    if (!attribute) {
+        return false;
+    }
+
+    const std::string normalized = to_lower_copy(*attribute);
+    value = normalized == "1" || normalized == "true" || normalized == "on" || normalized == "yes";
+    return true;
+}
+
+static bool
+parse_positive_u32_attribute(const std::map<std::string, std::string>& attributes,
+                             const char* key,
+                             bool& present,
+                             uint32_t& value,
+                             std::string& errorMessage)
+{
+    const std::string* attribute = find_attribute_value(attributes, key);
+    if (!attribute) {
+        present = false;
+        value = 0u;
+        return true;
+    }
+
+    const int parsedValue = std::atoi(attribute->c_str());
+    if (parsedValue <= 0) {
+        errorMessage = "invalid positive TIFF tile dimension";
+        return false;
+    }
+
+    present = true;
+    value = static_cast<uint32_t>(parsedValue);
+    return true;
+}
+
 static float
 half_to_float(const uint16_t value)
 {
@@ -249,6 +287,57 @@ resolve_tiff_channel_layout(const HostImageData& image,
 }
 
 static bool
+resolve_tiff_tile_layout(const std::map<std::string, std::string>& attributes,
+                         TIFF* tif,
+                         bool& useTiles,
+                         uint32_t& tileWidth,
+                         uint32_t& tileLength,
+                         std::string& errorMessage)
+{
+    bool tiledValue = false;
+    const bool hasTiledAttr = parse_bool_attribute(attributes, "tiff:tiled", tiledValue);
+
+    bool hasTileWidth = false;
+    uint32_t requestedTileWidth = 0u;
+    if (!parse_positive_u32_attribute(
+            attributes, "tiff:tileWidth", hasTileWidth, requestedTileWidth, errorMessage)) {
+        return false;
+    }
+
+    bool hasTileLength = false;
+    uint32_t requestedTileLength = 0u;
+    if (!parse_positive_u32_attribute(
+            attributes, "tiff:tileLength", hasTileLength, requestedTileLength, errorMessage)) {
+        return false;
+    }
+
+    if (!hasTileLength) {
+        if (!parse_positive_u32_attribute(
+                attributes, "tiff:tileHeight", hasTileLength, requestedTileLength, errorMessage)) {
+            return false;
+        }
+    }
+
+    useTiles = (hasTiledAttr && tiledValue) || hasTileWidth || hasTileLength;
+    if (!useTiles) {
+        tileWidth = 0u;
+        tileLength = 0u;
+        return true;
+    }
+
+    tileWidth = requestedTileWidth;
+    tileLength = requestedTileLength;
+    TIFFDefaultTileSize(tif, &tileWidth, &tileLength);
+
+    if (tileWidth == 0u || tileLength == 0u) {
+        errorMessage = "invalid TIFF tile dimensions";
+        return false;
+    }
+
+    return true;
+}
+
+static bool
 convert_host_image_to_tiff_bytes(const HostImageData& image,
                                  const ImageEncodeSettings& settings,
                                  const int explicitAlphaChannel,
@@ -334,7 +423,6 @@ static bool
 resolve_tiff_decode_layout(const uint16_t samplesPerPixel,
                            const uint16_t photometric,
                            const uint16_t planarConfig,
-                           const bool isTiled,
                            int& alphaChannel,
                            std::string& errorMessage)
 {
@@ -344,10 +432,6 @@ resolve_tiff_decode_layout(const uint16_t samplesPerPixel,
     }
     if (planarConfig != PLANARCONFIG_CONTIG) {
         errorMessage = "native TIFF decode requires contiguous planar layout";
-        return false;
-    }
-    if (isTiled) {
-        errorMessage = "native TIFF decode does not support tiled images yet";
         return false;
     }
 
@@ -399,61 +483,99 @@ resolve_tiff_component_type(const uint16_t bitsPerSample,
 }
 
 static void
-copy_tiff_row_samples(const uint8_t* rowBytes,
-                      const size_t rowPixelCount,
-                      const uint16_t samplesPerPixel,
-                      const uint16_t bitsPerSample,
-                      const uint16_t photometric,
-                      const ImageComponentType componentType,
-                      std::byte* destinationRow)
+copy_tiff_interleaved_samples(const uint8_t* sourceBytes,
+                              const size_t sourcePixelWidth,
+                              const size_t copyPixelWidth,
+                              const size_t copyPixelHeight,
+                              const size_t destinationPixelWidth,
+                              const size_t destinationOriginX,
+                              const size_t destinationOriginY,
+                              const uint16_t samplesPerPixel,
+                              const uint16_t bitsPerSample,
+                              const uint16_t photometric,
+                              const ImageComponentType componentType,
+                              std::byte* destinationBytes)
 {
     if (componentType == ImageComponentType::U8) {
-        uint8_t* destination = reinterpret_cast<uint8_t*>(destinationRow);
-        for (size_t sampleIndex = 0; sampleIndex < rowPixelCount * static_cast<size_t>(samplesPerPixel); ++sampleIndex) {
-            uint8_t value = rowBytes[sampleIndex];
-            if (photometric == PHOTOMETRIC_MINISWHITE) {
-                value = static_cast<uint8_t>(255u - value);
+        const uint8_t* source = reinterpret_cast<const uint8_t*>(sourceBytes);
+        uint8_t* destination = reinterpret_cast<uint8_t*>(destinationBytes);
+        for (size_t localY = 0; localY < copyPixelHeight; ++localY) {
+            for (size_t localX = 0; localX < copyPixelWidth; ++localX) {
+                const size_t sourcePixelIndex = (localY * sourcePixelWidth + localX) * static_cast<size_t>(samplesPerPixel);
+                const size_t destinationPixelIndex =
+                    ((destinationOriginY + localY) * destinationPixelWidth + destinationOriginX + localX)
+                    * static_cast<size_t>(samplesPerPixel);
+                for (size_t sampleOffset = 0; sampleOffset < static_cast<size_t>(samplesPerPixel); ++sampleOffset) {
+                    uint8_t value = source[sourcePixelIndex + sampleOffset];
+                    if (photometric == PHOTOMETRIC_MINISWHITE) {
+                        value = static_cast<uint8_t>(255u - value);
+                    }
+                    destination[destinationPixelIndex + sampleOffset] = value;
+                }
             }
-            destination[sampleIndex] = value;
         }
         return;
     }
 
     if (componentType == ImageComponentType::U16) {
-        const uint16_t* source = reinterpret_cast<const uint16_t*>(rowBytes);
-        uint16_t* destination = reinterpret_cast<uint16_t*>(destinationRow);
-        for (size_t sampleIndex = 0; sampleIndex < rowPixelCount * static_cast<size_t>(samplesPerPixel); ++sampleIndex) {
-            uint16_t value = source[sampleIndex];
-            if (photometric == PHOTOMETRIC_MINISWHITE) {
-                value = static_cast<uint16_t>(65535u - value);
+        const uint16_t* source = reinterpret_cast<const uint16_t*>(sourceBytes);
+        uint16_t* destination = reinterpret_cast<uint16_t*>(destinationBytes);
+        for (size_t localY = 0; localY < copyPixelHeight; ++localY) {
+            for (size_t localX = 0; localX < copyPixelWidth; ++localX) {
+                const size_t sourcePixelIndex = (localY * sourcePixelWidth + localX) * static_cast<size_t>(samplesPerPixel);
+                const size_t destinationPixelIndex =
+                    ((destinationOriginY + localY) * destinationPixelWidth + destinationOriginX + localX)
+                    * static_cast<size_t>(samplesPerPixel);
+                for (size_t sampleOffset = 0; sampleOffset < static_cast<size_t>(samplesPerPixel); ++sampleOffset) {
+                    uint16_t value = source[sourcePixelIndex + sampleOffset];
+                    if (photometric == PHOTOMETRIC_MINISWHITE) {
+                        value = static_cast<uint16_t>(65535u - value);
+                    }
+                    destination[destinationPixelIndex + sampleOffset] = value;
+                }
             }
-            destination[sampleIndex] = value;
         }
         return;
     }
 
     if (componentType == ImageComponentType::U32) {
-        const uint32_t* source = reinterpret_cast<const uint32_t*>(rowBytes);
-        uint32_t* destination = reinterpret_cast<uint32_t*>(destinationRow);
-        for (size_t sampleIndex = 0; sampleIndex < rowPixelCount * static_cast<size_t>(samplesPerPixel); ++sampleIndex) {
-            uint32_t value = source[sampleIndex];
-            if (photometric == PHOTOMETRIC_MINISWHITE) {
-                value = 0xffffffffu - value;
+        const uint32_t* source = reinterpret_cast<const uint32_t*>(sourceBytes);
+        uint32_t* destination = reinterpret_cast<uint32_t*>(destinationBytes);
+        for (size_t localY = 0; localY < copyPixelHeight; ++localY) {
+            for (size_t localX = 0; localX < copyPixelWidth; ++localX) {
+                const size_t sourcePixelIndex = (localY * sourcePixelWidth + localX) * static_cast<size_t>(samplesPerPixel);
+                const size_t destinationPixelIndex =
+                    ((destinationOriginY + localY) * destinationPixelWidth + destinationOriginX + localX)
+                    * static_cast<size_t>(samplesPerPixel);
+                for (size_t sampleOffset = 0; sampleOffset < static_cast<size_t>(samplesPerPixel); ++sampleOffset) {
+                    uint32_t value = source[sourcePixelIndex + sampleOffset];
+                    if (photometric == PHOTOMETRIC_MINISWHITE) {
+                        value = 0xffffffffu - value;
+                    }
+                    destination[destinationPixelIndex + sampleOffset] = value;
+                }
             }
-            destination[sampleIndex] = value;
         }
         return;
     }
 
     if (componentType == ImageComponentType::F32 && bitsPerSample == 32u) {
-        const float* source = reinterpret_cast<const float*>(rowBytes);
-        float* destination = reinterpret_cast<float*>(destinationRow);
-        for (size_t sampleIndex = 0; sampleIndex < rowPixelCount * static_cast<size_t>(samplesPerPixel); ++sampleIndex) {
-            float value = source[sampleIndex];
-            if (photometric == PHOTOMETRIC_MINISWHITE) {
-                value = 1.0f - value;
+        const float* source = reinterpret_cast<const float*>(sourceBytes);
+        float* destination = reinterpret_cast<float*>(destinationBytes);
+        for (size_t localY = 0; localY < copyPixelHeight; ++localY) {
+            for (size_t localX = 0; localX < copyPixelWidth; ++localX) {
+                const size_t sourcePixelIndex = (localY * sourcePixelWidth + localX) * static_cast<size_t>(samplesPerPixel);
+                const size_t destinationPixelIndex =
+                    ((destinationOriginY + localY) * destinationPixelWidth + destinationOriginX + localX)
+                    * static_cast<size_t>(samplesPerPixel);
+                for (size_t sampleOffset = 0; sampleOffset < static_cast<size_t>(samplesPerPixel); ++sampleOffset) {
+                    float value = source[sourcePixelIndex + sampleOffset];
+                    if (photometric == PHOTOMETRIC_MINISWHITE) {
+                        value = 1.0f - value;
+                    }
+                    destination[destinationPixelIndex + sampleOffset] = value;
+                }
             }
-            destination[sampleIndex] = value;
         }
     }
 }
@@ -495,8 +617,7 @@ decode_tiff_file(const std::string& path)
 
     int alphaChannel = -1;
     std::string errorMessage;
-    if (!resolve_tiff_decode_layout(
-            samplesPerPixel, photometric, planarConfig, TIFFIsTiled(tif) != 0, alphaChannel, errorMessage)) {
+    if (!resolve_tiff_decode_layout(samplesPerPixel, photometric, planarConfig, alphaChannel, errorMessage)) {
         TIFFClose(tif);
         result.errorMessage = errorMessage;
         return result;
@@ -532,20 +653,82 @@ decode_tiff_file(const std::string& path)
                         * static_cast<size_t>(samplesPerPixel) * bytesPerComponent);
 
     std::vector<uint8_t> rowBuffer(static_cast<size_t>(scanlineSize));
-    const size_t destinationRowBytes = static_cast<size_t>(width) * static_cast<size_t>(samplesPerPixel)
-                                       * bytesPerComponent;
-
-    for (uint32_t row = 0u; row < height; ++row) {
-        if (TIFFReadScanline(tif, rowBuffer.data(), row, 0) != 1) {
+    if (TIFFIsTiled(tif) != 0) {
+        uint32_t tileWidth = 0u;
+        uint32_t tileLength = 0u;
+        TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tileWidth);
+        TIFFGetField(tif, TIFFTAG_TILELENGTH, &tileLength);
+        if (tileWidth == 0u || tileLength == 0u) {
             TIFFClose(tif);
-            result = DecodedImageData();
-            result.errorMessage = "can't read TIFF scanline";
+            result.errorMessage = "invalid TIFF tile geometry";
             return result;
         }
 
-        std::byte* destinationRow = result.bytes.data() + static_cast<size_t>(row) * destinationRowBytes;
-        copy_tiff_row_samples(
-            rowBuffer.data(), static_cast<size_t>(width), samplesPerPixel, bitsPerSample, photometric, componentType, destinationRow);
+        const tsize_t tileSize = TIFFTileSize(tif);
+        const tsize_t tileRowSize = TIFFTileRowSize(tif);
+        if (tileSize <= 0) {
+            TIFFClose(tif);
+            result.errorMessage = "invalid TIFF tile size";
+            return result;
+        }
+        if (tileRowSize <= 0) {
+            TIFFClose(tif);
+            result.errorMessage = "invalid TIFF tile row size";
+            return result;
+        }
+
+        std::vector<uint8_t> tileBuffer(static_cast<size_t>(tileSize));
+        for (uint32_t tileY = 0u; tileY < height; tileY += tileLength) {
+            for (uint32_t tileX = 0u; tileX < width; tileX += tileWidth) {
+                const ttile_t tileIndex = TIFFComputeTile(tif, tileX, tileY, 0u, 0u);
+                if (TIFFReadEncodedTile(tif, tileIndex, tileBuffer.data(), tileSize) < 0) {
+                    TIFFClose(tif);
+                    result = DecodedImageData();
+                    result.errorMessage = "can't read TIFF tile";
+                    return result;
+                }
+
+                const size_t copyWidth = std::min(static_cast<size_t>(tileWidth), static_cast<size_t>(width - tileX));
+                const size_t copyHeight =
+                    std::min(static_cast<size_t>(tileLength), static_cast<size_t>(height - tileY));
+                const size_t tilePixelsPerRow = static_cast<size_t>(tileRowSize)
+                                                / (static_cast<size_t>(samplesPerPixel) * bytesPerComponent);
+                copy_tiff_interleaved_samples(tileBuffer.data(),
+                                              tilePixelsPerRow,
+                                              copyWidth,
+                                              copyHeight,
+                                              static_cast<size_t>(width),
+                                              static_cast<size_t>(tileX),
+                                              static_cast<size_t>(tileY),
+                                              samplesPerPixel,
+                                              bitsPerSample,
+                                              photometric,
+                                              componentType,
+                                              result.bytes.data());
+            }
+        }
+    } else {
+        for (uint32_t row = 0u; row < height; ++row) {
+            if (TIFFReadScanline(tif, rowBuffer.data(), row, 0) != 1) {
+                TIFFClose(tif);
+                result = DecodedImageData();
+                result.errorMessage = "can't read TIFF scanline";
+                return result;
+            }
+
+            copy_tiff_interleaved_samples(rowBuffer.data(),
+                                          static_cast<size_t>(width),
+                                          static_cast<size_t>(width),
+                                          1u,
+                                          static_cast<size_t>(width),
+                                          0u,
+                                          static_cast<size_t>(row),
+                                          samplesPerPixel,
+                                          bitsPerSample,
+                                          photometric,
+                                          componentType,
+                                          result.bytes.data());
+        }
     }
 
     TIFFClose(tif);
@@ -576,6 +759,9 @@ encode_tiff_file(const std::string& path,
         return false;
     }
 
+    bool useTiles = false;
+    uint32_t tileWidth = 0u;
+    uint32_t tileLength = 0u;
     int outputChannels = 0;
     int resolvedAlphaChannel = -1;
     std::array<int, 4> sourceChannelMap = { 0, 1, 2, 3 };
@@ -632,23 +818,77 @@ encode_tiff_file(const std::string& path,
     TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
     TIFFSetField(tif, TIFFTAG_COMPRESSION, compression);
 
+    if (!resolve_tiff_tile_layout(attributes, tif, useTiles, tileWidth, tileLength, errorMessage)) {
+        TIFFClose(tif);
+        return false;
+    }
+    if (useTiles) {
+        TIFFSetField(tif, TIFFTAG_TILEWIDTH, tileWidth);
+        TIFFSetField(tif, TIFFTAG_TILELENGTH, tileLength);
+    }
+
     if (resolvedAlphaChannel >= 0) {
         const uint16_t extraSample = has_unassociated_alpha_hint(attributes) ? EXTRASAMPLE_UNASSALPHA
                                                                               : EXTRASAMPLE_ASSOCALPHA;
         TIFFSetField(tif, TIFFTAG_EXTRASAMPLES, 1, &extraSample);
     }
 
-    const uint16_t rowsPerStrip = TIFFDefaultStripSize(tif, 0u);
-    TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, rowsPerStrip);
-
     const size_t rowBytes = static_cast<size_t>(image.width) * static_cast<size_t>(outputChannels)
                             * byte_size_for_image_component(settings.componentType);
-    for (int row = 0; row < image.height; ++row) {
-        std::byte* rowData = encodedBytes.data() + static_cast<size_t>(row) * rowBytes;
-        if (TIFFWriteScanline(tif, rowData, static_cast<uint32_t>(row), 0) != 1) {
+
+    if (useTiles) {
+        const tsize_t tileByteCountSigned = TIFFTileSize(tif);
+        const tsize_t tileRowBytesSigned = TIFFTileRowSize(tif);
+        if (tileByteCountSigned <= 0 || tileRowBytesSigned <= 0) {
             TIFFClose(tif);
-            errorMessage = "can't write TIFF scanline";
+            errorMessage = "invalid TIFF tile buffer geometry";
             return false;
+        }
+
+        const size_t tileByteCount = static_cast<size_t>(tileByteCountSigned);
+        const size_t tileRowBytes = static_cast<size_t>(tileRowBytesSigned);
+        std::vector<std::byte> tileBytes(tileByteCount);
+
+        for (uint32_t tileY = 0u; tileY < static_cast<uint32_t>(image.height); tileY += tileLength) {
+            for (uint32_t tileX = 0u; tileX < static_cast<uint32_t>(image.width); tileX += tileWidth) {
+                std::fill(tileBytes.begin(), tileBytes.end(), std::byte { 0 });
+
+                const size_t copyWidth =
+                    std::min(static_cast<size_t>(tileWidth), static_cast<size_t>(image.width) - static_cast<size_t>(tileX));
+                const size_t copyHeight = std::min(
+                    static_cast<size_t>(tileLength), static_cast<size_t>(image.height) - static_cast<size_t>(tileY));
+
+                for (size_t localY = 0; localY < copyHeight; ++localY) {
+                    const std::byte* sourceRow =
+                        encodedBytes.data() + (static_cast<size_t>(tileY) + localY) * rowBytes
+                        + static_cast<size_t>(tileX) * static_cast<size_t>(outputChannels)
+                              * byte_size_for_image_component(settings.componentType);
+                    std::byte* destinationRow = tileBytes.data() + localY * tileRowBytes;
+                    std::memcpy(destinationRow,
+                                sourceRow,
+                                copyWidth * static_cast<size_t>(outputChannels)
+                                    * byte_size_for_image_component(settings.componentType));
+                }
+
+                const ttile_t tileIndex = TIFFComputeTile(tif, tileX, tileY, 0u, 0u);
+                if (TIFFWriteEncodedTile(tif, tileIndex, tileBytes.data(), tileByteCountSigned) < 0) {
+                    TIFFClose(tif);
+                    errorMessage = "can't write TIFF tile";
+                    return false;
+                }
+            }
+        }
+    } else {
+        const uint16_t rowsPerStrip = TIFFDefaultStripSize(tif, 0u);
+        TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, rowsPerStrip);
+
+        for (int row = 0; row < image.height; ++row) {
+            std::byte* rowData = encodedBytes.data() + static_cast<size_t>(row) * rowBytes;
+            if (TIFFWriteScanline(tif, rowData, static_cast<uint32_t>(row), 0) != 1) {
+                TIFFClose(tif);
+                errorMessage = "can't write TIFF scanline";
+                return false;
+            }
         }
     }
 
