@@ -18,7 +18,7 @@ struct OutputWriteRequest {
     const HostImageData* image = nullptr;
 };
 
-void
-save_image_output(const OutputWriteRequest& request);
+bool
+save_image_output(const OutputWriteRequest& request, std::string& errorMessage);
 
 }  // namespace rawgl::io

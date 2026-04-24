@@ -21,7 +21,7 @@ public:
     HostImageData loadHostImageData(const std::string& path,
                                     const std::map<std::string, std::string>& attributes) const;
 
-    void saveImageOutput(const OutputWriteRequest& request) const;
+    bool saveImageOutput(const OutputWriteRequest& request, std::string& errorMessage) const;
 
 private:
     IoRuntimeOptions m_options;

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -163,6 +164,55 @@ struct ShaderInterface {
 };
 
 using ShaderInspectionResult = ShaderInterface;
+
+/// Describes a mesh file inspection request.
+struct MeshInspectionRequest {
+    /// Mesh path to inspect. Currently OBJ receives detailed text-level inspection.
+    std::string path;
+};
+
+/// Material name discovered while scanning an OBJ file.
+struct MeshMaterialInfo {
+    /// Stable numeric ID assigned in first-use order. Faces before any material use ID 0.
+    uint32_t id = 0;
+    /// OBJ `usemtl` name. Empty for the implicit material 0 bucket.
+    std::string name;
+    /// Number of source faces using this material ID.
+    size_t faceCount = 0;
+};
+
+/// Contiguous OBJ group/object span discovered while scanning faces.
+struct MeshGroupInfo {
+    /// Group or object name. Empty means the source had no active group/object name.
+    std::string name;
+    /// First source face index covered by this span.
+    size_t firstFaceIndex = 0;
+    /// Number of source faces in this span.
+    size_t faceCount = 0;
+};
+
+/// CPU-only mesh inspection data useful before building a render workflow.
+struct MeshInspectionResult {
+    bool success = false;
+    std::string errorMessage;
+    std::string path;
+    size_t vertexCount = 0;
+    size_t texcoordCount = 0;
+    size_t normalCount = 0;
+    size_t faceCount = 0;
+    size_t triangleFaceCount = 0;
+    size_t quadFaceCount = 0;
+    size_t ngonFaceCount = 0;
+    size_t generatedTriangleCount = 0;
+    bool hasBounds = false;
+    bool hasUvRange = false;
+    std::array<float, 3> boundsMin = { 0.0f, 0.0f, 0.0f };
+    std::array<float, 3> boundsMax = { 0.0f, 0.0f, 0.0f };
+    std::array<float, 2> uvMin = { 0.0f, 0.0f };
+    std::array<float, 2> uvMax = { 0.0f, 0.0f };
+    std::vector<MeshMaterialInfo> materials;
+    std::vector<MeshGroupInfo> groups;
+};
 
 /// Per-execution values for RawGL system uniforms.
 struct SystemUniformState {
@@ -435,5 +485,9 @@ private:
 /// Convenience wrapper that creates a temporary context and inspects one shader.
 ShaderInterface
 InspectShaderInterface(const ShaderInspectionRequest& request);
+
+/// Inspect a mesh file without compiling or executing a workflow.
+MeshInspectionResult
+InspectMeshFile(const MeshInspectionRequest& request);
 
 }  // namespace rawgl

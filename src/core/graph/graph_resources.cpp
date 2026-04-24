@@ -176,11 +176,17 @@ load_cached_mesh_resource(const RawGLContextState& contextState, const GraphMesh
     if (triMesh->color != nullptr) {
         sharedMesh->colors.assign(triMesh->color, triMesh->color + triMesh->numVerts * 4);
     }
+    if (triMesh->materialId != nullptr) {
+        sharedMesh->materialIds.assign(triMesh->materialId, triMesh->materialId + triMesh->numVerts);
+    } else {
+        sharedMesh->materialIds.assign(triMesh->numVerts, 0u);
+    }
     sharedMesh->indices.assign(triMesh->indices, triMesh->indices + triMesh->numIndices);
     sharedMesh->vrtSize  = static_cast<GLsizei>(triMesh->numVerts * 3 * sizeof(float));
     sharedMesh->texSize  = static_cast<GLsizei>(triMesh->numVerts * 2 * sizeof(float));
     sharedMesh->nrmSize  = static_cast<GLsizei>(triMesh->numVerts * 3 * sizeof(float));
     sharedMesh->clrSize  = static_cast<GLsizei>(triMesh->numVerts * 4 * sizeof(unsigned char));
+    sharedMesh->matSize  = static_cast<GLsizei>(triMesh->numVerts * sizeof(uint32_t));
     sharedMesh->idxSize  = static_cast<GLsizei>(triMesh->numIndices * sizeof(unsigned int));
     sharedMesh->numIndxs = static_cast<GLsizei>(triMesh->numIndices);
 

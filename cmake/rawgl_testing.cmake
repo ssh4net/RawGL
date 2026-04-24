@@ -42,6 +42,7 @@ if(BUILD_TESTING)
     endfunction()
 
     rawgl_add_cpp_smoke_test(rawgl_core_inspect_smoke tests/rawgl_core_inspect_smoke.cpp)
+    rawgl_add_cpp_smoke_test(rawgl_core_mesh_inspect_smoke tests/rawgl_core_mesh_inspect_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_core_graph_smoke tests/rawgl_core_graph_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_core_default_vertex_smoke tests/rawgl_core_default_vertex_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_core_system_uniform_reject_smoke tests/rawgl_core_system_uniform_reject_smoke.cpp)
@@ -55,6 +56,21 @@ if(BUILD_TESTING)
     rawgl_add_cpp_smoke_test(rawgl_core_transient_output_reuse_smoke tests/rawgl_core_transient_output_reuse_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_io_workflow_smoke tests/rawgl_io_workflow_smoke.cpp)
     rawgl_add_cpp_io_smoke_test(rawgl_io_host_image_smoke tests/rawgl_io_host_image_smoke.cpp)
+    if(TARGET PNG::PNG AND TARGET TIFF::TIFF AND TARGET OpenEXR::OpenEXR)
+        rawgl_add_cpp_io_smoke_test(rawgl_io_native_codec_errors_smoke tests/rawgl_io_native_codec_errors_smoke.cpp)
+        target_include_directories(rawgl_io_native_codec_errors_smoke PRIVATE
+            "${CMAKE_SOURCE_DIR}/src/io")
+    endif()
+    if(TARGET PNG::PNG AND TARGET JPEG::JPEG AND TARGET OpenEXR::OpenEXR)
+        rawgl_add_cpp_io_smoke_test(rawgl_io_native_codecs_smoke tests/rawgl_io_native_codecs_smoke.cpp)
+        target_include_directories(rawgl_io_native_codecs_smoke PRIVATE
+            "${CMAKE_SOURCE_DIR}/src/io")
+    endif()
+    if(TARGET TIFF::TIFF)
+        rawgl_add_cpp_io_smoke_test(rawgl_io_tiff_native_smoke tests/rawgl_io_tiff_native_smoke.cpp)
+        target_include_directories(rawgl_io_tiff_native_smoke PRIVATE
+            "${CMAKE_SOURCE_DIR}/src/io")
+    endif()
     if(RAWGL_HAS_OPENMETA)
         rawgl_add_cpp_io_smoke_test(rawgl_io_metadata_smoke tests/rawgl_io_metadata_smoke.cpp)
     endif()
@@ -63,6 +79,11 @@ if(BUILD_TESTING)
     add_test(NAME rawgl_core_inspect_smoke
         COMMAND rawgl_core_inspect_smoke)
     set_tests_properties(rawgl_core_inspect_smoke PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+    add_test(NAME rawgl_core_mesh_inspect_smoke
+        COMMAND rawgl_core_mesh_inspect_smoke)
+    set_tests_properties(rawgl_core_mesh_inspect_smoke PROPERTIES
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
     add_test(NAME rawgl_core_graph_smoke
@@ -125,6 +146,27 @@ if(BUILD_TESTING)
     set_tests_properties(rawgl_io_host_image_smoke PROPERTIES
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+    if(TARGET PNG::PNG AND TARGET TIFF::TIFF AND TARGET OpenEXR::OpenEXR)
+        add_test(NAME rawgl_io_native_codec_errors_smoke
+            COMMAND rawgl_io_native_codec_errors_smoke)
+        set_tests_properties(rawgl_io_native_codec_errors_smoke PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    endif()
+
+    if(TARGET PNG::PNG AND TARGET JPEG::JPEG AND TARGET OpenEXR::OpenEXR)
+        add_test(NAME rawgl_io_native_codecs_smoke
+            COMMAND rawgl_io_native_codecs_smoke)
+        set_tests_properties(rawgl_io_native_codecs_smoke PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    endif()
+
+    if(TARGET TIFF::TIFF)
+        add_test(NAME rawgl_io_tiff_native_smoke
+            COMMAND rawgl_io_tiff_native_smoke)
+        set_tests_properties(rawgl_io_tiff_native_smoke PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    endif()
+
     add_test(NAME rawgl_io_workflow_smoke
         COMMAND rawgl_io_workflow_smoke)
     set_tests_properties(rawgl_io_workflow_smoke PROPERTIES
@@ -180,6 +222,7 @@ if(BUILD_TESTING)
         rawgl_add_script_test(rawgl_invalid_vertfrag_arity test_invalid_vertfrag_arity)
         rawgl_add_script_test(rawgl_mesh_ao_sponge test_mesh_ao_sponge)
         rawgl_add_script_test(rawgl_mesh_cli_order test_mesh_cli_order)
+        rawgl_add_script_test(rawgl_mesh_obj_material_smoke test_mesh_obj_material_smoke)
         rawgl_add_script_test(rawgl_mesh_obj_smoke test_mesh_obj_smoke)
         rawgl_add_script_test(rawgl_mesh_ply_smoke test_mesh_ply_smoke)
         rawgl_add_script_test(rawgl_missing_input_uniform test_missing_input_uniform)

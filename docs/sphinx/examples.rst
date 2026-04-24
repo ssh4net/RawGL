@@ -225,8 +225,13 @@ For a larger OBJ import, run
 ``examples/Mesh/OBJ/RenderObjPerspectiveBaseColor.py``. The file in that
 directory uses quads, mesh normals, named groups, and two U-coordinate tiles.
 The example sets ``tris`` to ``false`` so RawGL triangulates the faces while
-loading the mesh. It uses the first U tile for the bunny base-color texture and
-the second U tile for the skateboard texture.
+loading the mesh. It reads OBJ material IDs into vertex attribute location 4,
+then chooses the bunny or skateboard base-color texture from that material ID.
+RawGL derives these IDs from ``usemtl`` names in the OBJ file and does not load
+the MTL file for this path.
+
+The script calls ``rawgl.inspect_mesh_file(...)`` before building the workflow
+to read bounds, group spans, UV range, and the material-name to ID mapping.
 
 .. image:: _static/examples/obj_perspective_basecolor_640.jpg
    :alt: Perspective OBJ render using two base-color texture tiles

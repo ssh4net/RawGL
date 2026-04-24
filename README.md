@@ -3,18 +3,19 @@ Command line image processing tool using OpenGL GLSL shaders.
  
 ## Features
 
-**Image import/export use OpenimageIO**\
-Support all image file formats that support by OpenimageIO for import:
-* Camera RAWs (oiio compiled with libraw plugin)
-* OpenEXR
-* TIFF
-* PNG
-* JPEG
-* JPEG-2000 (oiio compiled with openjpeg plugin)
-* etc.\
-Export for this moment limited to JPG, PNG, TIFF, TGA, HDR, EXR
+**Image import/export uses native backends for common production formats, with OpenImageIO fallback for formats that are not native yet.**
+Native paths currently cover:
+* JPEG through libjpeg-turbo/libjpeg
+* PNG through libpng
+* TIFF through libtiff, including tiled TIFF and BigTIFF
+* OpenEXR through OpenEXR, including tiled EXR
 
-**On image import and export allow define OpenimageIO reading/writing options like:**
+OpenImageIO remains available as the fallback path for formats that have not
+moved to native backends yet, such as camera RAW through OIIO's LibRaw plugin,
+JPEG-2000 through OIIO's OpenJPEG plugin, TGA, HDR, WebP, and other OIIO
+plugins available in the dependency build.
+
+**On image import and export allow define codec reading/writing options like:**
 * oiio:ColorSpace ACES
 * oiio:RawColor 1
 * oiio:UnassociatedAlpha
@@ -27,7 +28,9 @@ Export for this moment limited to JPG, PNG, TIFF, TGA, HDR, EXR
 * raw:ColorSpace ProPhoto-linear
 * raw:Demosaic AHD-Mod
 * etc.\
-More about possible OpenimageIO options read there:
+Native backends support the RawGL options listed above for their format family.
+OIIO fallback formats still use OIIO/plugin attributes. More about possible
+OpenImageIO options read there:
 https://openimageio.readthedocs.io/en/latest/builtinplugins.html
 https://openimageio.readthedocs.io/en/latest/stdmetadata.html#sec-metadata-color
 https://openimageio.readthedocs.io/en/latest/oiiotool.html
@@ -167,6 +170,11 @@ rawgl.make_host_image(array)
 rawgl.host_image_to_array(host_image)
 ```
 
+Use `rawgl.inspect_mesh_file(path)` when a script needs mesh facts before it
+builds a workflow. The current detailed path is OBJ-focused and reports source
+counts, bounds, UV range, group spans, and `usemtl` material IDs without loading
+MTL files.
+
 For more explicit control, the lower-level nanobind façade remains available under:
 
 ```python
@@ -260,6 +268,8 @@ Documentation
 | | **true (default)** - file already contains triangles |
 | | false - triangulate polygon faces during mesh load |
 | | Supported file formats: PLY and OBJ |
+| | OBJ `usemtl` material-name IDs are available in shaders as `layout(location = 4) in uint material_id;` |
+| | MTL files are ignored on this path. Bind textures explicitly from the workflow/script. |
 | | **rend:** |
 | | **tr (default)** - GL_TRIANGLES: render as polygons |
 | | ln - GL_LINES: render as lines |
@@ -310,7 +320,7 @@ Documentation
 | | --in UniformVec3 0.15 0.25 0.165 |
 | | --in UniformMatx 0.1 0.2 0.3  0.4 0.5 0.6  0.7 0.8 0.9 |
 | |
-| -t [ --in_attr ] arg | OpenImageIO/plugin attribute value |
+| -t [ --in_attr ] arg | Codec/plugin input attribute value |
 | | (e.g.: --in_attr oiio:colorspace sRGB). |
 | | **Some used defaults** |
 | | oiio:ColorSpace Linear |
@@ -336,10 +346,11 @@ Documentation
 | | r16, rg16, rgb16, rgba16, |
 | | r16f, rg16f, rgb16f, rgba16f, |
 | | r32f, rg32f, rgb32f, rgba32f |
-| | If format not support this bit depth OpenImageIO automatically convert to supported bit depth. |
+| | File writers convert this host format to the requested `--out_bits` when the target codec supports it. |
 | |
-| -r [ --out_attr ] arg | OpenImageIO/plugin attribute value |
-| | (e.g.: --out_attr oiio:colorspace sRGB). |
+| -r [ --out_attr ] arg | Codec/plugin output attribute value |
+| | (e.g.: --out_attr tiff:compression zip). |
+| | Native output families use native attributes directly. Invalid native JPEG, PNG, TIFF, or OpenEXR writer options fail instead of silently falling back to OpenImageIO. |
 | |
 | -n [ --out_channels ] arg | # of channels in output image |
 | |

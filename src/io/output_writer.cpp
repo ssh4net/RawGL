@@ -8,11 +8,12 @@
 
 namespace rawgl::io {
 
-void
-save_image_output(const OutputWriteRequest& request)
+bool
+save_image_output(const OutputWriteRequest& request, std::string& errorMessage)
 {
     if (request.path.empty() || request.image == nullptr) {
-        return;
+        errorMessage = "invalid image output request";
+        return false;
     }
 
     const ImageEncodeSettings settings = resolve_image_encode_settings(request.path, request.bits);
@@ -21,7 +22,6 @@ save_image_output(const OutputWriteRequest& request)
                      << ", using the closest supported format instead.";
     }
 
-    std::string errorMessage;
     if (!encode_image_file(request.path,
                            request.attributes,
                            request.alphaChannel,
@@ -29,8 +29,10 @@ save_image_output(const OutputWriteRequest& request)
                            settings,
                            errorMessage)) {
         LOG(error) << errorMessage;
-        return;
+        return false;
     }
+
+    return true;
 }
 
 }  // namespace rawgl::io

@@ -23,6 +23,14 @@ except ImportError:  # pragma: no cover - optional dependency
 __version__ = getattr(_impl, "__version__", "0.0.0")
 advanced = _impl
 
+if hasattr(_impl, "inspect_mesh_file"):
+    _inspect_mesh_file_impl = _impl.inspect_mesh_file
+
+    def inspect_mesh_file(path):
+        """Inspect a mesh file without compiling or executing a workflow."""
+
+        return _inspect_mesh_file_impl(str(path))
+
 _BUILTIN_FULLSCREEN_VERTEX_SHADER = """#version 450 core
 layout(location = 0) in vec2 pos;
 layout(location = 1) in vec2 uv_co;

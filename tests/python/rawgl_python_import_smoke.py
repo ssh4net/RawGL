@@ -30,6 +30,11 @@ def main() -> int:
             return fail("core binding mode does not expose IoRuntime")
         if not hasattr(rawgl, "BatchRunner"):
             return fail("core binding mode does not expose BatchRunner")
+        if not hasattr(rawgl, "inspect_mesh_file"):
+            return fail("core binding mode does not expose inspect_mesh_file()")
+        mesh_info = rawgl.inspect_mesh_file("tests/inputs/fullscreen_triangle_material.obj")
+        if not mesh_info.success:
+            return fail(f"mesh inspection failed: {mesh_info.error_message}")
         if not hasattr(rawgl, "MetadataReadRequest"):
             return fail("core binding mode does not expose MetadataReadRequest")
         if not hasattr(rawgl, "MetadataDocument"):

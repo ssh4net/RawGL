@@ -21,6 +21,7 @@ The normal path is the high-level helper layer:
 - ``rawgl.prepare_image(...)``
 - ``rawgl.prepare_render(...)``
 - ``rawgl.prepare_compute(...)``
+- ``rawgl.inspect_mesh_file(...)``
 
 Use the explicit ``rawgl.io`` helper surface when the workflow starts or ends
 with files:
@@ -154,6 +155,24 @@ Typical inspection shape:
        name_style=rawgl.MetadataNameStyle.oiio,
        name_policy=rawgl.MetadataNamePolicy.exif_tool_alias,
    )
+
+Mesh inspection
+---------------
+
+Use ``rawgl.inspect_mesh_file(...)`` when a script needs mesh facts before it
+builds a workflow. The current detailed path is OBJ-focused and reports source
+counts, bounds, UV range, group spans, and ``usemtl`` material IDs without
+loading any MTL files.
+
+.. code-block:: python
+
+   import rawgl
+
+   mesh_info = rawgl.inspect_mesh_file("model.obj")
+   if not mesh_info.success:
+       raise RuntimeError(mesh_info.error_message)
+
+   material_ids = {material.name: material.id for material in mesh_info.materials}
 
 Prepared workflows
 ------------------

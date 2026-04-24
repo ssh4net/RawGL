@@ -19,6 +19,7 @@ struct TriMesh {
     float* normal        = nullptr;
     float* uv            = nullptr;
     unsigned char* color = nullptr;
+    uint32_t* materialId = nullptr;
     uint32_t numVerts    = 0;
 
     uint32_t* indices   = nullptr;

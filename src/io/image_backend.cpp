@@ -70,10 +70,30 @@ static ImageBackendKind
 select_decode_backend(const ImageCodecFamily codec)
 {
     switch (codec) {
-    case ImageCodecFamily::Jpeg: return ImageBackendKind::NativeJpegTurbo;
-    case ImageCodecFamily::Png: return ImageBackendKind::NativePng;
-    case ImageCodecFamily::Tiff: return ImageBackendKind::NativeTiff;
-    case ImageCodecFamily::Exr: return ImageBackendKind::NativeOpenExr;
+    case ImageCodecFamily::Jpeg:
+#if defined(RAWGL_HAS_LIBJPEG)
+        return ImageBackendKind::NativeJpegTurbo;
+#else
+        return ImageBackendKind::OiioFallback;
+#endif
+    case ImageCodecFamily::Png:
+#if defined(RAWGL_HAS_LIBPNG)
+        return ImageBackendKind::NativePng;
+#else
+        return ImageBackendKind::OiioFallback;
+#endif
+    case ImageCodecFamily::Tiff:
+#if defined(RAWGL_HAS_LIBTIFF)
+        return ImageBackendKind::NativeTiff;
+#else
+        return ImageBackendKind::OiioFallback;
+#endif
+    case ImageCodecFamily::Exr:
+#if defined(RAWGL_HAS_OPENEXR)
+        return ImageBackendKind::NativeOpenExr;
+#else
+        return ImageBackendKind::OiioFallback;
+#endif
     case ImageCodecFamily::Unknown:
     case ImageCodecFamily::Bmp:
     case ImageCodecFamily::Tga:
@@ -89,10 +109,30 @@ static ImageBackendKind
 select_encode_backend(const ImageCodecFamily codec)
 {
     switch (codec) {
-    case ImageCodecFamily::Jpeg: return ImageBackendKind::NativeJpegTurbo;
-    case ImageCodecFamily::Png: return ImageBackendKind::NativePng;
-    case ImageCodecFamily::Tiff: return ImageBackendKind::NativeTiff;
-    case ImageCodecFamily::Exr: return ImageBackendKind::NativeOpenExr;
+    case ImageCodecFamily::Jpeg:
+#if defined(RAWGL_HAS_LIBJPEG)
+        return ImageBackendKind::NativeJpegTurbo;
+#else
+        return ImageBackendKind::OiioFallback;
+#endif
+    case ImageCodecFamily::Png:
+#if defined(RAWGL_HAS_LIBPNG)
+        return ImageBackendKind::NativePng;
+#else
+        return ImageBackendKind::OiioFallback;
+#endif
+    case ImageCodecFamily::Tiff:
+#if defined(RAWGL_HAS_LIBTIFF)
+        return ImageBackendKind::NativeTiff;
+#else
+        return ImageBackendKind::OiioFallback;
+#endif
+    case ImageCodecFamily::Exr:
+#if defined(RAWGL_HAS_OPENEXR)
+        return ImageBackendKind::NativeOpenExr;
+#else
+        return ImageBackendKind::OiioFallback;
+#endif
     case ImageCodecFamily::Unknown:
     case ImageCodecFamily::Bmp:
     case ImageCodecFamily::Tga:
@@ -102,6 +142,20 @@ select_encode_backend(const ImageCodecFamily codec)
     default:
         return ImageBackendKind::OiioFallback;
     }
+}
+
+static const char*
+image_backend_kind_name(const ImageBackendKind backend)
+{
+    switch (backend) {
+    case ImageBackendKind::OiioFallback: return "OpenImageIO";
+    case ImageBackendKind::NativeJpegTurbo: return "native JPEG";
+    case ImageBackendKind::NativePng: return "native PNG";
+    case ImageBackendKind::NativeTiff: return "native TIFF";
+    case ImageBackendKind::NativeOpenExr: return "native OpenEXR";
+    }
+
+    return "unknown";
 }
 
 static ImageComponentType
@@ -323,6 +377,7 @@ DecodedImageData
 decode_image_file(const std::string& path, const std::map<std::string, std::string>& attributes)
 {
     const ImageBackendKind backend = select_decode_backend(get_image_codec_family(path));
+    LOG(debug) << "Image decode backend selected: " << image_backend_kind_name(backend) << " for " << path;
 
     switch (backend) {
     case ImageBackendKind::OiioFallback: return decode_image_file_oiio(path, attributes);
@@ -385,6 +440,7 @@ encode_image_file(const std::string& path,
                   std::string& errorMessage)
 {
     const ImageBackendKind backend = select_encode_backend(settings.codec);
+    LOG(debug) << "Image encode backend selected: " << image_backend_kind_name(backend) << " for " << path;
 
     switch (backend) {
     case ImageBackendKind::OiioFallback:
@@ -394,32 +450,32 @@ encode_image_file(const std::string& path,
         if (encode_jpg_file(path, attributes, alphaChannel, image, nativeErrorMessage)) {
             return true;
         }
-        LOG(warning) << "Native JPEG write failed for " << path << ", falling back to OIIO: " << nativeErrorMessage;
-        return encode_image_file_oiio(path, attributes, alphaChannel, image, settings, errorMessage);
+        errorMessage = nativeErrorMessage.empty() ? "native JPEG write failed" : nativeErrorMessage;
+        return false;
     }
     case ImageBackendKind::NativePng: {
         std::string nativeErrorMessage;
         if (encode_png_file(path, attributes, alphaChannel, image, settings, nativeErrorMessage)) {
             return true;
         }
-        LOG(warning) << "Native PNG write failed for " << path << ", falling back to OIIO: " << nativeErrorMessage;
-        return encode_image_file_oiio(path, attributes, alphaChannel, image, settings, errorMessage);
+        errorMessage = nativeErrorMessage.empty() ? "native PNG write failed" : nativeErrorMessage;
+        return false;
     }
     case ImageBackendKind::NativeTiff: {
         std::string nativeErrorMessage;
         if (encode_tiff_file(path, attributes, alphaChannel, image, settings, nativeErrorMessage)) {
             return true;
         }
-        LOG(warning) << "Native TIFF write failed for " << path << ", falling back to OIIO: " << nativeErrorMessage;
-        return encode_image_file_oiio(path, attributes, alphaChannel, image, settings, errorMessage);
+        errorMessage = nativeErrorMessage.empty() ? "native TIFF write failed" : nativeErrorMessage;
+        return false;
     }
     case ImageBackendKind::NativeOpenExr: {
         std::string nativeErrorMessage;
         if (encode_exr_file(path, attributes, alphaChannel, image, settings, nativeErrorMessage)) {
             return true;
         }
-        LOG(warning) << "Native OpenEXR write failed for " << path << ", falling back to OIIO: " << nativeErrorMessage;
-        return encode_image_file_oiio(path, attributes, alphaChannel, image, settings, errorMessage);
+        errorMessage = nativeErrorMessage.empty() ? "native OpenEXR write failed" : nativeErrorMessage;
+        return false;
     }
     default:
         return encode_image_file_oiio(path, attributes, alphaChannel, image, settings, errorMessage);

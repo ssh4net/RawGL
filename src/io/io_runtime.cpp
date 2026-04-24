@@ -24,10 +24,10 @@ IoRuntimeService::loadHostImageData(const std::string& path,
     return rawgl::io::load_host_image_data(path, attributes);
 }
 
-void
-IoRuntimeService::saveImageOutput(const OutputWriteRequest& request) const
+bool
+IoRuntimeService::saveImageOutput(const OutputWriteRequest& request, std::string& errorMessage) const
 {
-    rawgl::io::save_image_output(request);
+    return rawgl::io::save_image_output(request, errorMessage);
 }
 
 }  // namespace rawgl::io

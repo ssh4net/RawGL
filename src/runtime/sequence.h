@@ -130,9 +130,10 @@ struct MeshInput {
         float* pTexts         = nullptr;
         float* pNorms         = nullptr;
         unsigned char* pColrs = nullptr;
+        uint32_t* pMaterialIds = nullptr;
         uint32_t* pIndxs      = nullptr;
 
-        GLsizei vrtSize, texSize, nrmSize, clrSize, idxSize, numIndxs;
+        GLsizei vrtSize, texSize, nrmSize, clrSize, matSize, idxSize, numIndxs;
     };
     Mesh mesh;
 
@@ -142,6 +143,7 @@ struct MeshInput {
         GLuint tboId = 0;
         GLuint nboId = 0;
         GLuint cboId = 0;
+        GLuint mboId = 0;
         GLuint iboId = 0;
     };
     VertexBuffer VBO;
@@ -170,7 +172,7 @@ struct MeshInput {
     static const std::vector<MeshParm> MESH_PARM_ARR;
 
     MeshInput()
-        : mesh { true, true, GL_TRIANGLES, "", nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, 0, 0, 0, 0 }
+        : mesh { true, true, GL_TRIANGLES, "", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, 0, 0, 0, 0, 0 }
         , VBO()
     {
     }
@@ -368,12 +370,14 @@ struct SequenceSharedMeshData {
     GLsizei texSize = 0;
     GLsizei nrmSize = 0;
     GLsizei clrSize = 0;
+    GLsizei matSize = 0;
     GLsizei idxSize = 0;
     GLsizei numIndxs = 0;
     std::vector<float> verts;
     std::vector<float> texcoords;
     std::vector<float> normals;
     std::vector<unsigned char> colors;
+    std::vector<uint32_t> materialIds;
     std::vector<uint32_t> indices;
 };
 

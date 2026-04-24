@@ -56,7 +56,9 @@ save_image_file_impl(const ImageSaveRequest& request)
         writeRequest.alphaChannel = request.alphaChannel;
         writeRequest.bits         = request.bits;
         writeRequest.image        = &request.image;
-        save_image_output(writeRequest);
+        if (!save_image_output(writeRequest, result.errorMessage)) {
+            return result;
+        }
         result.success = true;
     } catch (const std::exception& exception) {
         result.errorMessage = exception.what();

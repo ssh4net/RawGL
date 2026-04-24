@@ -296,6 +296,53 @@ NB_MODULE(_rawgl, module)
         .def_rw("system_uniforms", &rawgl::ShaderInterface::systemUniforms)
         .def_rw("buffer_variables", &rawgl::ShaderInterface::bufferVariables);
 
+    nb::class_<rawgl::MeshInspectionRequest>(module, "MeshInspectionRequest")
+        .def(nb::init<>())
+        .def_rw("path", &rawgl::MeshInspectionRequest::path);
+
+    nb::class_<rawgl::MeshMaterialInfo>(module, "MeshMaterialInfo")
+        .def(nb::init<>())
+        .def_rw("id", &rawgl::MeshMaterialInfo::id)
+        .def_rw("name", &rawgl::MeshMaterialInfo::name)
+        .def_rw("face_count", &rawgl::MeshMaterialInfo::faceCount);
+
+    nb::class_<rawgl::MeshGroupInfo>(module, "MeshGroupInfo")
+        .def(nb::init<>())
+        .def_rw("name", &rawgl::MeshGroupInfo::name)
+        .def_rw("first_face_index", &rawgl::MeshGroupInfo::firstFaceIndex)
+        .def_rw("face_count", &rawgl::MeshGroupInfo::faceCount);
+
+    nb::class_<rawgl::MeshInspectionResult>(module, "MeshInspectionResult")
+        .def(nb::init<>())
+        .def_rw("success", &rawgl::MeshInspectionResult::success)
+        .def_rw("error_message", &rawgl::MeshInspectionResult::errorMessage)
+        .def_rw("path", &rawgl::MeshInspectionResult::path)
+        .def_rw("vertex_count", &rawgl::MeshInspectionResult::vertexCount)
+        .def_rw("texcoord_count", &rawgl::MeshInspectionResult::texcoordCount)
+        .def_rw("normal_count", &rawgl::MeshInspectionResult::normalCount)
+        .def_rw("face_count", &rawgl::MeshInspectionResult::faceCount)
+        .def_rw("triangle_face_count", &rawgl::MeshInspectionResult::triangleFaceCount)
+        .def_rw("quad_face_count", &rawgl::MeshInspectionResult::quadFaceCount)
+        .def_rw("ngon_face_count", &rawgl::MeshInspectionResult::ngonFaceCount)
+        .def_rw("generated_triangle_count", &rawgl::MeshInspectionResult::generatedTriangleCount)
+        .def_rw("has_bounds", &rawgl::MeshInspectionResult::hasBounds)
+        .def_rw("has_uv_range", &rawgl::MeshInspectionResult::hasUvRange)
+        .def_rw("bounds_min", &rawgl::MeshInspectionResult::boundsMin)
+        .def_rw("bounds_max", &rawgl::MeshInspectionResult::boundsMax)
+        .def_rw("uv_min", &rawgl::MeshInspectionResult::uvMin)
+        .def_rw("uv_max", &rawgl::MeshInspectionResult::uvMax)
+        .def_rw("materials", &rawgl::MeshInspectionResult::materials)
+        .def_rw("groups", &rawgl::MeshInspectionResult::groups);
+
+    module.def("inspect_mesh_file",
+               [](const std::string& path) {
+                   rawgl::MeshInspectionRequest request;
+                   request.path = path;
+                   return rawgl::InspectMeshFile(request);
+               },
+               nb::arg("path"),
+               "Inspect a mesh file without compiling or executing a workflow.");
+
     nb::class_<rawgl::InputBinding>(module, "InputBinding")
         .def(nb::init<>())
         .def_rw("name", &rawgl::InputBinding::name)

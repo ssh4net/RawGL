@@ -62,6 +62,8 @@ static const float RAWGL_DEFAULT_NORMALS[] = { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0
 static const unsigned char RAWGL_DEFAULT_COLORS[] = { 255, 255, 255, 255, 255, 255, 255, 255,
                                                       255, 255, 255, 255, 255, 255, 255, 255 };
 
+static const uint32_t RAWGL_DEFAULT_MATERIAL_IDS[] = { 0u, 0u, 0u, 0u };
+
 static const unsigned int RAWGL_DEFAULT_INDICES[] = { 0, 1, 2, 0, 2, 3 };
 
 static const SequenceExecutionInputOverride*
@@ -189,6 +191,7 @@ clone_shared_mesh_data(MeshInput::Mesh& mesh, const SequenceSharedMeshData& shar
     mesh.pTexts = nullptr;
     mesh.pNorms = nullptr;
     mesh.pColrs = nullptr;
+    mesh.pMaterialIds = nullptr;
     mesh.pIndxs = nullptr;
 
     if (!sharedMesh.verts.empty()) {
@@ -207,6 +210,10 @@ clone_shared_mesh_data(MeshInput::Mesh& mesh, const SequenceSharedMeshData& shar
         mesh.pColrs = new unsigned char[sharedMesh.colors.size()];
         std::memcpy(mesh.pColrs, sharedMesh.colors.data(), sharedMesh.colors.size() * sizeof(unsigned char));
     }
+    if (!sharedMesh.materialIds.empty()) {
+        mesh.pMaterialIds = new uint32_t[sharedMesh.materialIds.size()];
+        std::memcpy(mesh.pMaterialIds, sharedMesh.materialIds.data(), sharedMesh.materialIds.size() * sizeof(uint32_t));
+    }
     if (!sharedMesh.indices.empty()) {
         mesh.pIndxs = new uint32_t[sharedMesh.indices.size()];
         std::memcpy(mesh.pIndxs, sharedMesh.indices.data(), sharedMesh.indices.size() * sizeof(uint32_t));
@@ -216,6 +223,7 @@ clone_shared_mesh_data(MeshInput::Mesh& mesh, const SequenceSharedMeshData& shar
     mesh.texSize  = sharedMesh.texSize;
     mesh.nrmSize  = sharedMesh.nrmSize;
     mesh.clrSize  = sharedMesh.clrSize;
+    mesh.matSize  = sharedMesh.matSize;
     mesh.idxSize  = sharedMesh.idxSize;
     mesh.numIndxs = sharedMesh.numIndxs;
 }
@@ -227,6 +235,7 @@ apply_shared_mesh_metadata(MeshInput::Mesh& mesh, const SequenceSharedMeshData& 
     mesh.texSize  = sharedMesh.texSize;
     mesh.nrmSize  = sharedMesh.nrmSize;
     mesh.clrSize  = sharedMesh.clrSize;
+    mesh.matSize  = sharedMesh.matSize;
     mesh.idxSize  = sharedMesh.idxSize;
     mesh.numIndxs = sharedMesh.numIndxs;
 }
@@ -276,6 +285,11 @@ configure_vertex_array(GLuint vaoId, const MeshInput::VertexBuffer& vertexBuffer
     GLCall(glVertexArrayAttribBinding(vaoId, 3, 3));
     GLCall(glEnableVertexArrayAttrib(vaoId, 3));
 
+    GLCall(glVertexArrayVertexBuffer(vaoId, 4, vertexBuffer.mboId, 0, sizeof(uint32_t)));
+    GLCall(glVertexArrayAttribIFormat(vaoId, 4, 1, GL_UNSIGNED_INT, 0));
+    GLCall(glVertexArrayAttribBinding(vaoId, 4, 4));
+    GLCall(glEnableVertexArrayAttrib(vaoId, 4));
+
     GLCall(glVertexArrayElementBuffer(vaoId, vertexBuffer.iboId));
 }
 
@@ -297,6 +311,9 @@ delete_vertex_buffers(MeshInput::VertexBuffer& vertexBuffer)
     if (vertexBuffer.cboId) {
         glDeleteBuffers(1, &vertexBuffer.cboId);
     }
+    if (vertexBuffer.mboId) {
+        glDeleteBuffers(1, &vertexBuffer.mboId);
+    }
     if (vertexBuffer.iboId) {
         glDeleteBuffers(1, &vertexBuffer.iboId);
     }
@@ -314,11 +331,13 @@ assign_default_mesh_data(MeshInput::Mesh& mesh)
     mesh.pTexts    = const_cast<float*>(RAWGL_DEFAULT_TEXCOORDS);
     mesh.pNorms    = const_cast<float*>(RAWGL_DEFAULT_NORMALS);
     mesh.pColrs    = const_cast<unsigned char*>(RAWGL_DEFAULT_COLORS);
+    mesh.pMaterialIds = const_cast<uint32_t*>(RAWGL_DEFAULT_MATERIAL_IDS);
     mesh.pIndxs    = const_cast<uint32_t*>(RAWGL_DEFAULT_INDICES);
     mesh.vrtSize   = static_cast<GLsizei>(sizeof(RAWGL_DEFAULT_VERTS));
     mesh.texSize   = static_cast<GLsizei>(sizeof(RAWGL_DEFAULT_TEXCOORDS));
     mesh.nrmSize   = static_cast<GLsizei>(sizeof(RAWGL_DEFAULT_NORMALS));
     mesh.clrSize   = static_cast<GLsizei>(sizeof(RAWGL_DEFAULT_COLORS));
+    mesh.matSize   = static_cast<GLsizei>(sizeof(RAWGL_DEFAULT_MATERIAL_IDS));
     mesh.idxSize   = static_cast<GLsizei>(sizeof(RAWGL_DEFAULT_INDICES));
     mesh.numIndxs  = static_cast<GLsizei>(sizeof(RAWGL_DEFAULT_INDICES) / sizeof(RAWGL_DEFAULT_INDICES[0]));
 }
@@ -343,18 +362,25 @@ load_mesh_data(MeshInput::Mesh& mesh)
     mesh.pTexts   = trimesh->uv;
     mesh.pNorms   = trimesh->normal;
     mesh.pColrs   = trimesh->color;
+    mesh.pMaterialIds = trimesh->materialId;
     mesh.pIndxs   = trimesh->indices;
     mesh.vrtSize  = static_cast<GLsizei>(trimesh->numVerts * 3 * sizeof(float));
     mesh.texSize  = static_cast<GLsizei>(trimesh->numVerts * 2 * sizeof(float));
     mesh.nrmSize  = static_cast<GLsizei>(trimesh->numVerts * 3 * sizeof(float));
     mesh.clrSize  = static_cast<GLsizei>(trimesh->numVerts * 4 * sizeof(unsigned char));
+    mesh.matSize  = static_cast<GLsizei>(trimesh->numVerts * sizeof(uint32_t));
     mesh.idxSize  = static_cast<GLsizei>(trimesh->numIndices * sizeof(unsigned int));
     mesh.numIndxs = static_cast<GLsizei>(trimesh->numIndices);
+
+    if (mesh.pMaterialIds == nullptr) {
+        mesh.pMaterialIds = new uint32_t[trimesh->numVerts]();
+    }
 
     trimesh->pos     = nullptr;
     trimesh->uv      = nullptr;
     trimesh->normal  = nullptr;
     trimesh->color   = nullptr;
+    trimesh->materialId = nullptr;
     trimesh->indices = nullptr;
     delete trimesh;
 
@@ -372,12 +398,14 @@ release_mesh_cpu_data(MeshInput::Mesh& mesh)
     delete[] mesh.pTexts;
     delete[] mesh.pNorms;
     delete[] mesh.pColrs;
+    delete[] mesh.pMaterialIds;
     delete[] mesh.pIndxs;
 
     mesh.pVerts = nullptr;
     mesh.pTexts = nullptr;
     mesh.pNorms = nullptr;
     mesh.pColrs = nullptr;
+    mesh.pMaterialIds = nullptr;
     mesh.pIndxs = nullptr;
 }
 
@@ -395,6 +423,12 @@ upload_mesh_buffers_only(const MeshInput::Mesh& mesh, MeshInput::VertexBuffer& v
 
     GLCall(glCreateBuffers(1, &vertexBuffer.cboId));
     GLCall(glNamedBufferData(vertexBuffer.cboId, mesh.clrSize, static_cast<const void*>(mesh.pColrs), GL_STATIC_DRAW));
+
+    GLCall(glCreateBuffers(1, &vertexBuffer.mboId));
+    GLCall(glNamedBufferData(vertexBuffer.mboId,
+                             mesh.matSize,
+                             static_cast<const void*>(mesh.pMaterialIds),
+                             GL_STATIC_DRAW));
 
     GLCall(glCreateBuffers(1, &vertexBuffer.iboId));
     GLCall(glNamedBufferData(vertexBuffer.iboId, mesh.idxSize, static_cast<const void*>(mesh.pIndxs), GL_STATIC_DRAW));
@@ -433,11 +467,13 @@ Sequence_CreateSharedGpuMesh(const SequenceSharedMeshData& sharedMesh)
     mesh.pTexts    = const_cast<float*>(sharedMesh.texcoords.data());
     mesh.pNorms    = const_cast<float*>(sharedMesh.normals.data());
     mesh.pColrs    = const_cast<unsigned char*>(sharedMesh.colors.data());
+    mesh.pMaterialIds = const_cast<uint32_t*>(sharedMesh.materialIds.data());
     mesh.pIndxs    = const_cast<uint32_t*>(sharedMesh.indices.data());
     mesh.vrtSize   = sharedMesh.vrtSize;
     mesh.texSize   = sharedMesh.texSize;
     mesh.nrmSize   = sharedMesh.nrmSize;
     mesh.clrSize   = sharedMesh.clrSize;
+    mesh.matSize   = sharedMesh.matSize;
     mesh.idxSize   = sharedMesh.idxSize;
     mesh.numIndxs  = sharedMesh.numIndxs;
 
