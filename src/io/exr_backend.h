@@ -21,4 +21,9 @@ encode_exr_file(const std::string& path,
                 const ImageEncodeSettings& settings,
                 std::string& errorMessage);
 
+bool
+extract_exr_reencode_attributes(const std::string& path,
+                                std::map<std::string, std::string>& attributes,
+                                std::string& errorMessage);
+
 }  // namespace rawgl::io

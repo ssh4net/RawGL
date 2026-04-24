@@ -22,6 +22,7 @@
 #include <OpenEXR/ImfHeader.h>
 #include <OpenEXR/ImfInputFile.h>
 #include <OpenEXR/ImfOutputFile.h>
+#include <OpenEXR/ImfStringAttribute.h>
 #include <OpenEXR/ImfTileDescription.h>
 #include <OpenEXR/ImfTiledInputFile.h>
 #include <OpenEXR/ImfTiledOutputFile.h>
@@ -31,6 +32,8 @@ namespace rawgl::io {
 namespace {
 
 #if defined(RAWGL_HAS_OPENEXR)
+static constexpr const char* kExrStringAttributePrefix = "openexr:attribute:string:";
+
 static char
 to_lower_ascii(const unsigned char c)
 {
@@ -97,6 +100,31 @@ apply_exr_writer_attributes(OPENEXR_IMF_NAMESPACE::Header& header,
     const std::string* dwaLevel = find_attribute_value(attributes, "openexr:dwaCompressionLevel");
     if (dwaLevel) {
         header.dwaCompressionLevel() = static_cast<float>(std::atof(dwaLevel->c_str()));
+    }
+
+    const std::string* lineOrderValue = find_attribute_value(attributes, "openexr:lineOrder");
+    if (lineOrderValue) {
+        const std::string normalized = to_lower_copy(*lineOrderValue);
+        if (normalized == "increasing_y") {
+            header.lineOrder() = OPENEXR_IMF_NAMESPACE::INCREASING_Y;
+        } else if (normalized == "decreasing_y") {
+            header.lineOrder() = OPENEXR_IMF_NAMESPACE::DECREASING_Y;
+        } else if (normalized == "random_y") {
+            header.lineOrder() = OPENEXR_IMF_NAMESPACE::RANDOM_Y;
+        }
+    }
+
+    for (const auto& attribute : attributes) {
+        if (attribute.first.rfind(kExrStringAttributePrefix, 0) != 0) {
+            continue;
+        }
+
+        const std::string attributeName = attribute.first.substr(std::strlen(kExrStringAttributePrefix));
+        if (attributeName.empty()) {
+            continue;
+        }
+
+        header.insert(attributeName, OPENEXR_IMF_NAMESPACE::StringAttribute(attribute.second));
     }
 }
 
@@ -187,6 +215,19 @@ resolve_exr_tile_layout(const std::map<std::string, std::string>& attributes,
     }
 
     return true;
+}
+
+static const char*
+to_exr_line_order_name(const OPENEXR_IMF_NAMESPACE::LineOrder lineOrder) noexcept
+{
+    switch (lineOrder) {
+    case OPENEXR_IMF_NAMESPACE::INCREASING_Y: return "increasing_y";
+    case OPENEXR_IMF_NAMESPACE::DECREASING_Y: return "decreasing_y";
+    case OPENEXR_IMF_NAMESPACE::RANDOM_Y: return "random_y";
+    case OPENEXR_IMF_NAMESPACE::NUM_LINEORDERS: break;
+    }
+
+    return "increasing_y";
 }
 
 static bool
@@ -678,6 +719,49 @@ encode_exr_file(const std::string& path,
             output.setFrameBuffer(frameBuffer);
             output.writePixels(image.height);
         }
+        return true;
+    } catch (const std::exception& e) {
+        errorMessage = e.what();
+        return false;
+    }
+#endif
+}
+
+bool
+extract_exr_reencode_attributes(const std::string& path,
+                                std::map<std::string, std::string>& attributes,
+                                std::string& errorMessage)
+{
+#if !defined(RAWGL_HAS_OPENEXR)
+    (void)path;
+    (void)attributes;
+    errorMessage = "OpenEXR support is not available";
+    return false;
+#else
+    try {
+        OPENEXR_IMF_NAMESPACE::InputFile file(path.c_str());
+        const OPENEXR_IMF_NAMESPACE::Header& header = file.header();
+
+        std::string compressionName;
+        OPENEXR_IMF_NAMESPACE::getCompressionNameFromId(header.compression(), compressionName);
+        if (!compressionName.empty()) {
+            attributes["openexr:compression"] = compressionName;
+        }
+
+        attributes["openexr:lineOrder"] = to_exr_line_order_name(header.lineOrder());
+
+        if (header.hasTileDescription()) {
+            const OPENEXR_IMF_NAMESPACE::TileDescription& tileDescription = header.tileDescription();
+            attributes["openexr:tiled"] = "true";
+            attributes["openexr:tileWidth"] = std::to_string(tileDescription.xSize);
+            attributes["openexr:tileHeight"] = std::to_string(tileDescription.ySize);
+        }
+
+        if (header.compression() == OPENEXR_IMF_NAMESPACE::DWAA_COMPRESSION
+            || header.compression() == OPENEXR_IMF_NAMESPACE::DWAB_COMPRESSION) {
+            attributes["openexr:dwaCompressionLevel"] = std::to_string(header.dwaCompressionLevel());
+        }
+
         return true;
     } catch (const std::exception& e) {
         errorMessage = e.what();

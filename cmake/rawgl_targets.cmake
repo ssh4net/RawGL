@@ -115,6 +115,9 @@ if(NOT TARGET miniply::miniply)
     target_include_directories(rawgl_core PRIVATE
         "${RAWGL_MINIPLY_INCLUDE_DIR}")
 endif()
+if(TARGET rapidobj::rapidobj)
+    target_compile_definitions(rawgl_core PRIVATE RAWGL_HAS_RAPIDOBJ=1)
+endif()
 
 target_compile_definitions(rawgl_support PRIVATE
     _CRT_SECURE_NO_WARNINGS
@@ -188,6 +191,9 @@ target_link_libraries(rawgl_core PUBLIC
     ${RAWGL_MINIPLY_TARGET}
     Threads::Threads
     ${RAWGL_EXTRA_WINDOWS_LIBS})
+if(TARGET rapidobj::rapidobj)
+    target_link_libraries(rawgl_core PRIVATE rapidobj::rapidobj)
+endif()
 
 target_link_libraries(rawgl_io PUBLIC
     rawgl_support

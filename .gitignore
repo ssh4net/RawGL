@@ -12,6 +12,7 @@ logs
 *.lo
 *.o
 *.obj
+!tests/inputs/*.obj
 
 # Precompiled Headers
 *.gch

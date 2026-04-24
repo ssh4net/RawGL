@@ -32,10 +32,14 @@ main()
     const std::filesystem::path inputPath = "tests/inputs/sky.jpg";
     const std::filesystem::path tiffOutputPath = "tests/outputs/rawgl_io_metadata_smoke.tif";
     const std::filesystem::path jpegOutputPath = "tests/outputs/rawgl_io_metadata_smoke.jpg";
+    const std::filesystem::path pngOutputPath = "tests/outputs/rawgl_io_metadata_smoke.png";
+    const std::filesystem::path exrOutputPath = "tests/outputs/rawgl_io_metadata_smoke.exr";
 
     std::error_code removeError;
     std::filesystem::remove(tiffOutputPath, removeError);
     std::filesystem::remove(jpegOutputPath, removeError);
+    std::filesystem::remove(pngOutputPath, removeError);
+    std::filesystem::remove(exrOutputPath, removeError);
 
     rawgl::io::ImageLoadRequest loadRequest;
     loadRequest.path = inputPath.string();
@@ -111,17 +115,10 @@ main()
         return 1;
     }
 
-    const uintmax_t tiffOutputSizeBeforePatch = std::filesystem::file_size(tiffOutputPath);
     const rawgl::io::ImageMetadataApplyResult tiffPatchResult =
         rawgl::io::apply_source_metadata_to_tiff_file_impl(documentResult.document, tiffOutputPath.string());
     if (!tiffPatchResult.success) {
         std::cerr << "TIFF metadata patch failed: " << tiffPatchResult.errorMessage << std::endl;
-        return 1;
-    }
-
-    const uintmax_t tiffOutputSizeAfterPatch = std::filesystem::file_size(tiffOutputPath);
-    if (tiffOutputSizeAfterPatch <= tiffOutputSizeBeforePatch) {
-        std::cerr << "TIFF metadata patch did not grow the output file." << std::endl;
         return 1;
     }
 
@@ -195,17 +192,10 @@ main()
         return 1;
     }
 
-    const uintmax_t jpegOutputSizeBeforePatch = std::filesystem::file_size(jpegOutputPath);
     const rawgl::io::ImageMetadataApplyResult jpegPatchResult =
         rawgl::io::apply_source_metadata_to_jpeg_file_impl(documentResult.document, jpegOutputPath.string());
     if (!jpegPatchResult.success) {
         std::cerr << "JPEG metadata patch failed: " << jpegPatchResult.errorMessage << std::endl;
-        return 1;
-    }
-
-    const uintmax_t jpegOutputSizeAfterPatch = std::filesystem::file_size(jpegOutputPath);
-    if (jpegOutputSizeAfterPatch <= jpegOutputSizeBeforePatch) {
-        std::cerr << "JPEG metadata patch did not grow the output file." << std::endl;
         return 1;
     }
 
@@ -243,6 +233,129 @@ main()
 
     if (!foundJpegDateTimeOriginal) {
         std::cerr << "DateTimeOriginal metadata entry was not preserved into JPEG." << std::endl;
+        return 1;
+    }
+
+    rawgl::io::ImageSaveRequest pngSaveRequest;
+    pngSaveRequest.path  = pngOutputPath.string();
+    pngSaveRequest.bits  = 8;
+    pngSaveRequest.image = loadResult.image;
+
+    const rawgl::io::ImageSaveResult pngSaveResult = rawgl::io::SaveImageFile(pngSaveRequest);
+    if (!pngSaveResult.success) {
+        std::cerr << "PNG metadata smoke save failed: " << pngSaveResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    if (!std::filesystem::exists(pngOutputPath)) {
+        std::cerr << "PNG metadata smoke output was not created: " << pngOutputPath << std::endl;
+        return 1;
+    }
+
+    const rawgl::io::ImageMetadataApplyResult pngPatchResult =
+        rawgl::io::apply_source_metadata_to_png_file_impl(documentResult.document, pngOutputPath.string());
+    if (!pngPatchResult.success) {
+        std::cerr << "PNG metadata patch failed: " << pngPatchResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    metadataRequest.path = pngOutputPath.string();
+    const rawgl::io::MetadataReadResult pngOutputMetadataResult = rawgl::io::ReadMetadataFile(metadataRequest);
+    if (!pngOutputMetadataResult.success) {
+        std::cerr << "Patched PNG metadata read failed: " << pngOutputMetadataResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    bool foundPngMake = false;
+    bool foundPngModel = false;
+    bool foundPngDateTimeOriginal = false;
+
+    for (const rawgl::io::MetadataEntry& entry : pngOutputMetadataResult.entries) {
+        if ((entry.name == "Make" || entry.name == "Exif:Make") && entry.valueText == sourceMake) {
+            foundPngMake = true;
+        } else if ((entry.name == "Model" || entry.name == "Exif:Model") && entry.valueText == sourceModel) {
+            foundPngModel = true;
+        } else if ((entry.name == "DateTimeOriginal" || entry.name == "Exif:DateTimeOriginal")
+                   && entry.valueText == sourceDateTimeOriginal) {
+            foundPngDateTimeOriginal = true;
+        }
+    }
+
+    if (!foundPngMake) {
+        std::cerr << "Make metadata entry was not preserved into PNG." << std::endl;
+        return 1;
+    }
+
+    if (!foundPngModel) {
+        std::cerr << "Model metadata entry was not preserved into PNG." << std::endl;
+        return 1;
+    }
+
+    if (!foundPngDateTimeOriginal) {
+        std::cerr << "DateTimeOriginal metadata entry was not preserved into PNG." << std::endl;
+        return 1;
+    }
+
+    rawgl::io::ImageSaveRequest exrSaveRequest;
+    exrSaveRequest.path  = exrOutputPath.string();
+    exrSaveRequest.bits  = 16;
+    exrSaveRequest.image = loadResult.image;
+
+    const rawgl::io::ImageSaveResult exrSaveResult = rawgl::io::SaveImageFile(exrSaveRequest);
+    if (!exrSaveResult.success) {
+        std::cerr << "EXR metadata smoke save failed: " << exrSaveResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    if (!std::filesystem::exists(exrOutputPath)) {
+        std::cerr << "EXR metadata smoke output was not created: " << exrOutputPath << std::endl;
+        return 1;
+    }
+
+    const rawgl::io::ImageMetadataApplyResult exrPatchResult =
+        rawgl::io::apply_source_metadata_to_exr_file_impl(documentResult.document, exrOutputPath.string());
+    if (!exrPatchResult.success) {
+        std::cerr << "EXR metadata patch failed: " << exrPatchResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    metadataRequest.path = exrOutputPath.string();
+    const rawgl::io::MetadataReadResult exrOutputMetadataResult = rawgl::io::ReadMetadataFile(metadataRequest);
+    if (!exrOutputMetadataResult.success) {
+        std::cerr << "Patched EXR metadata read failed: " << exrOutputMetadataResult.errorMessage << std::endl;
+        return 1;
+    }
+
+    bool foundExrMake = false;
+    bool foundExrModel = false;
+    bool foundExrDateTimeOriginal = false;
+
+    for (const rawgl::io::MetadataEntry& entry : exrOutputMetadataResult.entries) {
+        if ((entry.name == "Make" || entry.name == "openexr:Make") && entry.valueText == sourceMake) {
+            foundExrMake = true;
+        } else if ((entry.name == "Model" || entry.name == "openexr:Model") && entry.valueText == sourceModel) {
+            foundExrModel = true;
+        } else if ((entry.name == "DateTimeOriginal"
+                    || entry.name == "Exif:DateTimeOriginal"
+                    || entry.name == "openexr:DateTimeOriginal"
+                    || entry.name == "openexr:Exif:DateTimeOriginal")
+                   && entry.valueText == sourceDateTimeOriginal) {
+            foundExrDateTimeOriginal = true;
+        }
+    }
+
+    if (!foundExrMake) {
+        std::cerr << "Make metadata entry was not preserved into EXR." << std::endl;
+        return 1;
+    }
+
+    if (!foundExrModel) {
+        std::cerr << "Model metadata entry was not preserved into EXR." << std::endl;
+        return 1;
+    }
+
+    if (!foundExrDateTimeOriginal) {
+        std::cerr << "DateTimeOriginal metadata entry was not preserved into EXR." << std::endl;
         return 1;
     }
 

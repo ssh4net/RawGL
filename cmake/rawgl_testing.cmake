@@ -1,6 +1,13 @@
 include(CTest)
 
 if(BUILD_TESTING)
+    add_test(NAME rawgl_io_openmeta_boundary_smoke
+        COMMAND ${CMAKE_COMMAND}
+            -DRAWGL_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P "${CMAKE_SOURCE_DIR}/cmake/rawgl_openmeta_boundary_check.cmake")
+    set_tests_properties(rawgl_io_openmeta_boundary_smoke PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
     function(rawgl_add_cpp_smoke_test target_name source_file)
         add_executable(${target_name}
             ${source_file})
@@ -173,6 +180,7 @@ if(BUILD_TESTING)
         rawgl_add_script_test(rawgl_invalid_vertfrag_arity test_invalid_vertfrag_arity)
         rawgl_add_script_test(rawgl_mesh_ao_sponge test_mesh_ao_sponge)
         rawgl_add_script_test(rawgl_mesh_cli_order test_mesh_cli_order)
+        rawgl_add_script_test(rawgl_mesh_obj_smoke test_mesh_obj_smoke)
         rawgl_add_script_test(rawgl_mesh_ply_smoke test_mesh_ply_smoke)
         rawgl_add_script_test(rawgl_missing_input_uniform test_missing_input_uniform)
         rawgl_add_script_test(rawgl_output_array_reflection test_output_array_reflection)

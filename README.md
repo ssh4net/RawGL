@@ -254,12 +254,12 @@ Documentation
 | -M [ --pass_mesh ] arg | Use default quad or external Mesh from file |
 | | --pass_mesh quad |
 | | --pass_mesh mesh tris true rend tr path\to\file.ply |
-| | --pass_mesh mesh path\to\file.ply tris true rend tr |
+| | --pass_mesh mesh path\to\file.obj tris false rend tr |
 | | mesh references like `mesh::N` are not supported |
 | | **tris:** |
-| | **true (default)** - inform PLY parser that mesh is triangles only (faster loading on big meshes) |
-| | false - arbitrary meshes. |
-| | In both cases mesh will be triangulated in render time. |
+| | **true (default)** - file already contains triangles |
+| | false - triangulate polygon faces during mesh load |
+| | Supported file formats: PLY and OBJ |
 | | **rend:** |
 | | **tr (default)** - GL_TRIANGLES: render as polygons |
 | | ln - GL_LINES: render as lines |

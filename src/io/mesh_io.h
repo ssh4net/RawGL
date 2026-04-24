@@ -35,6 +35,8 @@ struct TriMesh {
 
 TriMesh*
 parse_file_with_miniply(const char* filename, bool assumeTriangles);
+TriMesh*
+parse_mesh_file(const char* filename, bool assumeTriangles);
 bool
 has_extension(const char* filename, const char* ext);
 

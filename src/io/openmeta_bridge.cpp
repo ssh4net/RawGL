@@ -3,6 +3,10 @@
 
 #include "metadata_internal.h"
 
+#include "exr_backend.h"
+#include "gl_utils.h"
+#include "texture_loader.h"
+
 #include <bit>
 #include <cstring>
 #include <filesystem>
@@ -17,6 +21,7 @@
 
 #if defined(RAWGL_HAS_OPENMETA)
 #include <openmeta/container_scan.h>
+#include <openmeta/exr_adapter.h>
 #include <openmeta/interop_export.h>
 #include <openmeta/mapped_file.h>
 #include <openmeta/meta_flags.h>
@@ -687,10 +692,6 @@ load_store_from_file(const std::string& path,
 
     const std::span<const std::byte> fileBytes = mappedFile.bytes();
     const openmeta::ScanResult scanMeasure = openmeta::measure_scan_auto(fileBytes);
-    if (scanMeasure.status == openmeta::ScanStatus::Unsupported) {
-        *errorMessage = scan_status_error_string(scanMeasure.status);
-        return false;
-    }
     if (scanMeasure.status == openmeta::ScanStatus::Malformed) {
         *errorMessage = scan_status_error_string(scanMeasure.status);
         return false;
@@ -747,7 +748,9 @@ load_store_from_file(const std::string& path,
             continue;
         }
 
-        if (readResult.scan.status != openmeta::ScanStatus::Ok) {
+        const bool allowUnsupportedScan = readResult.scan.status == openmeta::ScanStatus::Unsupported
+                                          && readResult.exr.status == openmeta::ExrDecodeStatus::Ok;
+        if (readResult.scan.status != openmeta::ScanStatus::Ok && !allowUnsupportedScan) {
             *errorMessage = scan_status_error_string(readResult.scan.status);
             return false;
         }
@@ -805,16 +808,10 @@ write_file_bytes(const std::string& path,
     return true;
 }
 
-static openmeta::TransferTargetFormat
-to_openmeta_transfer_target_format(const bool isTiff) noexcept
-{
-    return isTiff ? openmeta::TransferTargetFormat::Tiff : openmeta::TransferTargetFormat::Jpeg;
-}
-
 static ImageMetadataApplyResult
 apply_source_metadata_to_file_with_openmeta_impl(const MetadataDocument& document,
                                                  const std::string& path,
-                                                 const bool isTiff,
+                                                 const openmeta::TransferTargetFormat targetFormat,
                                                  const char* formatName)
 {
     ImageMetadataApplyResult result;
@@ -827,7 +824,7 @@ apply_source_metadata_to_file_with_openmeta_impl(const MetadataDocument& documen
     }
 
     openmeta::ExecutePreparedTransferSnapshotOptions options;
-    options.prepare.target_format = to_openmeta_transfer_target_format(isTiff);
+    options.prepare.target_format = targetFormat;
     options.prepare.include_xmp_app1 = true;
     options.prepare.include_icc_app2 = true;
     options.prepare.include_iptc_app13 = false;
@@ -864,6 +861,98 @@ apply_source_metadata_to_file_with_openmeta_impl(const MetadataDocument& documen
                                                      executed.execute.edited_output.size()),
                           formatName,
                           &result.errorMessage)) {
+        return result;
+    }
+
+    result.success = true;
+    return result;
+}
+
+static ImageMetadataApplyResult
+apply_source_metadata_to_exr_file_with_openmeta_impl(const MetadataDocument& document,
+                                                     const std::string& path)
+{
+    ImageMetadataApplyResult result;
+
+    const OpenMetaBackendStorage* storage = get_openmeta_storage(document);
+    if (!storage) {
+        result.errorMessage = "metadata document does not have source storage for EXR transfer";
+        return result;
+    }
+
+    openmeta::PrepareTransferRequest request;
+    request.target_format = openmeta::TransferTargetFormat::Exr;
+
+    openmeta::PreparedTransferBundle bundle;
+    const openmeta::PrepareTransferResult prepared =
+        openmeta::prepare_metadata_for_target_snapshot(storage->sourceSnapshot, request, &bundle);
+    if (prepared.status != openmeta::TransferStatus::Ok) {
+        result.errorMessage = prepared.message.empty()
+                                  ? "OpenMeta EXR metadata prepare failed"
+                                  : prepared.message;
+        return result;
+    }
+
+    openmeta::ExrAdapterBatch batch;
+    const openmeta::ExrAdapterResult adapted =
+        openmeta::build_prepared_exr_attribute_batch(bundle, &batch);
+    if (adapted.status != openmeta::ExrAdapterStatus::Ok) {
+        result.errorMessage = adapted.message.empty()
+                                  ? "OpenMeta EXR attribute batch build failed"
+                                  : adapted.message;
+        return result;
+    }
+
+    HostImageData image = load_host_image_data(path, std::map<std::string, std::string>());
+    int bits = 0;
+    if (image.glType == GL_HALF_FLOAT) {
+        bits = 16;
+    } else if (image.glType == GL_FLOAT) {
+        bits = 32;
+    } else {
+        result.errorMessage = "EXR metadata apply currently supports only half and float EXR outputs";
+        return result;
+    }
+
+    std::map<std::string, std::string> attributes;
+    if (!extract_exr_reencode_attributes(path, attributes, result.errorMessage)) {
+        return result;
+    }
+
+    for (const openmeta::ExrAdapterAttribute& attribute : batch.attributes) {
+        if (attribute.part_index != 0U) {
+            result.errorMessage = "EXR metadata apply supports only part 0";
+            return result;
+        }
+        if (attribute.is_opaque || attribute.type_name != "string") {
+            result.errorMessage = "EXR metadata apply supports only string header attributes";
+            return result;
+        }
+
+        std::string value(reinterpret_cast<const char*>(attribute.value.data()), attribute.value.size());
+        while (!value.empty() && value.back() == '\0') {
+            value.pop_back();
+        }
+
+        attributes[std::string("openexr:attribute:string:") + attribute.name] = std::move(value);
+    }
+
+    ImageSaveRequest saveRequest;
+    saveRequest.path = path;
+    saveRequest.bits = bits;
+    saveRequest.image = std::move(image);
+    for (const auto& attribute : attributes) {
+        Attribute one;
+        one.name = attribute.first;
+        one.value = attribute.second;
+        saveRequest.attributes.push_back(std::move(one));
+    }
+
+    const ImageSaveResult saved = SaveImageFile(saveRequest);
+    if (!saved.success) {
+        result.errorMessage = saved.errorMessage.empty()
+                                  ? "EXR metadata rewrite failed"
+                                  : saved.errorMessage;
         return result;
     }
 
@@ -970,7 +1059,8 @@ apply_source_metadata_to_tiff_file_impl(const MetadataDocument& document,
                                         const std::string& path)
 {
 #if defined(RAWGL_HAS_OPENMETA)
-    return apply_source_metadata_to_file_with_openmeta_impl(document, path, true, "TIFF");
+    return apply_source_metadata_to_file_with_openmeta_impl(
+        document, path, openmeta::TransferTargetFormat::Tiff, "TIFF");
 #else
     (void)document;
     (void)path;
@@ -985,7 +1075,39 @@ apply_source_metadata_to_jpeg_file_impl(const MetadataDocument& document,
                                         const std::string& path)
 {
 #if defined(RAWGL_HAS_OPENMETA)
-    return apply_source_metadata_to_file_with_openmeta_impl(document, path, false, "JPEG");
+    return apply_source_metadata_to_file_with_openmeta_impl(
+        document, path, openmeta::TransferTargetFormat::Jpeg, "JPEG");
+#else
+    (void)document;
+    (void)path;
+    ImageMetadataApplyResult result;
+    result.errorMessage = "RawGL metadata support was built without OpenMeta";
+    return result;
+#endif
+}
+
+ImageMetadataApplyResult
+apply_source_metadata_to_png_file_impl(const MetadataDocument& document,
+                                       const std::string& path)
+{
+#if defined(RAWGL_HAS_OPENMETA)
+    return apply_source_metadata_to_file_with_openmeta_impl(
+        document, path, openmeta::TransferTargetFormat::Png, "PNG");
+#else
+    (void)document;
+    (void)path;
+    ImageMetadataApplyResult result;
+    result.errorMessage = "RawGL metadata support was built without OpenMeta";
+    return result;
+#endif
+}
+
+ImageMetadataApplyResult
+apply_source_metadata_to_exr_file_impl(const MetadataDocument& document,
+                                       const std::string& path)
+{
+#if defined(RAWGL_HAS_OPENMETA)
+    return apply_source_metadata_to_exr_file_with_openmeta_impl(document, path);
 #else
     (void)document;
     (void)path;

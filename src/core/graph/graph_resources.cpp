@@ -160,7 +160,7 @@ load_cached_mesh_resource(const RawGLContextState& contextState, const GraphMesh
         }
     }
 
-    std::unique_ptr<TriMesh> triMesh(parse_file_with_miniply(mesh.path.c_str(), assumeTriangles));
+    std::unique_ptr<TriMesh> triMesh(parse_mesh_file(mesh.path.c_str(), assumeTriangles));
     if (!triMesh) {
         throw std::runtime_error("Failed to load mesh");
     }

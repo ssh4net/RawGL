@@ -30,4 +30,12 @@ ImageMetadataApplyResult
 apply_source_metadata_to_jpeg_file_impl(const MetadataDocument& document,
                                         const std::string& path);
 
+ImageMetadataApplyResult
+apply_source_metadata_to_png_file_impl(const MetadataDocument& document,
+                                       const std::string& path);
+
+ImageMetadataApplyResult
+apply_source_metadata_to_exr_file_impl(const MetadataDocument& document,
+                                       const std::string& path);
+
 }  // namespace rawgl::io

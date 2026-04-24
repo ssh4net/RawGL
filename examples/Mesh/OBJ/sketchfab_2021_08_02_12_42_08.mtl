@@ -1,0 +1,32 @@
+# Blender 5.1.0 Beta MTL File: 'Sketchfab_2021_08_02_12_42_08.blend'
+# www.blender.org
+
+newmtl Bunny
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd skate_bunny_baseColor.jpg
+map_Pm skate_bunny_metallic.jpg
+map_Pr skate_bunny_roughness.jpg
+
+newmtl Skateboard
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd skateboard_baseColor.jpg
+map_Pm skateboard_metallic.jpg
+map_Pr skateboard_roughness.jpg

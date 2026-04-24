@@ -177,6 +177,9 @@ function(rawgl_print_config_summary)
         rawgl_report_dependency("miniply" ON OFF "")
     endif()
 
+    rawgl_any_target_found(_rawgl_rapidobj_found rapidobj::rapidobj)
+    rawgl_report_dependency("rapidobj" ON "${_rawgl_rapidobj_found}" "${_rawgl_rapidobj_found_PROVIDER}")
+
     message(STATUS "    Platform extras:")
 
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")

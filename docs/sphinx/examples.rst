@@ -161,7 +161,8 @@ Source: ``Test`` for the CLI example, ``Pattern`` for the Python equivalent.
 Mesh rendering currently sits on the explicit workflow-builder path rather than
 the very small ``rawgl.image(...)`` helper layer.
 
-The validated file-oriented CLI path is in ``tests/test_mesh_ao_sponge.bat``:
+The validated file-oriented CLI path is in ``tests/test_mesh_ao_sponge.bat``.
+RawGL accepts PLY and OBJ mesh files on this path:
 
 .. code-block:: bat
 
@@ -219,6 +220,21 @@ Related repo files:
 - ``tests/shaders/mesh_ao.vert``
 - ``tests/shaders/mesh_ao.frag``
 - ``tests/rawgl_core_shared_file_resources_smoke.cpp``
+
+For a larger OBJ import, run
+``examples/Mesh/OBJ/RenderObjPerspectiveBaseColor.py``. The file in that
+directory uses quads, mesh normals, named groups, and two U-coordinate tiles.
+The example sets ``tris`` to ``false`` so RawGL triangulates the faces while
+loading the mesh. It uses the first U tile for the bunny base-color texture and
+the second U tile for the skateboard texture.
+
+.. image:: _static/examples/obj_perspective_basecolor_640.jpg
+   :alt: Perspective OBJ render using two base-color texture tiles
+   :width: 320
+
+Related repo file:
+
+- ``examples/Mesh/OBJ/RenderObjPerspectiveBaseColor.py``
 
 Sequence rendering
 ------------------

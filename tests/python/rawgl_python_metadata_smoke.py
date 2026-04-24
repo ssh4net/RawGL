@@ -23,7 +23,9 @@ def _find_entry(entries, *names):
 def main() -> int:
     input_path = Path("tests/inputs/sky.jpg")
     output_path = Path("tests/outputs/rawgl_python_metadata_smoke.tif")
+    exr_output_path = Path("tests/outputs/rawgl_python_metadata_smoke.exr")
     output_path.unlink(missing_ok=True)
+    exr_output_path.unlink(missing_ok=True)
 
     image = rawgl.io.load_image(input_path)
     rawgl.io.save_image(image, output_path, bits=16)
@@ -71,6 +73,19 @@ def main() -> int:
     output_height_entry = _find_entry(output_entries, "ImageLength", "ImageHeight")
     if output_height_entry is None or output_height_entry.value_text != str(image.height):
         return fail("saved TIFF metadata did not export image height correctly")
+
+    rawgl.io.save_image(image, exr_output_path, bits=16)
+    exr_entries = rawgl.io.read_metadata(
+        exr_output_path,
+        name_style=rawgl.MetadataNameStyle.oiio,
+        name_policy=rawgl.MetadataNamePolicy.exif_tool_alias,
+    )
+    if not exr_entries:
+        return fail("rawgl.io.read_metadata() returned no metadata entries for saved EXR")
+
+    exr_line_order_entry = _find_entry(exr_entries, "openexr:lineOrder")
+    if exr_line_order_entry is None or exr_line_order_entry.value_text != "0":
+        return fail("saved EXR metadata did not export openexr:lineOrder correctly")
 
     io_runtime = rawgl.IoRuntime()
     request = rawgl.MetadataReadRequest()

@@ -151,6 +151,7 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(OpenEXR CONFIG QUIET)
 find_package(OpenImageIO CONFIG REQUIRED)
 find_package(miniply CONFIG QUIET)
+find_package(RapidObj CONFIG REQUIRED)
 
 if(TARGET PNG::png_static AND NOT TARGET PNG::PNG)
     add_library(PNG::PNG INTERFACE IMPORTED)

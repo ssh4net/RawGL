@@ -334,7 +334,7 @@ load_mesh_data(MeshInput::Mesh& mesh)
     Timer timer;
     LOG(debug) << "Loading mesh...";
 
-    TriMesh* trimesh = parse_file_with_miniply(mesh.FileName.c_str(), mesh.Triangles);
+    TriMesh* trimesh = parse_mesh_file(mesh.FileName.c_str(), mesh.Triangles);
     if (trimesh == nullptr) {
         throw std::runtime_error("Failed to load mesh");
     }
