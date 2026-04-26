@@ -4,6 +4,9 @@
 #include "../src/io/metadata_internal.h"
 #include "rawgl/rawgl_io.h"
 
+#include <GL/glew.h>
+
+#include <cstddef>
 #include <filesystem>
 #include <iostream>
 
@@ -24,6 +27,30 @@ find_entry_value(const std::vector<rawgl::io::MetadataEntry>& entries, const std
     return false;
 }
 
+static rawgl::HostImageData
+make_u8_rgb_image(const int width, const int height)
+{
+    rawgl::HostImageData image;
+    image.width = width;
+    image.height = height;
+    image.channels = 3;
+    image.alphaChannel = -1;
+    image.glInternalFormat = GL_RGB8;
+    image.glType = GL_UNSIGNED_BYTE;
+    image.bytes.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 3u);
+
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const size_t offset = (static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x)) * 3u;
+            image.bytes[offset] = static_cast<std::byte>((x * 17 + y * 3) & 0xff);
+            image.bytes[offset + 1u] = static_cast<std::byte>((x * 5 + y * 11) & 0xff);
+            image.bytes[offset + 2u] = static_cast<std::byte>((x * 13 + y * 7) & 0xff);
+        }
+    }
+
+    return image;
+}
+
 }  // namespace
 
 int
@@ -34,6 +61,7 @@ main()
     const std::filesystem::path jpegOutputPath = "tests/outputs/rawgl_io_metadata_smoke.jpg";
     const std::filesystem::path pngOutputPath = "tests/outputs/rawgl_io_metadata_smoke.png";
     const std::filesystem::path exrOutputPath = "tests/outputs/rawgl_io_metadata_smoke.exr";
+    const rawgl::HostImageData targetImage = make_u8_rgb_image(37, 23);
 
     std::error_code removeError;
     std::filesystem::remove(tiffOutputPath, removeError);
@@ -102,7 +130,7 @@ main()
     rawgl::io::ImageSaveRequest tiffSaveRequest;
     tiffSaveRequest.path  = tiffOutputPath.string();
     tiffSaveRequest.bits  = 16;
-    tiffSaveRequest.image = loadResult.image;
+    tiffSaveRequest.image = targetImage;
 
     const rawgl::io::ImageSaveResult tiffSaveResult = rawgl::io::SaveImageFile(tiffSaveRequest);
     if (!tiffSaveResult.success) {
@@ -136,10 +164,10 @@ main()
     bool foundDateTimeOriginal = false;
 
     for (const rawgl::io::MetadataEntry& entry : tiffOutputMetadataResult.entries) {
-        if (entry.name == "ImageWidth" && entry.valueText == std::to_string(loadResult.image.width)) {
+        if (entry.name == "ImageWidth" && entry.valueText == std::to_string(targetImage.width)) {
             foundWidth = true;
         } else if ((entry.name == "ImageLength" || entry.name == "ImageHeight")
-                   && entry.valueText == std::to_string(loadResult.image.height)) {
+                   && entry.valueText == std::to_string(targetImage.height)) {
             foundHeight = true;
         } else if ((entry.name == "Make" || entry.name == "Exif:Make") && entry.valueText == sourceMake) {
             foundMake = true;
@@ -179,7 +207,7 @@ main()
     rawgl::io::ImageSaveRequest jpegSaveRequest;
     jpegSaveRequest.path  = jpegOutputPath.string();
     jpegSaveRequest.bits  = 8;
-    jpegSaveRequest.image = loadResult.image;
+    jpegSaveRequest.image = targetImage;
 
     const rawgl::io::ImageSaveResult jpegSaveResult = rawgl::io::SaveImageFile(jpegSaveRequest);
     if (!jpegSaveResult.success) {
@@ -209,6 +237,8 @@ main()
     bool foundJpegMake = false;
     bool foundJpegModel = false;
     bool foundJpegDateTimeOriginal = false;
+    bool foundJpegWidth = false;
+    bool foundJpegHeight = false;
 
     for (const rawgl::io::MetadataEntry& entry : jpegOutputMetadataResult.entries) {
         if ((entry.name == "Make" || entry.name == "Exif:Make") && entry.valueText == sourceMake) {
@@ -218,6 +248,12 @@ main()
         } else if ((entry.name == "DateTimeOriginal" || entry.name == "Exif:DateTimeOriginal")
                    && entry.valueText == sourceDateTimeOriginal) {
             foundJpegDateTimeOriginal = true;
+        } else if ((entry.name == "ImageWidth" || entry.name == "ExifImageWidth")
+                   && entry.valueText == std::to_string(targetImage.width)) {
+            foundJpegWidth = true;
+        } else if ((entry.name == "ImageLength" || entry.name == "ImageHeight" || entry.name == "ExifImageHeight")
+                   && entry.valueText == std::to_string(targetImage.height)) {
+            foundJpegHeight = true;
         }
     }
 
@@ -236,10 +272,15 @@ main()
         return 1;
     }
 
+    if (!foundJpegWidth || !foundJpegHeight) {
+        std::cerr << "JPEG target image dimensions were not written into transferred metadata." << std::endl;
+        return 1;
+    }
+
     rawgl::io::ImageSaveRequest pngSaveRequest;
     pngSaveRequest.path  = pngOutputPath.string();
     pngSaveRequest.bits  = 8;
-    pngSaveRequest.image = loadResult.image;
+    pngSaveRequest.image = targetImage;
 
     const rawgl::io::ImageSaveResult pngSaveResult = rawgl::io::SaveImageFile(pngSaveRequest);
     if (!pngSaveResult.success) {
@@ -269,6 +310,8 @@ main()
     bool foundPngMake = false;
     bool foundPngModel = false;
     bool foundPngDateTimeOriginal = false;
+    bool foundPngWidth = false;
+    bool foundPngHeight = false;
 
     for (const rawgl::io::MetadataEntry& entry : pngOutputMetadataResult.entries) {
         if ((entry.name == "Make" || entry.name == "Exif:Make") && entry.valueText == sourceMake) {
@@ -278,6 +321,12 @@ main()
         } else if ((entry.name == "DateTimeOriginal" || entry.name == "Exif:DateTimeOriginal")
                    && entry.valueText == sourceDateTimeOriginal) {
             foundPngDateTimeOriginal = true;
+        } else if ((entry.name == "ImageWidth" || entry.name == "ExifImageWidth")
+                   && entry.valueText == std::to_string(targetImage.width)) {
+            foundPngWidth = true;
+        } else if ((entry.name == "ImageLength" || entry.name == "ImageHeight" || entry.name == "ExifImageHeight")
+                   && entry.valueText == std::to_string(targetImage.height)) {
+            foundPngHeight = true;
         }
     }
 
@@ -296,10 +345,15 @@ main()
         return 1;
     }
 
+    if (!foundPngWidth || !foundPngHeight) {
+        std::cerr << "PNG target image dimensions were not written into transferred metadata." << std::endl;
+        return 1;
+    }
+
     rawgl::io::ImageSaveRequest exrSaveRequest;
     exrSaveRequest.path  = exrOutputPath.string();
     exrSaveRequest.bits  = 16;
-    exrSaveRequest.image = loadResult.image;
+    exrSaveRequest.image = targetImage;
 
     const rawgl::io::ImageSaveResult exrSaveResult = rawgl::io::SaveImageFile(exrSaveRequest);
     if (!exrSaveResult.success) {

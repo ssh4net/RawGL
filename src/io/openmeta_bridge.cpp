@@ -9,6 +9,8 @@
 
 #include <bit>
 #include <cstring>
+#include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -808,6 +810,100 @@ write_file_bytes(const std::string& path,
     return true;
 }
 
+static bool
+set_transfer_target_image_spec_from_host_image(const HostImageData& image,
+                                               openmeta::TransferTargetImageSpec* spec,
+                                               std::string* errorMessage)
+{
+    if (!spec) {
+        if (errorMessage) {
+            *errorMessage = "OpenMeta target image spec output is null";
+        }
+        return false;
+    }
+
+    if (image.width <= 0 || image.height <= 0) {
+        if (errorMessage) {
+            *errorMessage = "target image dimensions are invalid for metadata transfer";
+        }
+        return false;
+    }
+
+    if (image.channels <= 0
+        || image.channels > static_cast<int>(openmeta::kTransferTargetImageSpecMaxSamples)) {
+        if (errorMessage) {
+            *errorMessage = "target image channel count is invalid for metadata transfer";
+        }
+        return false;
+    }
+
+    uint16_t bitsPerSample = 0U;
+    uint16_t sampleFormat = 1U;
+    switch (image.glType) {
+    case GL_UNSIGNED_BYTE:
+        bitsPerSample = 8U;
+        sampleFormat = 1U;
+        break;
+    case GL_UNSIGNED_SHORT:
+        bitsPerSample = 16U;
+        sampleFormat = 1U;
+        break;
+    case GL_UNSIGNED_INT:
+        bitsPerSample = 32U;
+        sampleFormat = 1U;
+        break;
+    case GL_HALF_FLOAT:
+        bitsPerSample = 16U;
+        sampleFormat = 3U;
+        break;
+    case GL_FLOAT:
+        bitsPerSample = 32U;
+        sampleFormat = 3U;
+        break;
+    default:
+        if (errorMessage) {
+            *errorMessage = "target image component type is unsupported for metadata transfer";
+        }
+        return false;
+    }
+
+    spec->has_dimensions = true;
+    spec->width = static_cast<uint32_t>(image.width);
+    spec->height = static_cast<uint32_t>(image.height);
+    spec->has_orientation = true;
+    spec->orientation = 1U;
+    spec->has_samples_per_pixel = true;
+    spec->samples_per_pixel = static_cast<uint16_t>(image.channels);
+    spec->bits_per_sample_count = 1U;
+    spec->bits_per_sample[0] = bitsPerSample;
+    spec->sample_format_count = 1U;
+    spec->sample_format[0] = sampleFormat;
+    spec->has_photometric_interpretation = true;
+    spec->photometric_interpretation = image.channels >= 3 ? 2U : 1U;
+    spec->has_planar_configuration = true;
+    spec->planar_configuration = 1U;
+
+    return true;
+}
+
+static bool
+set_transfer_target_image_spec_from_file(const std::string& path,
+                                         const char* formatName,
+                                         openmeta::TransferTargetImageSpec* spec,
+                                         std::string* errorMessage)
+{
+    try {
+        const HostImageData image = load_host_image_data(path, std::map<std::string, std::string>());
+        return set_transfer_target_image_spec_from_host_image(image, spec, errorMessage);
+    } catch (const std::exception& exception) {
+        if (errorMessage) {
+            *errorMessage = std::string("failed to inspect ") + formatName
+                            + " target image for metadata transfer: " + exception.what();
+        }
+        return false;
+    }
+}
+
 static ImageMetadataApplyResult
 apply_source_metadata_to_file_with_openmeta_impl(const MetadataDocument& document,
                                                  const std::string& path,
@@ -829,6 +925,12 @@ apply_source_metadata_to_file_with_openmeta_impl(const MetadataDocument& documen
     options.prepare.include_icc_app2 = true;
     options.prepare.include_iptc_app13 = false;
     options.prepare.xmp_include_existing = true;
+    if (!set_transfer_target_image_spec_from_file(path,
+                                                  formatName,
+                                                  &options.prepare.target_image_spec,
+                                                  &result.errorMessage)) {
+        return result;
+    }
     options.edit_target_path = path;
     options.execute.edit_apply = true;
 
@@ -880,8 +982,30 @@ apply_source_metadata_to_exr_file_with_openmeta_impl(const MetadataDocument& doc
         return result;
     }
 
+    HostImageData image;
+    try {
+        image = load_host_image_data(path, std::map<std::string, std::string>());
+    } catch (const std::exception& exception) {
+        result.errorMessage = std::string("failed to inspect EXR target image for metadata transfer: ")
+                              + exception.what();
+        return result;
+    }
+
+    int bits = 0;
+    if (image.glType == GL_HALF_FLOAT) {
+        bits = 16;
+    } else if (image.glType == GL_FLOAT) {
+        bits = 32;
+    } else {
+        result.errorMessage = "EXR metadata apply currently supports only half and float EXR outputs";
+        return result;
+    }
+
     openmeta::PrepareTransferRequest request;
     request.target_format = openmeta::TransferTargetFormat::Exr;
+    if (!set_transfer_target_image_spec_from_host_image(image, &request.target_image_spec, &result.errorMessage)) {
+        return result;
+    }
 
     openmeta::PreparedTransferBundle bundle;
     const openmeta::PrepareTransferResult prepared =
@@ -900,17 +1024,6 @@ apply_source_metadata_to_exr_file_with_openmeta_impl(const MetadataDocument& doc
         result.errorMessage = adapted.message.empty()
                                   ? "OpenMeta EXR attribute batch build failed"
                                   : adapted.message;
-        return result;
-    }
-
-    HostImageData image = load_host_image_data(path, std::map<std::string, std::string>());
-    int bits = 0;
-    if (image.glType == GL_HALF_FLOAT) {
-        bits = 16;
-    } else if (image.glType == GL_FLOAT) {
-        bits = 32;
-    } else {
-        result.errorMessage = "EXR metadata apply currently supports only half and float EXR outputs";
         return result;
     }
 
