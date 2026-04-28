@@ -6,6 +6,16 @@ Purpose: define the current metadata boundary in `rawgl_io` after removing the
 OIIO-attribute-based transfer path, and describe the native-write direction
 needed later.
 
+Status update, 2026-04-27:
+
+- RawGL now exposes explicit OpenMeta-backed source metadata transfer through
+  `TransferImageMetadataFile(...)` and Python `save_image(...,
+  source_metadata=document)`.
+- Current target coverage is JPEG, TIFF, PNG, and EXR.
+- OpenMeta types still do not leak into RawGL public headers.
+- The older statement that save helpers do not preserve source metadata is now
+  superseded for the explicit `source_metadata` path.
+
 Related notes:
 
 - [rawgl_module_split_2026-04-17.md](/mnt/w/VisualStudio/RawGL/docs/rawgl_module_split_2026-04-17.md)
@@ -14,15 +24,19 @@ Related notes:
 
 ## 1. Current state
 
-Current public metadata support is file-oriented and read-only:
+Current public metadata support is file-oriented:
 
 - `rawgl::io::ReadMetadataFile(...)`
 - `rawgl::io::IoRuntime::readMetadataFile(...)`
 - `rawgl::io::ReadMetadataDocumentFile(...)`
 - `rawgl::io::IoRuntime::readMetadataDocumentFile(...)`
+- `rawgl::io::TransferImageMetadataFile(...)`
+- `rawgl::io::IoRuntime::transferImageMetadataFile(...)`
 - Python:
   - `rawgl.io.read_metadata(...)`
   - `rawgl.io.read_metadata_document(...)`
+  - `rawgl.io.transfer_image_metadata(...)`
+  - `rawgl.io.save_image(..., source_metadata=document)`
   - `rawgl.MetadataReadRequest`
   - `rawgl.IoRuntime.read_metadata_file(...)`
   - `rawgl.MetadataDocumentReadRequest`
@@ -42,7 +56,8 @@ Current strengths:
 
 Current limitation:
 
-- save helpers do not preserve source metadata
+- save helpers preserve source metadata only when explicitly passed a
+  `MetadataDocument`
 - there are no native format-family metadata writers yet
 - there are no helper APIs for in-place metadata mutation
 - there are no selective removal helpers yet

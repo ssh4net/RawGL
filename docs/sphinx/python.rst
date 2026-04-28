@@ -132,6 +132,10 @@ Current Python metadata support includes:
 
 - ``rawgl.io.read_metadata(...)`` for preview-oriented inspection
 - ``rawgl.io.read_metadata_document(...)`` for typed metadata reads
+- ``rawgl.io.transfer_image_metadata(...)`` for explicit transfer into an
+  already-written JPEG, TIFF, PNG, or EXR target
+- ``rawgl.io.save_image(..., source_metadata=document)`` for the common save
+  then transfer workflow
 - ``rawgl.MetadataReadRequest`` and ``rawgl.IoRuntime.read_metadata_file(...)``
   for explicit preview control
 - ``rawgl.MetadataDocumentReadRequest`` and
@@ -140,21 +144,19 @@ Current Python metadata support includes:
 
 This path requires an OpenMeta-enabled build of RawGL.
 
-Current save helpers do not preserve source metadata.
-Save-side transfer is deferred until RawGL has native format-family metadata
-writers instead of the removed OIIO-attribute bridge.
-
-Typical inspection shape:
+Typical transfer shape:
 
 .. code-block:: python
 
    import rawgl
 
+   image = rawgl.io.load_image("input.jpg")
    document = rawgl.io.read_metadata_document(
-       "input.png",
+       "input.jpg",
        name_style=rawgl.MetadataNameStyle.oiio,
        name_policy=rawgl.MetadataNamePolicy.exif_tool_alias,
    )
+   rawgl.io.save_image(image, "output.tif", bits=16, source_metadata=document)
 
 Mesh inspection
 ---------------

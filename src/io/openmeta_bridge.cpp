@@ -5,6 +5,7 @@
 
 #include "exr_backend.h"
 #include "gl_utils.h"
+#include "image_backend.h"
 #include "texture_loader.h"
 
 #include <bit>
@@ -908,7 +909,8 @@ static ImageMetadataApplyResult
 apply_source_metadata_to_file_with_openmeta_impl(const MetadataDocument& document,
                                                  const std::string& path,
                                                  const openmeta::TransferTargetFormat targetFormat,
-                                                 const char* formatName)
+                                                 const char* formatName,
+                                                 const HostImageData* targetImage)
 {
     ImageMetadataApplyResult result;
 
@@ -925,11 +927,19 @@ apply_source_metadata_to_file_with_openmeta_impl(const MetadataDocument& documen
     options.prepare.include_icc_app2 = true;
     options.prepare.include_iptc_app13 = false;
     options.prepare.xmp_include_existing = true;
-    if (!set_transfer_target_image_spec_from_file(path,
-                                                  formatName,
-                                                  &options.prepare.target_image_spec,
-                                                  &result.errorMessage)) {
-        return result;
+    if (targetImage) {
+        if (!set_transfer_target_image_spec_from_host_image(*targetImage,
+                                                            &options.prepare.target_image_spec,
+                                                            &result.errorMessage)) {
+            return result;
+        }
+    } else {
+        if (!set_transfer_target_image_spec_from_file(path,
+                                                      formatName,
+                                                      &options.prepare.target_image_spec,
+                                                      &result.errorMessage)) {
+            return result;
+        }
     }
     options.edit_target_path = path;
     options.execute.edit_apply = true;
@@ -972,7 +982,8 @@ apply_source_metadata_to_file_with_openmeta_impl(const MetadataDocument& documen
 
 static ImageMetadataApplyResult
 apply_source_metadata_to_exr_file_with_openmeta_impl(const MetadataDocument& document,
-                                                     const std::string& path)
+                                                     const std::string& path,
+                                                     const HostImageData* targetImage)
 {
     ImageMetadataApplyResult result;
 
@@ -982,19 +993,23 @@ apply_source_metadata_to_exr_file_with_openmeta_impl(const MetadataDocument& doc
         return result;
     }
 
-    HostImageData image;
-    try {
-        image = load_host_image_data(path, std::map<std::string, std::string>());
-    } catch (const std::exception& exception) {
-        result.errorMessage = std::string("failed to inspect EXR target image for metadata transfer: ")
-                              + exception.what();
-        return result;
+    HostImageData loadedImage;
+    const HostImageData* image = targetImage;
+    if (!image) {
+        try {
+            loadedImage = load_host_image_data(path, std::map<std::string, std::string>());
+            image = &loadedImage;
+        } catch (const std::exception& exception) {
+            result.errorMessage = std::string("failed to inspect EXR target image for metadata transfer: ")
+                                  + exception.what();
+            return result;
+        }
     }
 
     int bits = 0;
-    if (image.glType == GL_HALF_FLOAT) {
+    if (image->glType == GL_HALF_FLOAT) {
         bits = 16;
-    } else if (image.glType == GL_FLOAT) {
+    } else if (image->glType == GL_FLOAT) {
         bits = 32;
     } else {
         result.errorMessage = "EXR metadata apply currently supports only half and float EXR outputs";
@@ -1003,7 +1018,7 @@ apply_source_metadata_to_exr_file_with_openmeta_impl(const MetadataDocument& doc
 
     openmeta::PrepareTransferRequest request;
     request.target_format = openmeta::TransferTargetFormat::Exr;
-    if (!set_transfer_target_image_spec_from_host_image(image, &request.target_image_spec, &result.errorMessage)) {
+    if (!set_transfer_target_image_spec_from_host_image(*image, &request.target_image_spec, &result.errorMessage)) {
         return result;
     }
 
@@ -1053,7 +1068,7 @@ apply_source_metadata_to_exr_file_with_openmeta_impl(const MetadataDocument& doc
     ImageSaveRequest saveRequest;
     saveRequest.path = path;
     saveRequest.bits = bits;
-    saveRequest.image = std::move(image);
+    saveRequest.image = *image;
     for (const auto& attribute : attributes) {
         Attribute one;
         one.name = attribute.first;
@@ -1173,10 +1188,28 @@ apply_source_metadata_to_tiff_file_impl(const MetadataDocument& document,
 {
 #if defined(RAWGL_HAS_OPENMETA)
     return apply_source_metadata_to_file_with_openmeta_impl(
-        document, path, openmeta::TransferTargetFormat::Tiff, "TIFF");
+        document, path, openmeta::TransferTargetFormat::Tiff, "TIFF", nullptr);
 #else
     (void)document;
     (void)path;
+    ImageMetadataApplyResult result;
+    result.errorMessage = "RawGL metadata support was built without OpenMeta";
+    return result;
+#endif
+}
+
+ImageMetadataApplyResult
+apply_source_metadata_to_tiff_file_impl(const MetadataDocument& document,
+                                        const std::string& path,
+                                        const HostImageData& targetImage)
+{
+#if defined(RAWGL_HAS_OPENMETA)
+    return apply_source_metadata_to_file_with_openmeta_impl(
+        document, path, openmeta::TransferTargetFormat::Tiff, "TIFF", &targetImage);
+#else
+    (void)document;
+    (void)path;
+    (void)targetImage;
     ImageMetadataApplyResult result;
     result.errorMessage = "RawGL metadata support was built without OpenMeta";
     return result;
@@ -1189,10 +1222,28 @@ apply_source_metadata_to_jpeg_file_impl(const MetadataDocument& document,
 {
 #if defined(RAWGL_HAS_OPENMETA)
     return apply_source_metadata_to_file_with_openmeta_impl(
-        document, path, openmeta::TransferTargetFormat::Jpeg, "JPEG");
+        document, path, openmeta::TransferTargetFormat::Jpeg, "JPEG", nullptr);
 #else
     (void)document;
     (void)path;
+    ImageMetadataApplyResult result;
+    result.errorMessage = "RawGL metadata support was built without OpenMeta";
+    return result;
+#endif
+}
+
+ImageMetadataApplyResult
+apply_source_metadata_to_jpeg_file_impl(const MetadataDocument& document,
+                                        const std::string& path,
+                                        const HostImageData& targetImage)
+{
+#if defined(RAWGL_HAS_OPENMETA)
+    return apply_source_metadata_to_file_with_openmeta_impl(
+        document, path, openmeta::TransferTargetFormat::Jpeg, "JPEG", &targetImage);
+#else
+    (void)document;
+    (void)path;
+    (void)targetImage;
     ImageMetadataApplyResult result;
     result.errorMessage = "RawGL metadata support was built without OpenMeta";
     return result;
@@ -1205,10 +1256,28 @@ apply_source_metadata_to_png_file_impl(const MetadataDocument& document,
 {
 #if defined(RAWGL_HAS_OPENMETA)
     return apply_source_metadata_to_file_with_openmeta_impl(
-        document, path, openmeta::TransferTargetFormat::Png, "PNG");
+        document, path, openmeta::TransferTargetFormat::Png, "PNG", nullptr);
 #else
     (void)document;
     (void)path;
+    ImageMetadataApplyResult result;
+    result.errorMessage = "RawGL metadata support was built without OpenMeta";
+    return result;
+#endif
+}
+
+ImageMetadataApplyResult
+apply_source_metadata_to_png_file_impl(const MetadataDocument& document,
+                                       const std::string& path,
+                                       const HostImageData& targetImage)
+{
+#if defined(RAWGL_HAS_OPENMETA)
+    return apply_source_metadata_to_file_with_openmeta_impl(
+        document, path, openmeta::TransferTargetFormat::Png, "PNG", &targetImage);
+#else
+    (void)document;
+    (void)path;
+    (void)targetImage;
     ImageMetadataApplyResult result;
     result.errorMessage = "RawGL metadata support was built without OpenMeta";
     return result;
@@ -1220,7 +1289,7 @@ apply_source_metadata_to_exr_file_impl(const MetadataDocument& document,
                                        const std::string& path)
 {
 #if defined(RAWGL_HAS_OPENMETA)
-    return apply_source_metadata_to_exr_file_with_openmeta_impl(document, path);
+    return apply_source_metadata_to_exr_file_with_openmeta_impl(document, path, nullptr);
 #else
     (void)document;
     (void)path;
@@ -1228,6 +1297,65 @@ apply_source_metadata_to_exr_file_impl(const MetadataDocument& document,
     result.errorMessage = "RawGL metadata support was built without OpenMeta";
     return result;
 #endif
+}
+
+ImageMetadataApplyResult
+apply_source_metadata_to_exr_file_impl(const MetadataDocument& document,
+                                       const std::string& path,
+                                       const HostImageData& targetImage)
+{
+#if defined(RAWGL_HAS_OPENMETA)
+    return apply_source_metadata_to_exr_file_with_openmeta_impl(document, path, &targetImage);
+#else
+    (void)document;
+    (void)path;
+    (void)targetImage;
+    ImageMetadataApplyResult result;
+    result.errorMessage = "RawGL metadata support was built without OpenMeta";
+    return result;
+#endif
+}
+
+ImageMetadataTransferResult
+transfer_image_metadata_file_impl(const ImageMetadataTransferRequest& request)
+{
+    ImageMetadataTransferResult result;
+
+    ImageMetadataApplyResult applied;
+    const HostImageData* targetImage = request.hasTargetImage ? &request.targetImage : nullptr;
+    switch (get_image_codec_family(request.path)) {
+    case ImageCodecFamily::Jpeg:
+        applied = targetImage ? apply_source_metadata_to_jpeg_file_impl(request.sourceMetadata,
+                                                                        request.path,
+                                                                        *targetImage)
+                              : apply_source_metadata_to_jpeg_file_impl(request.sourceMetadata, request.path);
+        break;
+    case ImageCodecFamily::Png:
+        applied = targetImage ? apply_source_metadata_to_png_file_impl(request.sourceMetadata,
+                                                                       request.path,
+                                                                       *targetImage)
+                              : apply_source_metadata_to_png_file_impl(request.sourceMetadata, request.path);
+        break;
+    case ImageCodecFamily::Tiff:
+        applied = targetImage ? apply_source_metadata_to_tiff_file_impl(request.sourceMetadata,
+                                                                        request.path,
+                                                                        *targetImage)
+                              : apply_source_metadata_to_tiff_file_impl(request.sourceMetadata, request.path);
+        break;
+    case ImageCodecFamily::Exr:
+        applied = targetImage ? apply_source_metadata_to_exr_file_impl(request.sourceMetadata,
+                                                                       request.path,
+                                                                       *targetImage)
+                              : apply_source_metadata_to_exr_file_impl(request.sourceMetadata, request.path);
+        break;
+    default:
+        result.errorMessage = "metadata transfer currently supports JPEG, PNG, TIFF, and EXR targets";
+        return result;
+    }
+
+    result.success = applied.success;
+    result.errorMessage = std::move(applied.errorMessage);
+    return result;
 }
 
 }  // namespace rawgl::io

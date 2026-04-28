@@ -65,19 +65,35 @@ PNG writes 8-bit and 16-bit integer images.
 TIFF output accepts:
 
 - ``tiff:compression``: ``none``, ``lzw``, ``packbits``, ``zip``, ``deflate``,
-  or ``adobe_deflate``
+  ``adobe_deflate``, ``jpeg``, ``lzma``, ``zstd``, ``webp``, ``jxl``,
+  ``jxl_dng``, or ``lerc`` when the deployed libtiff build provides that codec
 - ``compression`` or ``oiio:Compression``: legacy compression spelling
 - ``tiff:predictor``: ``none``/``1``, ``horizontal``/``2``, or ``float``/``3``
-- ``tiff:tiled``: ``true``/``false``
-- ``tiff:tileWidth`` and ``tiff:tileLength`` or ``tiff:tileHeight``
-- ``tiff:rowsPerStrip`` for striped output
-- ``tiff:bigTiff`` or ``tiff:bigtiff``: force BigTIFF output
+- ``tiff:layout``: ``strips`` or ``tiled``. ``tiff:tiled`` is still accepted.
+- ``tiff:tileWidth``/``tiff:tile_width`` and
+  ``tiff:tileLength``/``tiff:tile_length`` or
+  ``tiff:tileHeight``/``tiff:tile_height``
+- ``tiff:rowsPerStrip`` or ``tiff:rows_per_strip`` for striped output
+- ``tiff:bigTiff``, ``tiff:bigtiff``, or ``tiff:big_tiff``: force BigTIFF
+  output
+- ``tiff:jpegQuality``/``tiff:jpeg_quality``: JPEG-in-TIFF quality from ``1``
+  to ``100``
+- ``tiff:zipLevel``/``tiff:zip_level`` or
+  ``tiff:deflateLevel``/``tiff:deflate_level``: Deflate level from ``1`` to
+  ``9``
+- ``tiff:zstdLevel``/``tiff:zstd_level``: ZSTD level from ``1`` to ``22``
+- ``tiff:lzmaPreset``/``tiff:lzma_preset``: LZMA preset from ``0`` to ``9``
+- ``tiff:webpLevel``/``tiff:webp_level``: WebP level from ``0`` to ``100``
+- ``tiff:webpLossless``/``tiff:webp_lossless`` and
+  ``tiff:webpLosslessExact``/``tiff:webp_lossless_exact`` for WebP-in-TIFF
 - ``oiio:UnassociatedAlpha``: mark the extra alpha sample as unassociated
 
 TIFF writes 8-bit, 16-bit, and 32-bit float output. ``tiff:rowsPerStrip`` is
 not valid when tiled output is enabled. TIFF predictors require LZW or Deflate
 compression; the floating-point predictor is valid only for 32-bit float
-output.
+output. Codec-specific quality and level options must match the selected
+compression mode; RawGL reports a write error instead of silently ignoring a
+mismatched option.
 
 OpenEXR output accepts:
 
@@ -100,9 +116,10 @@ Example output attributes:
      --out OutColor output.tif ^
      --out_bits 16 ^
      --out_attr tiff:compression zip ^
-     --out_attr tiff:tiled true ^
-     --out_attr tiff:tileWidth 256 ^
-     --out_attr tiff:tileLength 256
+     --out_attr tiff:zip_level 6 ^
+     --out_attr tiff:layout tiled ^
+     --out_attr tiff:tile_width 256 ^
+     --out_attr tiff:tile_height 256
 
 .. code-block:: python
 
@@ -175,7 +192,8 @@ the memory-first ``rawgl::Workflow`` surface.
 Metadata
 --------
 
-``rawgl::io`` also owns file-backed metadata readback.
+``rawgl::io`` also owns file-backed metadata readback and explicit
+source-to-target metadata transfer.
 
 Use metadata readback when:
 
@@ -183,13 +201,14 @@ Use metadata readback when:
 - the metadata inspection step should stay separate from workflow execution
 - you want the file boundary to remain explicit
 
-Current support includes preview reads and typed metadata documents for
-inspection.
+Current support includes preview reads, typed metadata documents for
+inspection, and transfer into already-written JPEG, TIFF, PNG, and EXR targets.
 
 Python exposes the same path through:
 
 - ``rawgl.io.read_metadata(...)``
 - ``rawgl.io.read_metadata_document(...)``
+- ``rawgl.io.transfer_image_metadata(...)``
 - ``rawgl.MetadataReadRequest``
 - ``rawgl.IoRuntime.read_metadata_file(...)``
 
@@ -198,9 +217,10 @@ Use the preview path when you want printable metadata entries.
 Use the typed document path when you want a RawGL-owned typed representation of
 the metadata families that were read.
 
-Current save helpers do not preserve source metadata. Native metadata write and
-transfer are deferred until `rawgl_io` has format-family-aware writers instead
-of the removed OIIO-attribute bridge.
+Use ``TransferImageMetadataFile(...)`` or Python ``save_image(...,
+source_metadata=document)`` when a generated target should inherit metadata
+from a source document. The transfer path uses OpenMeta internally, but OpenMeta
+types do not appear in RawGL public headers.
 
 When to prefer IoRuntime
 ------------------------

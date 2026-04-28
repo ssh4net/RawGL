@@ -142,9 +142,10 @@ That lets RawGL expose real format controls directly:
     (`12-bit` lossy/lossless and `16-bit` lossless where the deployed library
     version supports it)
 - PNG bit depth, interlace, compression, filter policy, gamma/CICP/sRGB policy
-- TIFF compression, tiling/strip layout, predictor, and forced BigTIFF mode
-  are in. Planar layout, broader sample-format coverage, and richer TIFF
-  policy are still future work.
+- TIFF compression, tiling/strip layout, predictor, forced BigTIFF mode, and
+  per-codec compression levels are in. Planar layout, broader sample-format
+  coverage, multipage/subIFD policy, and deeper TIFF read controls are still
+  future work.
 - OpenEXR compression, half/float policy, multipart/channel handling, line
   order. One-level tiled read/write is in; mip/ripmap and multipart are still
   future work.

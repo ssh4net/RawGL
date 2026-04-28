@@ -54,7 +54,18 @@ final format-specific writer step.
 
 ## 3. Public API rule
 
-Do not reintroduce save-side metadata transfer into the public API yet.
+Status update, 2026-04-27:
+
+RawGL now exposes a narrow public transfer API:
+
+- `TransferImageMetadataFile(...)`
+- `IoRuntime::transferImageMetadataFile(...)`
+- Python `rawgl.io.transfer_image_metadata(...)`
+- Python `rawgl.io.save_image(..., source_metadata=document)`
+
+This supersedes the original “do not reintroduce yet” rule for the explicit
+transfer path. The public API still does not expose OpenMeta types and still
+does not imply implicit metadata preservation on every save.
 
 For now:
 
@@ -63,7 +74,8 @@ For now:
 - keep `MetadataField`
 - keep `MetadataDocument`
 - keep metadata reads public
-- keep metadata writes internal-only until JPEG/TIFF native write is proven
+- keep selective metadata mutation/editing internal until the native write
+  model is broader
 
 Reason:
 
@@ -247,7 +259,7 @@ This is the real first implementation task.
 The first landing is good enough when:
 
 - metadata read still works exactly as today
-- no public save-side metadata API is reintroduced yet
+- public transfer remains explicit and opt-in
 - JPEG/TIFF read captures native EXIF/XMP/ICC packets internally
 - one internal JPEG/TIFF write helper can emit source-native packets without
   flattening to OIIO attributes
@@ -260,7 +272,8 @@ Near-term priority:
 1. internal native packet capture on JPEG/TIFF read
 2. internal JPEG/TIFF native packet write helper
 3. validation fixtures for passthrough preservation
-4. only then consider reintroducing a public metadata-preserving save API
+4. expand the explicit public transfer API only after format behavior is
+   validated
 
 OpenMeta remains useful for:
 

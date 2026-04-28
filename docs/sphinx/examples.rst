@@ -25,8 +25,8 @@ Run ``examples/Metadata/ReadMetadata.py`` for a checked-in file-oriented
 metadata example.
 
 It loads ``tests/inputs/sky.jpg``, reads the source EXIF metadata, reads the
-same metadata into a typed RawGL document, and writes a baseline TIFF copy for
-image-only IO.
+same metadata into a typed RawGL document, and writes TIFF, JPEG, PNG, and EXR
+copies with source metadata transferred into each target.
 
 .. code-block:: python
 
@@ -35,23 +35,20 @@ image-only IO.
    import rawgl
 
    source_path = Path("tests/inputs/sky.jpg")
-   output_path = Path("examples/Metadata/ReadMetadata_python.tif")
+   output_path = Path("examples/Metadata/ReadMetadata_transfer_python.tif")
 
    image = rawgl.io.load_image(source_path)
-   rawgl.io.save_image(image, output_path, bits=16)
-
    document = rawgl.io.read_metadata_document(
        source_path,
        name_style=rawgl.MetadataNameStyle.oiio,
        name_policy=rawgl.MetadataNamePolicy.exif_tool_alias,
    )
 
+   rawgl.io.save_image(image, output_path, bits=16, source_metadata=document)
    print(len(document.fields))
 
 Use this shape when metadata is part of the file-oriented pipeline but not part
 of the shader execution itself.
-
-Current save helpers do not preserve source metadata.
 
 .. image:: _static/examples/sky_source_640.jpg
    :alt: Source sky photo used by the metadata and image-processing examples

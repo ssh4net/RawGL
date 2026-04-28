@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2022-2026 Erium Vladlen.
 
-#include "../src/io/metadata_internal.h"
 #include "rawgl/rawgl_io.h"
 
 #include <GL/glew.h>
@@ -143,8 +142,12 @@ main()
         return 1;
     }
 
-    const rawgl::io::ImageMetadataApplyResult tiffPatchResult =
-        rawgl::io::apply_source_metadata_to_tiff_file_impl(documentResult.document, tiffOutputPath.string());
+    rawgl::io::ImageMetadataTransferRequest transferRequest;
+    transferRequest.sourceMetadata = documentResult.document;
+    transferRequest.path = tiffOutputPath.string();
+
+    const rawgl::io::ImageMetadataTransferResult tiffPatchResult =
+        rawgl::io::TransferImageMetadataFile(transferRequest);
     if (!tiffPatchResult.success) {
         std::cerr << "TIFF metadata patch failed: " << tiffPatchResult.errorMessage << std::endl;
         return 1;
@@ -220,8 +223,9 @@ main()
         return 1;
     }
 
-    const rawgl::io::ImageMetadataApplyResult jpegPatchResult =
-        rawgl::io::apply_source_metadata_to_jpeg_file_impl(documentResult.document, jpegOutputPath.string());
+    transferRequest.path = jpegOutputPath.string();
+    const rawgl::io::ImageMetadataTransferResult jpegPatchResult =
+        rawgl::io::TransferImageMetadataFile(transferRequest);
     if (!jpegPatchResult.success) {
         std::cerr << "JPEG metadata patch failed: " << jpegPatchResult.errorMessage << std::endl;
         return 1;
@@ -293,8 +297,9 @@ main()
         return 1;
     }
 
-    const rawgl::io::ImageMetadataApplyResult pngPatchResult =
-        rawgl::io::apply_source_metadata_to_png_file_impl(documentResult.document, pngOutputPath.string());
+    transferRequest.path = pngOutputPath.string();
+    const rawgl::io::ImageMetadataTransferResult pngPatchResult =
+        rawgl::io::TransferImageMetadataFile(transferRequest);
     if (!pngPatchResult.success) {
         std::cerr << "PNG metadata patch failed: " << pngPatchResult.errorMessage << std::endl;
         return 1;
@@ -366,8 +371,9 @@ main()
         return 1;
     }
 
-    const rawgl::io::ImageMetadataApplyResult exrPatchResult =
-        rawgl::io::apply_source_metadata_to_exr_file_impl(documentResult.document, exrOutputPath.string());
+    transferRequest.path = exrOutputPath.string();
+    const rawgl::io::ImageMetadataTransferResult exrPatchResult =
+        rawgl::io::TransferImageMetadataFile(transferRequest);
     if (!exrPatchResult.success) {
         std::cerr << "EXR metadata patch failed: " << exrPatchResult.errorMessage << std::endl;
         return 1;

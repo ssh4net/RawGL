@@ -308,6 +308,7 @@ def save_image(
     bits=16,
     alpha_channel=None,
     attributes=None,
+    source_metadata=None,
     io_runtime=None,
 ):
     """Save one HostImageData or NumPy image to disk through rawgl.io."""
@@ -337,6 +338,37 @@ def save_image(
     result = io_runtime.save_image_file(request)
     if not result.success:
         raise RuntimeError(result.error_message or f"failed to save image '{path}'")
+    if source_metadata is not None:
+        transfer_image_metadata(path, source_metadata, io_runtime=io_runtime)
+    return result
+
+
+def transfer_image_metadata(path, source_metadata, *, target_image=None, io_runtime=None):
+    """Transfer a RawGL MetadataDocument into an already-written image file."""
+
+    io_runtime_type = globals().get("IoRuntime")
+    transfer_request_type = globals().get("ImageMetadataTransferRequest")
+    if io_runtime_type is None or transfer_request_type is None:
+        raise RuntimeError("rawgl.transfer_image_metadata() requires the core Python bindings")
+
+    if io_runtime is None:
+        io_runtime = io_runtime_type()
+
+    request = transfer_request_type()
+    request.path = str(path)
+    request.source_metadata = source_metadata
+    if target_image is not None:
+        if _is_numpy_array(target_image):
+            request.target_image = make_host_image(target_image)
+        elif isinstance(target_image, HostImageData):
+            request.target_image = target_image
+        else:
+            raise TypeError("target_image must be a HostImageData or NumPy array")
+        request.has_target_image = True
+
+    result = io_runtime.transfer_image_metadata_file(request)
+    if not result.success:
+        raise RuntimeError(result.error_message or f"failed to transfer metadata into '{path}'")
     return result
 
 
@@ -1991,6 +2023,8 @@ class _IoNamespace:
         self.MetadataReadResult = globals().get("MetadataReadResult")
         self.MetadataDocumentReadRequest = globals().get("MetadataDocumentReadRequest")
         self.MetadataDocumentReadResult = globals().get("MetadataDocumentReadResult")
+        self.ImageMetadataTransferRequest = globals().get("ImageMetadataTransferRequest")
+        self.ImageMetadataTransferResult = globals().get("ImageMetadataTransferResult")
 
     def _resolve_runtime(self, io_runtime=None):
         if io_runtime is not None:
@@ -2011,6 +2045,7 @@ class _IoNamespace:
         bits=16,
         alpha_channel=None,
         attributes=None,
+        source_metadata=None,
         io_runtime=None,
     ):
         return save_image(
@@ -2019,6 +2054,15 @@ class _IoNamespace:
             bits=bits,
             alpha_channel=alpha_channel,
             attributes=attributes,
+            source_metadata=source_metadata,
+            io_runtime=self._resolve_runtime(io_runtime),
+        )
+
+    def transfer_image_metadata(self, path, source_metadata, *, target_image=None, io_runtime=None):
+        return transfer_image_metadata(
+            path,
+            source_metadata,
+            target_image=target_image,
             io_runtime=self._resolve_runtime(io_runtime),
         )
 

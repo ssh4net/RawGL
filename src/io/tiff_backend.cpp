@@ -7,11 +7,15 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cctype>
 #include <cstdint>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <initializer_list>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -47,6 +51,25 @@ find_attribute_value(const std::map<std::string, std::string>& attributes, const
     return &it->second;
 }
 
+static const std::string*
+find_attribute_value(const std::map<std::string, std::string>& attributes, std::initializer_list<const char*> keys)
+{
+    for (const char* key : keys) {
+        const auto it = attributes.find(key);
+        if (it != attributes.end()) {
+            return &it->second;
+        }
+    }
+    return nullptr;
+}
+
+enum class TiffStorageLayout
+{
+    Auto,
+    Strips,
+    Tiles,
+};
+
 static uint16_t
 default_tiff_compression()
 {
@@ -58,13 +81,7 @@ parse_tiff_compression(const std::map<std::string, std::string>& attributes,
                        uint16_t& compression,
                        std::string& errorMessage)
 {
-    const std::string* value = find_attribute_value(attributes, "tiff:compression");
-    if (!value) {
-        value = find_attribute_value(attributes, "compression");
-    }
-    if (!value) {
-        value = find_attribute_value(attributes, "oiio:Compression");
-    }
+    const std::string* value = find_attribute_value(attributes, { "tiff:compression", "compression", "oiio:Compression" });
     if (!value) {
         compression = default_tiff_compression();
         return true;
@@ -82,6 +99,55 @@ parse_tiff_compression(const std::map<std::string, std::string>& attributes,
         compression = COMPRESSION_ADOBE_DEFLATE;
 #else
         compression = COMPRESSION_DEFLATE;
+#endif
+    } else if (normalized == "jpeg" || normalized == "jpg") {
+#if defined(COMPRESSION_JPEG)
+        compression = COMPRESSION_JPEG;
+#else
+        errorMessage = "TIFF JPEG compression is not available in this libtiff header";
+        return false;
+#endif
+    } else if (normalized == "lzma") {
+#if defined(COMPRESSION_LZMA)
+        compression = COMPRESSION_LZMA;
+#else
+        errorMessage = "TIFF LZMA compression is not available in this libtiff header";
+        return false;
+#endif
+    } else if (normalized == "zstd") {
+#if defined(COMPRESSION_ZSTD)
+        compression = COMPRESSION_ZSTD;
+#else
+        errorMessage = "TIFF ZSTD compression is not available in this libtiff header";
+        return false;
+#endif
+    } else if (normalized == "webp") {
+#if defined(COMPRESSION_WEBP)
+        compression = COMPRESSION_WEBP;
+#else
+        errorMessage = "TIFF WebP compression is not available in this libtiff header";
+        return false;
+#endif
+    } else if (normalized == "jxl" || normalized == "jpegxl" || normalized == "jpeg_xl") {
+#if defined(COMPRESSION_JXL)
+        compression = COMPRESSION_JXL;
+#else
+        errorMessage = "TIFF JPEG XL compression is not available in this libtiff header";
+        return false;
+#endif
+    } else if (normalized == "jxl_dng" || normalized == "jpegxl_dng" || normalized == "dng_jxl") {
+#if defined(COMPRESSION_JXL_DNG_1_7)
+        compression = COMPRESSION_JXL_DNG_1_7;
+#else
+        errorMessage = "TIFF DNG JPEG XL compression is not available in this libtiff header";
+        return false;
+#endif
+    } else if (normalized == "lerc") {
+#if defined(COMPRESSION_LERC)
+        compression = COMPRESSION_LERC;
+#else
+        errorMessage = "TIFF LERC compression is not available in this libtiff header";
+        return false;
 #endif
     } else {
         errorMessage = "unsupported TIFF compression mode";
@@ -125,28 +191,107 @@ parse_bool_attribute(const std::map<std::string, std::string>& attributes, const
 }
 
 static bool
-parse_positive_u32_attribute(const std::map<std::string, std::string>& attributes,
-                             const char* key,
-                             bool& present,
-                             uint32_t& value,
-                             const char* invalidValueMessage,
-                             std::string& errorMessage)
+parse_bool_attribute(const std::map<std::string, std::string>& attributes,
+                     std::initializer_list<const char*> keys,
+                     bool& value)
 {
-    const std::string* attribute = find_attribute_value(attributes, key);
+    const std::string* attribute = find_attribute_value(attributes, keys);
+    if (!attribute) {
+        return false;
+    }
+
+    const std::string normalized = to_lower_copy(*attribute);
+    value = normalized == "1" || normalized == "true" || normalized == "on" || normalized == "yes";
+    return true;
+}
+
+static bool
+parse_u32_attribute(const std::map<std::string, std::string>& attributes,
+                    std::initializer_list<const char*> keys,
+                    const uint32_t minimumValue,
+                    const uint32_t maximumValue,
+                    bool& present,
+                    uint32_t& value,
+                    const char* invalidValueMessage,
+                    std::string& errorMessage)
+{
+    const std::string* attribute = find_attribute_value(attributes, keys);
     if (!attribute) {
         present = false;
         value = 0u;
         return true;
     }
 
-    const int parsedValue = std::atoi(attribute->c_str());
-    if (parsedValue <= 0) {
+    if (attribute->empty()) {
+        errorMessage = invalidValueMessage;
+        return false;
+    }
+
+    for (const char digit : *attribute) {
+        if (!std::isdigit(static_cast<unsigned char>(digit))) {
+            errorMessage = invalidValueMessage;
+            return false;
+        }
+    }
+
+    errno = 0;
+    char* end = nullptr;
+    const unsigned long long parsedValue = std::strtoull(attribute->c_str(), &end, 10);
+    if (errno != 0 || end == nullptr || *end != '\0' || parsedValue < minimumValue || parsedValue > maximumValue) {
         errorMessage = invalidValueMessage;
         return false;
     }
 
     present = true;
     value = static_cast<uint32_t>(parsedValue);
+    return true;
+}
+
+static bool
+parse_tiff_storage_layout(const std::map<std::string, std::string>& attributes,
+                          TiffStorageLayout& layout,
+                          std::string& errorMessage)
+{
+    layout = TiffStorageLayout::Auto;
+
+    const std::string* value =
+        find_attribute_value(attributes, { "tiff:layout", "tiff:storageLayout", "tiff:storage_layout", "tiff:storage" });
+    if (value) {
+        const std::string normalized = to_lower_copy(*value);
+        if (normalized == "auto") {
+            layout = TiffStorageLayout::Auto;
+        } else if (normalized == "strip" || normalized == "strips" || normalized == "scanline"
+                   || normalized == "scanlines") {
+            layout = TiffStorageLayout::Strips;
+        } else if (normalized == "tile" || normalized == "tiles" || normalized == "tiled") {
+            layout = TiffStorageLayout::Tiles;
+        } else {
+            errorMessage = "unsupported TIFF storage layout";
+            return false;
+        }
+    }
+
+    bool tiledValue = false;
+    const bool hasTiledAttribute = parse_bool_attribute(attributes, "tiff:tiled", tiledValue);
+    if (!hasTiledAttribute) {
+        return true;
+    }
+
+    if (tiledValue) {
+        if (layout == TiffStorageLayout::Strips) {
+            errorMessage = "conflicting TIFF layout options";
+            return false;
+        }
+        layout = TiffStorageLayout::Tiles;
+        return true;
+    }
+
+    if (layout == TiffStorageLayout::Tiles) {
+        errorMessage = "conflicting TIFF layout options";
+        return false;
+    }
+
+    layout = TiffStorageLayout::Strips;
     return true;
 }
 
@@ -212,12 +357,14 @@ resolve_tiff_strip_layout(const std::map<std::string, std::string>& attributes,
 {
     bool hasRowsPerStrip = false;
     uint32_t requestedRowsPerStrip = 0u;
-    if (!parse_positive_u32_attribute(attributes,
-                                      "tiff:rowsPerStrip",
-                                      hasRowsPerStrip,
-                                      requestedRowsPerStrip,
-                                      "invalid positive TIFF rows-per-strip value",
-                                      errorMessage)) {
+    if (!parse_u32_attribute(attributes,
+                             { "tiff:rowsPerStrip", "tiff:rows_per_strip" },
+                             1u,
+                             std::numeric_limits<uint32_t>::max(),
+                             hasRowsPerStrip,
+                             requestedRowsPerStrip,
+                             "invalid positive TIFF rows-per-strip value",
+                             errorMessage)) {
         return false;
     }
 
@@ -243,13 +390,211 @@ static bool
 should_force_bigtiff(const std::map<std::string, std::string>& attributes)
 {
     bool forceBigTiff = false;
-    if (parse_bool_attribute(attributes, "tiff:bigTiff", forceBigTiff)) {
-        return forceBigTiff;
-    }
-    if (parse_bool_attribute(attributes, "tiff:bigtiff", forceBigTiff)) {
+    if (parse_bool_attribute(attributes, { "tiff:bigTiff", "tiff:bigtiff", "tiff:big_tiff" }, forceBigTiff)) {
         return forceBigTiff;
     }
     return false;
+}
+
+static bool
+set_tiff_compression_u32_option(TIFF* tif,
+                                const std::map<std::string, std::string>& attributes,
+                                const uint16_t compression,
+                                const uint16_t expectedCompression,
+                                const uint32_t tag,
+                                std::initializer_list<const char*> keys,
+                                const uint32_t minimumValue,
+                                const uint32_t maximumValue,
+                                const char* invalidValueMessage,
+                                const char* wrongCompressionMessage,
+                                std::string& errorMessage)
+{
+    bool present = false;
+    uint32_t value = 0u;
+    if (!parse_u32_attribute(
+            attributes, keys, minimumValue, maximumValue, present, value, invalidValueMessage, errorMessage)) {
+        return false;
+    }
+    if (!present) {
+        return true;
+    }
+    if (compression != expectedCompression) {
+        errorMessage = wrongCompressionMessage;
+        return false;
+    }
+    if (TIFFSetField(tif, tag, static_cast<int>(value)) != 1) {
+        errorMessage = "failed to set TIFF compression option";
+        return false;
+    }
+    return true;
+}
+
+static bool
+set_tiff_compression_options(TIFF* tif,
+                             const std::map<std::string, std::string>& attributes,
+                             const uint16_t compression,
+                             std::string& errorMessage)
+{
+#if defined(TIFFTAG_JPEGQUALITY) && defined(COMPRESSION_JPEG)
+    if (!set_tiff_compression_u32_option(tif,
+                                         attributes,
+                                         compression,
+                                         COMPRESSION_JPEG,
+                                         TIFFTAG_JPEGQUALITY,
+                                         { "tiff:jpegQuality", "tiff:jpeg_quality", "jpeg:quality", "jpg:quality" },
+                                         1u,
+                                         100u,
+                                         "invalid TIFF JPEG quality value",
+                                         "TIFF JPEG quality requires JPEG compression",
+                                         errorMessage)) {
+        return false;
+    }
+#else
+    if (find_attribute_value(attributes, { "tiff:jpegQuality", "tiff:jpeg_quality", "jpeg:quality", "jpg:quality" })) {
+        errorMessage = "TIFF JPEG quality is not available in this libtiff build";
+        return false;
+    }
+#endif
+
+    const std::string* zipQuality = find_attribute_value(
+        attributes, { "tiff:zipQuality", "tiff:zip_quality", "tiff:zipLevel", "tiff:zip_level",
+                      "tiff:deflateLevel", "tiff:deflate_level" });
+    if (zipQuality) {
+#if defined(TIFFTAG_ZIPQUALITY)
+        bool present = false;
+        uint32_t value = 0u;
+        if (!parse_u32_attribute(attributes,
+                                 { "tiff:zipQuality", "tiff:zip_quality", "tiff:zipLevel", "tiff:zip_level",
+                                   "tiff:deflateLevel", "tiff:deflate_level" },
+                                 1u,
+                                 9u,
+                                 present,
+                                 value,
+                                 "invalid TIFF Deflate level value",
+                                 errorMessage)) {
+            return false;
+        }
+        if (compression != COMPRESSION_DEFLATE
+#if defined(COMPRESSION_ADOBE_DEFLATE)
+            && compression != COMPRESSION_ADOBE_DEFLATE
+#endif
+        ) {
+            errorMessage = "TIFF Deflate level requires Deflate compression";
+            return false;
+        }
+        if (TIFFSetField(tif, TIFFTAG_ZIPQUALITY, static_cast<int>(value)) != 1) {
+            errorMessage = "failed to set TIFF Deflate level";
+            return false;
+        }
+#else
+        (void)zipQuality;
+        errorMessage = "TIFF Deflate level is not available in this libtiff build";
+        return false;
+#endif
+    }
+
+#if defined(TIFFTAG_ZSTD_LEVEL) && defined(COMPRESSION_ZSTD)
+    if (!set_tiff_compression_u32_option(tif,
+                                         attributes,
+                                         compression,
+                                         COMPRESSION_ZSTD,
+                                         TIFFTAG_ZSTD_LEVEL,
+                                         { "tiff:zstdLevel", "tiff:zstd_level" },
+                                         1u,
+                                         22u,
+                                         "invalid TIFF ZSTD level value",
+                                         "TIFF ZSTD level requires ZSTD compression",
+                                         errorMessage)) {
+        return false;
+    }
+#else
+    if (find_attribute_value(attributes, { "tiff:zstdLevel", "tiff:zstd_level" })) {
+        errorMessage = "TIFF ZSTD level is not available in this libtiff build";
+        return false;
+    }
+#endif
+
+#if defined(TIFFTAG_LZMAPRESET) && defined(COMPRESSION_LZMA)
+    if (!set_tiff_compression_u32_option(tif,
+                                         attributes,
+                                         compression,
+                                         COMPRESSION_LZMA,
+                                         TIFFTAG_LZMAPRESET,
+                                         { "tiff:lzmaPreset", "tiff:lzma_preset" },
+                                         0u,
+                                         9u,
+                                         "invalid TIFF LZMA preset value",
+                                         "TIFF LZMA preset requires LZMA compression",
+                                         errorMessage)) {
+        return false;
+    }
+#else
+    if (find_attribute_value(attributes, { "tiff:lzmaPreset", "tiff:lzma_preset" })) {
+        errorMessage = "TIFF LZMA preset is not available in this libtiff build";
+        return false;
+    }
+#endif
+
+#if defined(TIFFTAG_WEBP_LEVEL) && defined(COMPRESSION_WEBP)
+    if (!set_tiff_compression_u32_option(tif,
+                                         attributes,
+                                         compression,
+                                         COMPRESSION_WEBP,
+                                         TIFFTAG_WEBP_LEVEL,
+                                         { "tiff:webpLevel", "tiff:webp_level" },
+                                         0u,
+                                         100u,
+                                         "invalid TIFF WebP level value",
+                                         "TIFF WebP level requires WebP compression",
+                                         errorMessage)) {
+        return false;
+    }
+#else
+    if (find_attribute_value(attributes, { "tiff:webpLevel", "tiff:webp_level" })) {
+        errorMessage = "TIFF WebP level is not available in this libtiff build";
+        return false;
+    }
+#endif
+
+#if defined(TIFFTAG_WEBP_LOSSLESS) && defined(COMPRESSION_WEBP)
+    bool webpLossless = false;
+    if (parse_bool_attribute(attributes, { "tiff:webpLossless", "tiff:webp_lossless" }, webpLossless)) {
+        if (compression != COMPRESSION_WEBP) {
+            errorMessage = "TIFF WebP lossless mode requires WebP compression";
+            return false;
+        }
+        if (TIFFSetField(tif, TIFFTAG_WEBP_LOSSLESS, webpLossless ? 1 : 0) != 1) {
+            errorMessage = "failed to set TIFF WebP lossless mode";
+            return false;
+        }
+    }
+#else
+    if (find_attribute_value(attributes, { "tiff:webpLossless", "tiff:webp_lossless" })) {
+        errorMessage = "TIFF WebP lossless mode is not available in this libtiff build";
+        return false;
+    }
+#endif
+
+#if defined(TIFFTAG_WEBP_LOSSLESS_EXACT) && defined(COMPRESSION_WEBP)
+    bool webpLosslessExact = false;
+    if (parse_bool_attribute(attributes, { "tiff:webpLosslessExact", "tiff:webp_lossless_exact" }, webpLosslessExact)) {
+        if (compression != COMPRESSION_WEBP) {
+            errorMessage = "TIFF WebP exact lossless mode requires WebP compression";
+            return false;
+        }
+        if (TIFFSetField(tif, TIFFTAG_WEBP_LOSSLESS_EXACT, webpLosslessExact ? 1 : 0) != 1) {
+            errorMessage = "failed to set TIFF WebP exact lossless mode";
+            return false;
+        }
+    }
+#else
+    if (find_attribute_value(attributes, { "tiff:webpLosslessExact", "tiff:webp_lossless_exact" })) {
+        errorMessage = "TIFF WebP exact lossless mode is not available in this libtiff build";
+        return false;
+    }
+#endif
+
+    return true;
 }
 
 static float
@@ -392,19 +737,19 @@ resolve_tiff_channel_layout(const HostImageData& image,
 static bool
 resolve_tiff_tile_layout(const std::map<std::string, std::string>& attributes,
                          TIFF* tif,
+                         const TiffStorageLayout storageLayout,
                          bool& useTiles,
                          uint32_t& tileWidth,
                          uint32_t& tileLength,
                          std::string& errorMessage)
 {
-    bool tiledValue = false;
-    const bool hasTiledAttr = parse_bool_attribute(attributes, "tiff:tiled", tiledValue);
-
     bool hasTileWidth = false;
     uint32_t requestedTileWidth = 0u;
-    if (!parse_positive_u32_attribute(
+    if (!parse_u32_attribute(
             attributes,
-            "tiff:tileWidth",
+            { "tiff:tileWidth", "tiff:tile_width" },
+            1u,
+            std::numeric_limits<uint32_t>::max(),
             hasTileWidth,
             requestedTileWidth,
             "invalid positive TIFF tile width",
@@ -414,9 +759,11 @@ resolve_tiff_tile_layout(const std::map<std::string, std::string>& attributes,
 
     bool hasTileLength = false;
     uint32_t requestedTileLength = 0u;
-    if (!parse_positive_u32_attribute(
+    if (!parse_u32_attribute(
             attributes,
-            "tiff:tileLength",
+            { "tiff:tileLength", "tiff:tile_length" },
+            1u,
+            std::numeric_limits<uint32_t>::max(),
             hasTileLength,
             requestedTileLength,
             "invalid positive TIFF tile length",
@@ -425,9 +772,11 @@ resolve_tiff_tile_layout(const std::map<std::string, std::string>& attributes,
     }
 
     if (!hasTileLength) {
-        if (!parse_positive_u32_attribute(
+        if (!parse_u32_attribute(
                 attributes,
-                "tiff:tileHeight",
+                { "tiff:tileHeight", "tiff:tile_height" },
+                1u,
+                std::numeric_limits<uint32_t>::max(),
                 hasTileLength,
                 requestedTileLength,
                 "invalid positive TIFF tile height",
@@ -436,7 +785,12 @@ resolve_tiff_tile_layout(const std::map<std::string, std::string>& attributes,
         }
     }
 
-    useTiles = (hasTiledAttr && tiledValue) || hasTileWidth || hasTileLength;
+    if (storageLayout == TiffStorageLayout::Strips && (hasTileWidth || hasTileLength)) {
+        errorMessage = "TIFF tile dimensions are not valid for stripped TIFF output";
+        return false;
+    }
+
+    useTiles = storageLayout == TiffStorageLayout::Tiles || hasTileWidth || hasTileLength;
     if (!useTiles) {
         tileWidth = 0u;
         tileLength = 0u;
@@ -943,18 +1297,30 @@ encode_tiff_file(const std::string& path,
     TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
     TIFFSetField(tif, TIFFTAG_COMPRESSION, compression);
 
-    if (!resolve_tiff_tile_layout(attributes, tif, useTiles, tileWidth, tileLength, errorMessage)) {
+    if (!set_tiff_compression_options(tif, attributes, compression, errorMessage)) {
         TIFFClose(tif);
         return false;
     }
+
+    TiffStorageLayout storageLayout = TiffStorageLayout::Auto;
+    if (!parse_tiff_storage_layout(attributes, storageLayout, errorMessage)) {
+        TIFFClose(tif);
+        return false;
+    }
+
+    if (!resolve_tiff_tile_layout(attributes, tif, storageLayout, useTiles, tileWidth, tileLength, errorMessage)) {
+        TIFFClose(tif);
+        return false;
+    }
+    if (!resolve_tiff_strip_layout(attributes, tif, useTiles, rowsPerStrip, errorMessage)) {
+        TIFFClose(tif);
+        return false;
+    }
+
     if (useTiles) {
         TIFFSetField(tif, TIFFTAG_TILEWIDTH, tileWidth);
         TIFFSetField(tif, TIFFTAG_TILELENGTH, tileLength);
     } else {
-        if (!resolve_tiff_strip_layout(attributes, tif, useTiles, rowsPerStrip, errorMessage)) {
-            TIFFClose(tif);
-            return false;
-        }
         TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, rowsPerStrip);
     }
 

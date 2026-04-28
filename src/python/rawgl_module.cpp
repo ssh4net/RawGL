@@ -686,12 +686,27 @@ NB_MODULE(_rawgl, module)
         .def_rw("error_message", &rawgl::io::MetadataDocumentReadResult::errorMessage)
         .def_rw("document", &rawgl::io::MetadataDocumentReadResult::document);
 
+    nb::class_<rawgl::io::ImageMetadataTransferRequest>(module, "ImageMetadataTransferRequest")
+        .def(nb::init<>())
+        .def_rw("path", &rawgl::io::ImageMetadataTransferRequest::path)
+        .def_rw("source_metadata", &rawgl::io::ImageMetadataTransferRequest::sourceMetadata)
+        .def_rw("has_target_image", &rawgl::io::ImageMetadataTransferRequest::hasTargetImage)
+        .def_rw("target_image", &rawgl::io::ImageMetadataTransferRequest::targetImage);
+
+    nb::class_<rawgl::io::ImageMetadataTransferResult>(module, "ImageMetadataTransferResult")
+        .def(nb::init<>())
+        .def_rw("success", &rawgl::io::ImageMetadataTransferResult::success)
+        .def_rw("error_message", &rawgl::io::ImageMetadataTransferResult::errorMessage);
+
     nb::class_<rawgl::io::IoRuntime>(module, "IoRuntime")
         .def(nb::init<const rawgl::io::IoRuntimeOptions&>(), nb::arg("options") = rawgl::io::IoRuntimeOptions {})
         .def("load_image_file", &rawgl::io::IoRuntime::loadImageFile, nb::arg("request"))
         .def("save_image_file", &rawgl::io::IoRuntime::saveImageFile, nb::arg("request"))
         .def("read_metadata_file", &rawgl::io::IoRuntime::readMetadataFile, nb::arg("request"))
         .def("read_metadata_document_file", &rawgl::io::IoRuntime::readMetadataDocumentFile, nb::arg("request"))
+        .def("transfer_image_metadata_file",
+             &rawgl::io::IoRuntime::transferImageMetadataFile,
+             nb::arg("request"))
         .def("prepare",
              [](const rawgl::io::IoRuntime& ioRuntime,
                 const rawgl::Session& session,
@@ -726,6 +741,9 @@ NB_MODULE(_rawgl, module)
     module.def("save_image_file", &rawgl::io::SaveImageFile, nb::arg("request"));
     module.def("read_metadata_file", &rawgl::io::ReadMetadataFile, nb::arg("request"));
     module.def("read_metadata_document_file", &rawgl::io::ReadMetadataDocumentFile, nb::arg("request"));
+    module.def("transfer_image_metadata_file",
+               &rawgl::io::TransferImageMetadataFile,
+               nb::arg("request"));
 
     nb::class_<rawgl::batch::BatchRunnerOptions>(module, "BatchRunnerOptions")
         .def(nb::init<>())

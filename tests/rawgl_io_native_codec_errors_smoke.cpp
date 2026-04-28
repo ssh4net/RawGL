@@ -98,8 +98,32 @@ main()
     if (!expect_save_failure("tests/outputs/rawgl_io_error_tiff_tile.tif",
                              image,
                              16,
-                             { { "tiff:tiled", "true" }, { "tiff:tileWidth", "0" } },
+                             { { "tiff:tiled", "true" }, { "tiff:tile_width", "0" } },
                              "Invalid TIFF tile width")) {
+        return 1;
+    }
+
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_tiff_layout.tif",
+                             image,
+                             16,
+                             { { "tiff:layout", "not_a_layout" } },
+                             "Invalid TIFF layout")) {
+        return 1;
+    }
+
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_tiff_layout_conflict.tif",
+                             image,
+                             16,
+                             { { "tiff:layout", "strips" }, { "tiff:tile_width", "16" } },
+                             "Conflicting TIFF layout")) {
+        return 1;
+    }
+
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_tiff_rows_with_tiles.tif",
+                             image,
+                             16,
+                             { { "tiff:layout", "tiled" }, { "tiff:rows_per_strip", "4" } },
+                             "TIFF rows-per-strip with tiles")) {
         return 1;
     }
 
@@ -116,6 +140,22 @@ main()
                              16,
                              { { "tiff:predictor", "not_a_predictor" } },
                              "Invalid TIFF predictor")) {
+        return 1;
+    }
+
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_tiff_zip_level.tif",
+                             image,
+                             16,
+                             { { "tiff:compression", "deflate" }, { "tiff:zip_level", "42" } },
+                             "Invalid TIFF Deflate level")) {
+        return 1;
+    }
+
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_tiff_wrong_level.tif",
+                             image,
+                             16,
+                             { { "tiff:compression", "lzw" }, { "tiff:zip_level", "5" } },
+                             "Wrong TIFF compression level")) {
         return 1;
     }
 

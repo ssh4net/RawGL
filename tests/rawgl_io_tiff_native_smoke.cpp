@@ -67,9 +67,9 @@ save_tiled_tiff(const std::filesystem::path& path, const rawgl::HostImageData& i
 {
     std::map<std::string, std::string> attributes;
     attributes.insert({ "tiff:compression", "none" });
-    attributes.insert({ "tiff:tiled", "true" });
-    attributes.insert({ "tiff:tileWidth", "16" });
-    attributes.insert({ "tiff:tileLength", "16" });
+    attributes.insert({ "tiff:layout", "tiled" });
+    attributes.insert({ "tiff:tile_width", "16" });
+    attributes.insert({ "tiff:tile_height", "16" });
 
     rawgl::io::ImageEncodeSettings settings;
     settings.codec = rawgl::io::ImageCodecFamily::Tiff;
@@ -85,7 +85,48 @@ save_tiled_tiff(const std::filesystem::path& path, const rawgl::HostImageData& i
 }
 
 static bool
-verify_tiff_layout(const std::filesystem::path& path)
+save_stripped_tiff(const std::filesystem::path& path,
+                   const rawgl::HostImageData& image,
+                   uint16_t& expectedCompression)
+{
+    std::map<std::string, std::string> attributes;
+    attributes.insert({ "tiff:layout", "strips" });
+    attributes.insert({ "tiff:rows_per_strip", "4" });
+
+#if defined(RAWGL_TEST_HAS_TIFFIO)
+#    if defined(COMPRESSION_ADOBE_DEFLATE)
+    expectedCompression = COMPRESSION_ADOBE_DEFLATE;
+#    else
+    expectedCompression = COMPRESSION_DEFLATE;
+#    endif
+    if (TIFFIsCODECConfigured(expectedCompression) != 0) {
+        attributes.insert({ "tiff:compression", "deflate" });
+        attributes.insert({ "tiff:zip_level", "6" });
+        attributes.insert({ "tiff:predictor", "horizontal" });
+    } else {
+        expectedCompression = COMPRESSION_NONE;
+        attributes.insert({ "tiff:compression", "none" });
+    }
+#else
+    expectedCompression = 1u;
+    attributes.insert({ "tiff:compression", "none" });
+#endif
+
+    rawgl::io::ImageEncodeSettings settings;
+    settings.codec = rawgl::io::ImageCodecFamily::Tiff;
+    settings.componentType = rawgl::io::ImageComponentType::U16;
+
+    std::string errorMessage;
+    if (!rawgl::io::encode_tiff_file(path.string(), attributes, -1, image, settings, errorMessage)) {
+        std::cerr << "Stripped TIFF save failed: " << errorMessage << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+static bool
+verify_tiled_tiff_layout(const std::filesystem::path& path)
 {
 #if defined(RAWGL_TEST_HAS_TIFFIO)
     TIFF* tif = TIFFOpen(path.string().c_str(), "r");
@@ -118,11 +159,56 @@ verify_tiff_layout(const std::filesystem::path& path)
 }
 
 static bool
+verify_stripped_tiff_layout(const std::filesystem::path& path, const uint16_t expectedCompression)
+{
+#if defined(RAWGL_TEST_HAS_TIFFIO)
+    TIFF* tif = TIFFOpen(path.string().c_str(), "r");
+    if (tif == nullptr) {
+        std::cerr << "Failed to reopen TIFF for strip verification." << std::endl;
+        return false;
+    }
+
+    if (TIFFIsTiled(tif) != 0) {
+        TIFFClose(tif);
+        std::cerr << "TIFF output is tiled but stripped output was requested." << std::endl;
+        return false;
+    }
+
+    uint32_t rowsPerStrip = 0u;
+    uint16_t compression = 0u;
+    TIFFGetField(tif, TIFFTAG_ROWSPERSTRIP, &rowsPerStrip);
+    TIFFGetField(tif, TIFFTAG_COMPRESSION, &compression);
+
+    uint16_t predictor = PREDICTOR_NONE;
+    TIFFGetFieldDefaulted(tif, TIFFTAG_PREDICTOR, &predictor);
+    TIFFClose(tif);
+
+    if (rowsPerStrip != 4u) {
+        std::cerr << "Unexpected TIFF rows-per-strip value." << std::endl;
+        return false;
+    }
+    if (compression != expectedCompression) {
+        std::cerr << "Unexpected TIFF compression value." << std::endl;
+        return false;
+    }
+    if (expectedCompression != COMPRESSION_NONE && predictor != PREDICTOR_HORIZONTAL) {
+        std::cerr << "Unexpected TIFF predictor value." << std::endl;
+        return false;
+    }
+#else
+    (void)path;
+    (void)expectedCompression;
+#endif
+
+    return true;
+}
+
+static bool
 verify_round_trip(const std::filesystem::path& path, const rawgl::HostImageData& source)
 {
     const rawgl::io::DecodedImageData result = rawgl::io::decode_tiff_file(path.string());
     if (!result.success) {
-        std::cerr << "Tiled TIFF reload failed: " << result.errorMessage << std::endl;
+        std::cerr << "TIFF reload failed: " << result.errorMessage << std::endl;
         return false;
     }
 
@@ -143,19 +229,32 @@ verify_round_trip(const std::filesystem::path& path, const rawgl::HostImageData&
 int
 main()
 {
-    const std::filesystem::path outputPath = "tests/outputs/rawgl_io_tiff_native_tiled_u16.tif";
+    const std::filesystem::path tiledOutputPath = "tests/outputs/rawgl_io_tiff_native_tiled_u16.tif";
+    const std::filesystem::path strippedOutputPath = "tests/outputs/rawgl_io_tiff_native_stripped_u16.tif";
 
     std::error_code removeError;
-    std::filesystem::remove(outputPath, removeError);
+    std::filesystem::remove(tiledOutputPath, removeError);
+    std::filesystem::remove(strippedOutputPath, removeError);
 
     const rawgl::HostImageData image = make_test_image();
-    if (!save_tiled_tiff(outputPath, image)) {
+    if (!save_tiled_tiff(tiledOutputPath, image)) {
         return 1;
     }
-    if (!verify_tiff_layout(outputPath)) {
+    if (!verify_tiled_tiff_layout(tiledOutputPath)) {
         return 1;
     }
-    if (!verify_round_trip(outputPath, image)) {
+    if (!verify_round_trip(tiledOutputPath, image)) {
+        return 1;
+    }
+
+    uint16_t expectedCompression = 0u;
+    if (!save_stripped_tiff(strippedOutputPath, image, expectedCompression)) {
+        return 1;
+    }
+    if (!verify_stripped_tiff_layout(strippedOutputPath, expectedCompression)) {
+        return 1;
+    }
+    if (!verify_round_trip(strippedOutputPath, image)) {
         return 1;
     }
 

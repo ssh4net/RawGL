@@ -28,7 +28,6 @@ def main() -> int:
     exr_output_path.unlink(missing_ok=True)
 
     image = rawgl.io.load_image(input_path)
-    rawgl.io.save_image(image, output_path, bits=16)
 
     entries = rawgl.io.read_metadata(
         input_path,
@@ -58,6 +57,7 @@ def main() -> int:
     if not document.fields:
         return fail("rawgl.io.read_metadata_document() returned no fields")
 
+    rawgl.io.save_image(image, output_path, bits=16, source_metadata=document)
     output_entries = rawgl.io.read_metadata(
         output_path,
         name_style=rawgl.MetadataNameStyle.oiio,
@@ -74,7 +74,15 @@ def main() -> int:
     if output_height_entry is None or output_height_entry.value_text != str(image.height):
         return fail("saved TIFF metadata did not export image height correctly")
 
-    rawgl.io.save_image(image, exr_output_path, bits=16)
+    output_make_entry = _find_entry(output_entries, "Make", "Exif:Make")
+    if output_make_entry is None or output_make_entry.value_text != make_entry.value_text:
+        return fail("transferred TIFF metadata did not preserve Make")
+
+    output_datetime_entry = _find_entry(output_entries, "DateTimeOriginal", "Exif:DateTimeOriginal")
+    if output_datetime_entry is None or output_datetime_entry.value_text != datetime_entry.value_text:
+        return fail("transferred TIFF metadata did not preserve DateTimeOriginal")
+
+    rawgl.io.save_image(image, exr_output_path, bits=16, source_metadata=document)
     exr_entries = rawgl.io.read_metadata(
         exr_output_path,
         name_style=rawgl.MetadataNameStyle.oiio,
@@ -86,6 +94,10 @@ def main() -> int:
     exr_line_order_entry = _find_entry(exr_entries, "openexr:lineOrder")
     if exr_line_order_entry is None or exr_line_order_entry.value_text != "0":
         return fail("saved EXR metadata did not export openexr:lineOrder correctly")
+
+    exr_make_entry = _find_entry(exr_entries, "openexr:Make", "Make")
+    if exr_make_entry is None or exr_make_entry.value_text != make_entry.value_text:
+        return fail("transferred EXR metadata did not preserve Make")
 
     io_runtime = rawgl.IoRuntime()
     request = rawgl.MetadataReadRequest()
@@ -102,6 +114,8 @@ def main() -> int:
         return fail("rawgl.io does not expose MetadataReadRequest")
     if getattr(rawgl.io, "MetadataDocumentReadRequest", None) is None:
         return fail("rawgl.io does not expose MetadataDocumentReadRequest")
+    if getattr(rawgl.io, "ImageMetadataTransferRequest", None) is None:
+        return fail("rawgl.io does not expose ImageMetadataTransferRequest")
 
     return 0
 

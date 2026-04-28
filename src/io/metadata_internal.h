@@ -27,15 +27,38 @@ apply_source_metadata_to_tiff_file_impl(const MetadataDocument& document,
                                         const std::string& path);
 
 ImageMetadataApplyResult
+apply_source_metadata_to_tiff_file_impl(const MetadataDocument& document,
+                                        const std::string& path,
+                                        const HostImageData& targetImage);
+
+ImageMetadataApplyResult
 apply_source_metadata_to_jpeg_file_impl(const MetadataDocument& document,
                                         const std::string& path);
+
+ImageMetadataApplyResult
+apply_source_metadata_to_jpeg_file_impl(const MetadataDocument& document,
+                                        const std::string& path,
+                                        const HostImageData& targetImage);
 
 ImageMetadataApplyResult
 apply_source_metadata_to_png_file_impl(const MetadataDocument& document,
                                        const std::string& path);
 
 ImageMetadataApplyResult
+apply_source_metadata_to_png_file_impl(const MetadataDocument& document,
+                                       const std::string& path,
+                                       const HostImageData& targetImage);
+
+ImageMetadataApplyResult
 apply_source_metadata_to_exr_file_impl(const MetadataDocument& document,
                                        const std::string& path);
+
+ImageMetadataApplyResult
+apply_source_metadata_to_exr_file_impl(const MetadataDocument& document,
+                                       const std::string& path,
+                                       const HostImageData& targetImage);
+
+ImageMetadataTransferResult
+transfer_image_metadata_file_impl(const ImageMetadataTransferRequest& request);
 
 }  // namespace rawgl::io

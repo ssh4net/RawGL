@@ -241,6 +241,26 @@ struct MetadataDocumentReadResult {
     MetadataDocument document;
 };
 
+/// Describes one file-backed source-metadata transfer into an already-written image.
+struct ImageMetadataTransferRequest {
+    /// Target image path to update in place.
+    std::string path;
+    /// Source metadata document read from the original file/container.
+    MetadataDocument sourceMetadata;
+    /// True when \ref targetImage contains the exact target pixel layout.
+    bool hasTargetImage = false;
+    /// Optional target image facts used to write target-correct image-layout metadata.
+    HostImageData targetImage;
+};
+
+/// Result of transferring source metadata into a file-backed target image.
+struct ImageMetadataTransferResult {
+    /// False when the target format is unsupported or transfer failed.
+    bool success = false;
+    /// Failure details when \ref success is false.
+    std::string errorMessage;
+};
+
 /// One file-backed workflow input owned by `rawgl::io`.
 struct FileInputBinding {
     size_t passIndex = 0;
@@ -405,6 +425,10 @@ public:
     MetadataDocumentReadResult
     readMetadataDocumentFile(const MetadataDocumentReadRequest& request) const;
 
+    /// Transfers source metadata into an already-written file-backed target image.
+    ImageMetadataTransferResult
+    transferImageMetadataFile(const ImageMetadataTransferRequest& request) const;
+
     /// Rewrites file-backed workflow inputs and outputs into explicit host-memory workflow state.
     WorkflowMaterializationResult
     materializeWorkflow(const Workflow& workflow,
@@ -522,6 +546,10 @@ ReadMetadataFile(const MetadataReadRequest& request);
 /// Reads a typed metadata document from one file-backed image or container using a default \ref IoRuntime.
 MetadataDocumentReadResult
 ReadMetadataDocumentFile(const MetadataDocumentReadRequest& request);
+
+/// Transfers source metadata into an already-written file-backed target image using a default \ref IoRuntime.
+ImageMetadataTransferResult
+TransferImageMetadataFile(const ImageMetadataTransferRequest& request);
 
 inline PrepareWorkflowResult
 IoRuntime::prepare(const Session& session,

@@ -29,4 +29,16 @@ ReadMetadataDocumentFile(const MetadataDocumentReadRequest& request)
     return IoRuntime().readMetadataDocumentFile(request);
 }
 
+ImageMetadataTransferResult
+IoRuntime::transferImageMetadataFile(const ImageMetadataTransferRequest& request) const
+{
+    return transfer_image_metadata_file_impl(request);
+}
+
+ImageMetadataTransferResult
+TransferImageMetadataFile(const ImageMetadataTransferRequest& request)
+{
+    return IoRuntime().transferImageMetadataFile(request);
+}
+
 }  // namespace rawgl::io
