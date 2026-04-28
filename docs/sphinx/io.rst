@@ -51,16 +51,24 @@ JPEG output accepts:
 
 - ``jpeg:quality`` or ``jpg:quality``: integer quality from ``1`` to ``100``
 - ``jpeg:progressive`` or ``jpg:progressive``: ``true``/``false``
+- ``jpeg:optimize`` or ``jpg:optimize``: optimize Huffman coding
+- ``jpeg:subsampling`` or ``jpg:subsampling``: ``default``, ``444``/``4:4:4``,
+  ``422``/``4:2:2``, ``420``/``4:2:0``, ``440``/``4:4:0``, or
+  ``411``/``4:1:1``
 - ``oiio:Compression`` with ``jpeg:N`` or ``jpg:N``: legacy quality spelling
 
-JPEG writes grayscale or RGB data. Alpha channels are omitted.
+JPEG writes grayscale or RGB data. Alpha channels are omitted. Chroma
+subsampling is valid only for RGB output. Invalid quality, boolean, or
+subsampling values fail the write instead of being clamped.
 
 PNG output accepts:
 
 - ``png:compressionLevel``: integer from ``0`` to ``9``
+- ``png:compression_level``: snake_case spelling for compression level
 - ``png:interlace`` or ``png:interlaced``: ``true`` enables Adam7 interlace
 
-PNG writes 8-bit and 16-bit integer images.
+PNG writes 8-bit and 16-bit integer images. Invalid compression and interlace
+values fail the write instead of being clamped.
 
 TIFF output accepts:
 
@@ -100,13 +108,20 @@ OpenEXR output accepts:
 - ``openexr:compression``: any compression name accepted by OpenEXR, such as
   ``zip``, ``zips``, ``piz``, ``rle``, ``dwaa``, or ``dwab``
 - ``compression`` or ``oiio:Compression``: legacy compression spelling
-- ``openexr:tiled``: ``true``/``false``
-- ``openexr:tileWidth`` and ``openexr:tileHeight`` or ``openexr:tileLength``
-- ``openexr:dwaCompressionLevel`` for DWAA/DWAB
-- ``openexr:lineOrder``: ``increasing_y``, ``decreasing_y``, or ``random_y``
+- ``openexr:layout``: ``scanlines`` or ``tiled``. ``openexr:tiled`` is still
+  accepted.
+- ``openexr:tileWidth``/``openexr:tile_width`` and
+  ``openexr:tileHeight``/``openexr:tile_height`` or
+  ``openexr:tileLength``/``openexr:tile_length``
+- ``openexr:dwaCompressionLevel``/``openexr:dwa_compression_level`` for
+  DWAA/DWAB
+- ``openexr:lineOrder``/``openexr:line_order``: ``increasing_y``,
+  ``decreasing_y``, or ``random_y``
 - ``openexr:attribute:string:<name>``: write one string header attribute
 
-OpenEXR writes half and 32-bit float output.
+OpenEXR writes half and 32-bit float output. Tile dimensions are valid only for
+tiled output. DWA compression level is valid only with DWAA or DWAB
+compression.
 
 Example output attributes:
 
@@ -129,9 +144,9 @@ Example output attributes:
        bits=16,
        attributes={
            "openexr:compression": "zip",
-           "openexr:tiled": "true",
-           "openexr:tileWidth": "64",
-           "openexr:tileHeight": "64",
+           "openexr:layout": "tiled",
+           "openexr:tile_width": "64",
+           "openexr:tile_height": "64",
        },
    )
 

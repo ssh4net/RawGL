@@ -163,6 +163,86 @@ main()
         return 1;
     }
 
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_png_compression.png",
+                             image,
+                             8,
+                             { { "png:compression_level", "42" } },
+                             "Invalid PNG compression level")) {
+        return 1;
+    }
+
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_png_interlace.png",
+                             image,
+                             8,
+                             { { "png:interlace", "maybe" } },
+                             "Invalid PNG interlace")) {
+        return 1;
+    }
+
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_jpeg_quality.jpg",
+                             image,
+                             8,
+                             { { "jpeg:quality", "0" } },
+                             "Invalid JPEG quality")) {
+        return 1;
+    }
+
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_jpeg_progressive.jpg",
+                             image,
+                             8,
+                             { { "jpeg:progressive", "maybe" } },
+                             "Invalid JPEG progressive")) {
+        return 1;
+    }
+
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_jpeg_subsampling.jpg",
+                             image,
+                             8,
+                             { { "jpeg:subsampling", "4:3:2" } },
+                             "Invalid JPEG subsampling")) {
+        return 1;
+    }
+
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_exr_tile.exr",
+                             image,
+                             16,
+                             { { "openexr:layout", "tiled" }, { "openexr:tile_width", "0" } },
+                             "Invalid OpenEXR tile width")) {
+        return 1;
+    }
+
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_exr_layout_conflict.exr",
+                             image,
+                             16,
+                             { { "openexr:layout", "scanlines" }, { "openexr:tile_width", "8" } },
+                             "Conflicting OpenEXR layout")) {
+        return 1;
+    }
+
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_exr_line_order.exr",
+                             image,
+                             16,
+                             { { "openexr:line_order", "sideways" } },
+                             "Invalid OpenEXR line order")) {
+        return 1;
+    }
+
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_exr_dwa_level_mode.exr",
+                             image,
+                             16,
+                             { { "openexr:compression", "zip" }, { "openexr:dwa_compression_level", "45" } },
+                             "OpenEXR DWA level with non-DWA compression")) {
+        return 1;
+    }
+
+    if (!expect_save_failure("tests/outputs/rawgl_io_error_exr_dwa_level.exr",
+                             image,
+                             16,
+                             { { "openexr:compression", "dwaa" }, { "openexr:dwa_compression_level", "-1" } },
+                             "Invalid OpenEXR DWA level")) {
+        return 1;
+    }
+
     if (!expect_save_failure("tests/outputs/rawgl_io_error_exr_compression.exr",
                              image,
                              16,

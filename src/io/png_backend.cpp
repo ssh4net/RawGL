@@ -7,10 +7,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <string>
 #include <vector>
 
 #if defined(RAWGL_HAS_LIBPNG)
@@ -25,33 +29,6 @@ host_is_little_endian()
 {
     const uint16_t value = 1u;
     return *reinterpret_cast<const uint8_t*>(&value) == 1u;
-}
-
-static int
-parse_png_compression_level(const std::map<std::string, std::string>& attributes)
-{
-    const auto it = attributes.find("png:compressionLevel");
-    if (it == attributes.end()) {
-        return -1;
-    }
-
-    const int value = std::atoi(it->second.c_str());
-    return std::clamp(value, 0, 9);
-}
-
-static bool
-parse_png_interlaced(const std::map<std::string, std::string>& attributes)
-{
-    auto it = attributes.find("png:interlaced");
-    if (it == attributes.end()) {
-        it = attributes.find("png:interlace");
-    }
-    if (it == attributes.end()) {
-        return false;
-    }
-
-    const std::string& value = it->second;
-    return value == "1" || value == "true" || value == "True" || value == "TRUE";
 }
 
 static int
@@ -221,12 +198,107 @@ convert_host_image_to_png_bytes(const HostImageData& image,
 }
 
 #if defined(RAWGL_HAS_LIBPNG)
+static char
+to_lower_ascii(const unsigned char c)
+{
+    return static_cast<char>(std::tolower(c));
+}
+
 static void
 close_file(FILE* file)
 {
     if (file != nullptr) {
         fclose(file);
     }
+}
+
+static std::string
+to_lower_copy(const std::string& value)
+{
+    std::string result = value;
+    std::transform(result.begin(), result.end(), result.begin(), to_lower_ascii);
+    return result;
+}
+
+static bool
+parse_png_compression_level(const std::map<std::string, std::string>& attributes,
+                            int& compressionLevel,
+                            std::string& errorMessage)
+{
+    compressionLevel = -1;
+
+    const std::string* attribute = nullptr;
+    const auto camelCase = attributes.find("png:compressionLevel");
+    if (camelCase != attributes.end()) {
+        attribute = &camelCase->second;
+    } else {
+        const auto snakeCase = attributes.find("png:compression_level");
+        if (snakeCase != attributes.end()) {
+            attribute = &snakeCase->second;
+        }
+    }
+
+    if (attribute == nullptr) {
+        return true;
+    }
+    if (attribute->empty()) {
+        errorMessage = "invalid PNG compression level";
+        return false;
+    }
+
+    for (const char digit : *attribute) {
+        if (!std::isdigit(static_cast<unsigned char>(digit))) {
+            errorMessage = "invalid PNG compression level";
+            return false;
+        }
+    }
+
+    errno = 0;
+    char* end = nullptr;
+    const unsigned long parsedValue = std::strtoul(attribute->c_str(), &end, 10);
+    if (errno != 0 || end == nullptr || *end != '\0' || parsedValue > 9ul) {
+        errorMessage = "invalid PNG compression level";
+        return false;
+    }
+
+    compressionLevel = static_cast<int>(parsedValue);
+    return true;
+}
+
+static bool
+parse_png_interlaced(const std::map<std::string, std::string>& attributes,
+                     bool& interlaced,
+                     std::string& errorMessage)
+{
+    interlaced = false;
+
+    const std::string* attribute = nullptr;
+    const auto interlacedValue = attributes.find("png:interlaced");
+    if (interlacedValue != attributes.end()) {
+        attribute = &interlacedValue->second;
+    } else {
+        const auto interlaceValue = attributes.find("png:interlace");
+        if (interlaceValue != attributes.end()) {
+            attribute = &interlaceValue->second;
+        }
+    }
+
+    if (attribute == nullptr) {
+        return true;
+    }
+
+    const std::string normalized = to_lower_copy(*attribute);
+    if (normalized == "1" || normalized == "true" || normalized == "on" || normalized == "yes") {
+        interlaced = true;
+        return true;
+    }
+    if (normalized == "0" || normalized == "false" || normalized == "off" || normalized == "no") {
+        interlaced = false;
+        return true;
+    }
+
+    errorMessage = "invalid PNG interlace value";
+    return false;
 }
 #endif
 
@@ -402,10 +474,24 @@ encode_png_file(const std::string& path,
         return false;
     }
 
-    png_init_io(pngPtr, file);
-    png_set_compression_level(pngPtr, parse_png_compression_level(attributes));
+    int compressionLevel = -1;
+    if (!parse_png_compression_level(attributes, compressionLevel, errorMessage)) {
+        png_destroy_write_struct(&pngPtr, &infoPtr);
+        close_file(file);
+        return false;
+    }
 
-    const int interlaceType = parse_png_interlaced(attributes) ? PNG_INTERLACE_ADAM7 : PNG_INTERLACE_NONE;
+    bool interlaced = false;
+    if (!parse_png_interlaced(attributes, interlaced, errorMessage)) {
+        png_destroy_write_struct(&pngPtr, &infoPtr);
+        close_file(file);
+        return false;
+    }
+
+    png_init_io(pngPtr, file);
+    png_set_compression_level(pngPtr, compressionLevel);
+
+    const int interlaceType = interlaced ? PNG_INTERLACE_ADAM7 : PNG_INTERLACE_NONE;
     const int bitDepth = settings.componentType == ImageComponentType::U16 ? 16 : 8;
     png_set_IHDR(pngPtr,
                  infoPtr,

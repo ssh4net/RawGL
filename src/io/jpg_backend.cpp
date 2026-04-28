@@ -7,9 +7,12 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
+#include <cctype>
 #include <csetjmp>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <string>
@@ -27,6 +30,16 @@ struct JpegErrorState {
     jpeg_error_mgr base;
     jmp_buf jumpBuffer;
     char message[JMSG_LENGTH_MAX];
+};
+
+enum class JpegSubsampling
+{
+    Default,
+    S444,
+    S422,
+    S420,
+    S440,
+    S411,
 };
 
 static bool
@@ -52,48 +65,237 @@ initialize_jpeg_error_state(JpegErrorState& state)
     state.message[0] = '\0';
 }
 
-static int
-parse_jpeg_quality(const std::map<std::string, std::string>& attributes)
+static char
+to_lower_ascii(const unsigned char c)
 {
-    const auto explicitJpeg = attributes.find("jpeg:quality");
-    if (explicitJpeg != attributes.end()) {
-        return std::clamp(std::atoi(explicitJpeg->second.c_str()), 1, 100);
-    }
+    return static_cast<char>(std::tolower(c));
+}
 
-    const auto explicitJpg = attributes.find("jpg:quality");
-    if (explicitJpg != attributes.end()) {
-        return std::clamp(std::atoi(explicitJpg->second.c_str()), 1, 100);
-    }
-
-    const auto legacyCompression = attributes.find("oiio:Compression");
-    if (legacyCompression != attributes.end()) {
-        const std::string& value = legacyCompression->second;
-        const std::string jpegPrefix = "jpeg:";
-        const std::string jpgPrefix = "jpg:";
-        if (value.rfind(jpegPrefix, 0) == 0) {
-            return std::clamp(std::atoi(value.substr(jpegPrefix.size()).c_str()), 1, 100);
-        }
-        if (value.rfind(jpgPrefix, 0) == 0) {
-            return std::clamp(std::atoi(value.substr(jpgPrefix.size()).c_str()), 1, 100);
-        }
-    }
-
-    return 95;
+static std::string
+to_lower_copy(const std::string& value)
+{
+    std::string result = value;
+    std::transform(result.begin(), result.end(), result.begin(), to_lower_ascii);
+    return result;
 }
 
 static bool
-parse_jpeg_progressive(const std::map<std::string, std::string>& attributes)
+parse_unsigned_decimal_setting(const std::string& text,
+                               const unsigned long minimumValue,
+                               const unsigned long maximumValue,
+                               unsigned long& value,
+                               const char* errorText,
+                               std::string& errorMessage)
 {
-    auto it = attributes.find("jpeg:progressive");
-    if (it == attributes.end()) {
-        it = attributes.find("jpg:progressive");
+    if (text.empty()) {
+        errorMessage = errorText;
+        return false;
     }
-    if (it == attributes.end()) {
+    for (const char digit : text) {
+        if (!std::isdigit(static_cast<unsigned char>(digit))) {
+            errorMessage = errorText;
+            return false;
+        }
+    }
+
+    errno = 0;
+    char* end = nullptr;
+    const unsigned long parsedValue = std::strtoul(text.c_str(), &end, 10);
+    if (errno != 0 || end == nullptr || *end != '\0' || parsedValue < minimumValue || parsedValue > maximumValue) {
+        errorMessage = errorText;
         return false;
     }
 
-    const std::string& value = it->second;
-    return value == "1" || value == "true" || value == "True" || value == "TRUE";
+    value = parsedValue;
+    return true;
+}
+
+static bool
+parse_jpeg_quality(const std::map<std::string, std::string>& attributes,
+                   int& quality,
+                   std::string& errorMessage)
+{
+    quality = 95;
+
+    const std::string* value = nullptr;
+    const auto explicitJpeg = attributes.find("jpeg:quality");
+    if (explicitJpeg != attributes.end()) {
+        value = &explicitJpeg->second;
+    } else {
+        const auto explicitJpg = attributes.find("jpg:quality");
+        if (explicitJpg != attributes.end()) {
+            value = &explicitJpg->second;
+        }
+    }
+
+    std::string legacyQuality;
+    if (value == nullptr) {
+        const auto legacyCompression = attributes.find("oiio:Compression");
+        if (legacyCompression != attributes.end()) {
+            const std::string& legacyValue = legacyCompression->second;
+            const std::string jpegPrefix = "jpeg:";
+            const std::string jpgPrefix = "jpg:";
+            if (legacyValue.rfind(jpegPrefix, 0) == 0) {
+                legacyQuality = legacyValue.substr(jpegPrefix.size());
+                value = &legacyQuality;
+            } else if (legacyValue.rfind(jpgPrefix, 0) == 0) {
+                legacyQuality = legacyValue.substr(jpgPrefix.size());
+                value = &legacyQuality;
+            } else {
+                errorMessage = "unsupported JPEG legacy compression value";
+                return false;
+            }
+        }
+    }
+
+    if (value == nullptr) {
+        return true;
+    }
+
+    unsigned long parsedValue = 0ul;
+    if (!parse_unsigned_decimal_setting(*value, 1ul, 100ul, parsedValue, "invalid JPEG quality value", errorMessage)) {
+        return false;
+    }
+
+    quality = static_cast<int>(parsedValue);
+    return true;
+}
+
+static bool
+parse_jpeg_bool_setting(const std::map<std::string, std::string>& attributes,
+                        const char* jpegKey,
+                        const char* jpgKey,
+                        bool& value,
+                        bool& present,
+                        const char* errorText,
+                        std::string& errorMessage)
+{
+    present = false;
+    value = false;
+
+    const std::string* attribute = nullptr;
+    const auto jpegValue = attributes.find(jpegKey);
+    if (jpegValue != attributes.end()) {
+        attribute = &jpegValue->second;
+    } else {
+        const auto jpgValue = attributes.find(jpgKey);
+        if (jpgValue != attributes.end()) {
+            attribute = &jpgValue->second;
+        }
+    }
+    if (attribute == nullptr) {
+        return true;
+    }
+
+    present = true;
+    const std::string normalized = to_lower_copy(*attribute);
+    if (normalized == "1" || normalized == "true" || normalized == "on" || normalized == "yes") {
+        value = true;
+        return true;
+    }
+    if (normalized == "0" || normalized == "false" || normalized == "off" || normalized == "no") {
+        value = false;
+        return true;
+    }
+
+    errorMessage = errorText;
+    return false;
+}
+
+static bool
+parse_jpeg_subsampling(const std::map<std::string, std::string>& attributes,
+                       JpegSubsampling& subsampling,
+                       bool& present,
+                       std::string& errorMessage)
+{
+    present = false;
+    subsampling = JpegSubsampling::Default;
+
+    const std::string* attribute = nullptr;
+    const auto jpegValue = attributes.find("jpeg:subsampling");
+    if (jpegValue != attributes.end()) {
+        attribute = &jpegValue->second;
+    } else {
+        const auto jpgValue = attributes.find("jpg:subsampling");
+        if (jpgValue != attributes.end()) {
+            attribute = &jpgValue->second;
+        }
+    }
+    if (attribute == nullptr) {
+        return true;
+    }
+
+    present = true;
+    const std::string normalized = to_lower_copy(*attribute);
+    if (normalized == "default" || normalized == "auto") {
+        subsampling = JpegSubsampling::Default;
+    } else if (normalized == "444" || normalized == "4:4:4" || normalized == "none") {
+        subsampling = JpegSubsampling::S444;
+    } else if (normalized == "422" || normalized == "4:2:2") {
+        subsampling = JpegSubsampling::S422;
+    } else if (normalized == "420" || normalized == "4:2:0") {
+        subsampling = JpegSubsampling::S420;
+    } else if (normalized == "440" || normalized == "4:4:0") {
+        subsampling = JpegSubsampling::S440;
+    } else if (normalized == "411" || normalized == "4:1:1") {
+        subsampling = JpegSubsampling::S411;
+    } else {
+        errorMessage = "unsupported JPEG chroma subsampling mode";
+        return false;
+    }
+
+    return true;
+}
+
+static bool
+apply_jpeg_subsampling(jpeg_compress_struct& cinfo,
+                       const int outputChannels,
+                       const JpegSubsampling subsampling,
+                       const bool present,
+                       std::string& errorMessage)
+{
+    if (!present || subsampling == JpegSubsampling::Default) {
+        return true;
+    }
+    if (outputChannels != 3 || cinfo.num_components < 3) {
+        errorMessage = "JPEG chroma subsampling requires RGB output";
+        return false;
+    }
+
+    int yHorizontal = 1;
+    int yVertical = 1;
+    switch (subsampling) {
+    case JpegSubsampling::S444:
+        yHorizontal = 1;
+        yVertical = 1;
+        break;
+    case JpegSubsampling::S422:
+        yHorizontal = 2;
+        yVertical = 1;
+        break;
+    case JpegSubsampling::S420:
+        yHorizontal = 2;
+        yVertical = 2;
+        break;
+    case JpegSubsampling::S440:
+        yHorizontal = 1;
+        yVertical = 2;
+        break;
+    case JpegSubsampling::S411:
+        yHorizontal = 4;
+        yVertical = 1;
+        break;
+    case JpegSubsampling::Default:
+        return true;
+    }
+
+    cinfo.comp_info[0].h_samp_factor = yHorizontal;
+    cinfo.comp_info[0].v_samp_factor = yVertical;
+    cinfo.comp_info[1].h_samp_factor = 1;
+    cinfo.comp_info[1].v_samp_factor = 1;
+    cinfo.comp_info[2].h_samp_factor = 1;
+    cinfo.comp_info[2].v_samp_factor = 1;
+    return true;
 }
 
 static float
@@ -363,9 +565,61 @@ encode_jpg_file(const std::string& path,
     cinfo.in_color_space = outputChannels == 1 ? JCS_GRAYSCALE : JCS_RGB;
 
     jpeg_set_defaults(&cinfo);
-    jpeg_set_quality(&cinfo, parse_jpeg_quality(attributes), TRUE);
-    if (parse_jpeg_progressive(attributes)) {
+
+    int quality = 95;
+    if (!parse_jpeg_quality(attributes, quality, errorMessage)) {
+        jpeg_destroy_compress(&cinfo);
+        close_file(file);
+        return false;
+    }
+    jpeg_set_quality(&cinfo, quality, TRUE);
+
+    bool progressive = false;
+    bool hasProgressive = false;
+    if (!parse_jpeg_bool_setting(attributes,
+                                 "jpeg:progressive",
+                                 "jpg:progressive",
+                                 progressive,
+                                 hasProgressive,
+                                 "invalid JPEG progressive value",
+                                 errorMessage)) {
+        jpeg_destroy_compress(&cinfo);
+        close_file(file);
+        return false;
+    }
+    (void)hasProgressive;
+    if (progressive) {
         jpeg_simple_progression(&cinfo);
+    }
+
+    bool optimizeCoding = false;
+    bool hasOptimizeCoding = false;
+    if (!parse_jpeg_bool_setting(attributes,
+                                 "jpeg:optimize",
+                                 "jpg:optimize",
+                                 optimizeCoding,
+                                 hasOptimizeCoding,
+                                 "invalid JPEG optimize value",
+                                 errorMessage)) {
+        jpeg_destroy_compress(&cinfo);
+        close_file(file);
+        return false;
+    }
+    if (hasOptimizeCoding) {
+        cinfo.optimize_coding = optimizeCoding ? TRUE : FALSE;
+    }
+
+    JpegSubsampling subsampling = JpegSubsampling::Default;
+    bool hasSubsampling = false;
+    if (!parse_jpeg_subsampling(attributes, subsampling, hasSubsampling, errorMessage)) {
+        jpeg_destroy_compress(&cinfo);
+        close_file(file);
+        return false;
+    }
+    if (!apply_jpeg_subsampling(cinfo, outputChannels, subsampling, hasSubsampling, errorMessage)) {
+        jpeg_destroy_compress(&cinfo);
+        close_file(file);
+        return false;
     }
 
     jpeg_start_compress(&cinfo, TRUE);

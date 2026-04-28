@@ -7,10 +7,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cctype>
 #include <cstdint>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -58,6 +62,25 @@ find_attribute_value(const std::map<std::string, std::string>& attributes, const
     return &it->second;
 }
 
+static const std::string*
+find_attribute_value(const std::map<std::string, std::string>& attributes, std::initializer_list<const char*> keys)
+{
+    for (const char* key : keys) {
+        const auto it = attributes.find(key);
+        if (it != attributes.end()) {
+            return &it->second;
+        }
+    }
+    return nullptr;
+}
+
+enum class ExrStorageLayout
+{
+    Auto,
+    Scanlines,
+    Tiles,
+};
+
 static OPENEXR_IMF_NAMESPACE::Compression
 default_exr_compression()
 {
@@ -69,13 +92,7 @@ parse_exr_compression(const std::map<std::string, std::string>& attributes,
                       OPENEXR_IMF_NAMESPACE::Compression& compression,
                       std::string& errorMessage)
 {
-    const std::string* value = find_attribute_value(attributes, "openexr:compression");
-    if (!value) {
-        value = find_attribute_value(attributes, "compression");
-    }
-    if (!value) {
-        value = find_attribute_value(attributes, "oiio:Compression");
-    }
+    const std::string* value = find_attribute_value(attributes, { "openexr:compression", "compression", "oiio:Compression" });
     if (!value) {
         compression = default_exr_compression();
         return true;
@@ -93,25 +110,95 @@ parse_exr_compression(const std::map<std::string, std::string>& attributes,
     return true;
 }
 
-static void
-apply_exr_writer_attributes(OPENEXR_IMF_NAMESPACE::Header& header,
-                            const std::map<std::string, std::string>& attributes)
+static bool
+parse_exr_line_order(const std::map<std::string, std::string>& attributes,
+                     OPENEXR_IMF_NAMESPACE::LineOrder& lineOrder,
+                     bool& present,
+                     std::string& errorMessage)
 {
-    const std::string* dwaLevel = find_attribute_value(attributes, "openexr:dwaCompressionLevel");
-    if (dwaLevel) {
-        header.dwaCompressionLevel() = static_cast<float>(std::atof(dwaLevel->c_str()));
+    present = false;
+    lineOrder = OPENEXR_IMF_NAMESPACE::INCREASING_Y;
+
+    const std::string* lineOrderValue =
+        find_attribute_value(attributes, { "openexr:lineOrder", "openexr:line_order" });
+    if (!lineOrderValue) {
+        return true;
     }
 
-    const std::string* lineOrderValue = find_attribute_value(attributes, "openexr:lineOrder");
-    if (lineOrderValue) {
-        const std::string normalized = to_lower_copy(*lineOrderValue);
-        if (normalized == "increasing_y") {
-            header.lineOrder() = OPENEXR_IMF_NAMESPACE::INCREASING_Y;
-        } else if (normalized == "decreasing_y") {
-            header.lineOrder() = OPENEXR_IMF_NAMESPACE::DECREASING_Y;
-        } else if (normalized == "random_y") {
-            header.lineOrder() = OPENEXR_IMF_NAMESPACE::RANDOM_Y;
-        }
+    present = true;
+    const std::string normalized = to_lower_copy(*lineOrderValue);
+    if (normalized == "increasing_y" || normalized == "increasing") {
+        lineOrder = OPENEXR_IMF_NAMESPACE::INCREASING_Y;
+    } else if (normalized == "decreasing_y" || normalized == "decreasing") {
+        lineOrder = OPENEXR_IMF_NAMESPACE::DECREASING_Y;
+    } else if (normalized == "random_y" || normalized == "random") {
+        lineOrder = OPENEXR_IMF_NAMESPACE::RANDOM_Y;
+    } else {
+        errorMessage = "unsupported OpenEXR line order";
+        return false;
+    }
+
+    return true;
+}
+
+static bool
+parse_exr_dwa_level(const std::map<std::string, std::string>& attributes,
+                    const OPENEXR_IMF_NAMESPACE::Compression compression,
+                    float& dwaLevel,
+                    bool& present,
+                    std::string& errorMessage)
+{
+    present = false;
+    dwaLevel = 45.0f;
+
+    const std::string* dwaLevelValue =
+        find_attribute_value(attributes, { "openexr:dwaCompressionLevel", "openexr:dwa_compression_level" });
+    if (!dwaLevelValue) {
+        return true;
+    }
+    if (compression != OPENEXR_IMF_NAMESPACE::DWAA_COMPRESSION
+        && compression != OPENEXR_IMF_NAMESPACE::DWAB_COMPRESSION) {
+        errorMessage = "OpenEXR DWA compression level requires DWAA or DWAB compression";
+        return false;
+    }
+
+    errno = 0;
+    char* end = nullptr;
+    const char* start = dwaLevelValue->c_str();
+    const float parsedValue = std::strtof(start, &end);
+    if (errno != 0 || end == nullptr || end == start || *end != '\0' || !std::isfinite(parsedValue)
+        || parsedValue < 0.0f) {
+        errorMessage = "invalid OpenEXR DWA compression level";
+        return false;
+    }
+
+    present = true;
+    dwaLevel = parsedValue;
+    return true;
+}
+
+static bool
+apply_exr_writer_attributes(OPENEXR_IMF_NAMESPACE::Header& header,
+                            const std::map<std::string, std::string>& attributes,
+                            const OPENEXR_IMF_NAMESPACE::Compression compression,
+                            std::string& errorMessage)
+{
+    OPENEXR_IMF_NAMESPACE::LineOrder lineOrder = OPENEXR_IMF_NAMESPACE::INCREASING_Y;
+    bool hasLineOrder = false;
+    if (!parse_exr_line_order(attributes, lineOrder, hasLineOrder, errorMessage)) {
+        return false;
+    }
+    if (hasLineOrder) {
+        header.lineOrder() = lineOrder;
+    }
+
+    float dwaLevel = 45.0f;
+    bool hasDwaLevel = false;
+    if (!parse_exr_dwa_level(attributes, compression, dwaLevel, hasDwaLevel, errorMessage)) {
+        return false;
+    }
+    if (hasDwaLevel) {
+        header.dwaCompressionLevel() = dwaLevel;
     }
 
     for (const auto& attribute : attributes) {
@@ -126,38 +213,73 @@ apply_exr_writer_attributes(OPENEXR_IMF_NAMESPACE::Header& header,
 
         header.insert(attributeName, OPENEXR_IMF_NAMESPACE::StringAttribute(attribute.second));
     }
-}
 
-static bool
-parse_bool_attribute(const std::map<std::string, std::string>& attributes, const char* key, bool& value)
-{
-    const std::string* attribute = find_attribute_value(attributes, key);
-    if (!attribute) {
-        return false;
-    }
-
-    const std::string normalized = to_lower_copy(*attribute);
-    value = normalized == "1" || normalized == "true" || normalized == "on" || normalized == "yes";
     return true;
 }
 
 static bool
-parse_positive_u32_attribute(const std::map<std::string, std::string>& attributes,
-                             const char* key,
-                             bool& present,
-                             uint32_t& value,
-                             std::string& errorMessage)
+parse_bool_attribute(const std::map<std::string, std::string>& attributes,
+                     std::initializer_list<const char*> keys,
+                     bool& value,
+                     bool& present,
+                     std::string& errorMessage)
 {
-    const std::string* attribute = find_attribute_value(attributes, key);
+    present = false;
+    value = false;
+
+    const std::string* attribute = find_attribute_value(attributes, keys);
+    if (!attribute) {
+        return true;
+    }
+
+    present = true;
+    const std::string normalized = to_lower_copy(*attribute);
+    if (normalized == "1" || normalized == "true" || normalized == "on" || normalized == "yes") {
+        value = true;
+        return true;
+    }
+    if (normalized == "0" || normalized == "false" || normalized == "off" || normalized == "no") {
+        value = false;
+        return true;
+    }
+
+    errorMessage = "invalid OpenEXR boolean option";
+    return false;
+}
+
+static bool
+parse_u32_attribute(const std::map<std::string, std::string>& attributes,
+                    std::initializer_list<const char*> keys,
+                    bool& present,
+                    uint32_t& value,
+                    const char* invalidValueMessage,
+                    std::string& errorMessage)
+{
+    const std::string* attribute = find_attribute_value(attributes, keys);
     if (!attribute) {
         present = false;
         value = 0u;
         return true;
     }
 
-    const int parsedValue = std::atoi(attribute->c_str());
-    if (parsedValue <= 0) {
-        errorMessage = "invalid positive OpenEXR tile dimension";
+    if (attribute->empty()) {
+        errorMessage = invalidValueMessage;
+        return false;
+    }
+
+    for (const char digit : *attribute) {
+        if (!std::isdigit(static_cast<unsigned char>(digit))) {
+            errorMessage = invalidValueMessage;
+            return false;
+        }
+    }
+
+    errno = 0;
+    char* end = nullptr;
+    const unsigned long parsedValue = std::strtoul(attribute->c_str(), &end, 10);
+    if (errno != 0 || end == nullptr || *end != '\0' || parsedValue == 0ul
+        || parsedValue > static_cast<unsigned long>(std::numeric_limits<uint32_t>::max())) {
+        errorMessage = invalidValueMessage;
         return false;
     }
 
@@ -167,37 +289,102 @@ parse_positive_u32_attribute(const std::map<std::string, std::string>& attribute
 }
 
 static bool
+parse_exr_storage_layout(const std::map<std::string, std::string>& attributes,
+                         ExrStorageLayout& layout,
+                         std::string& errorMessage)
+{
+    layout = ExrStorageLayout::Auto;
+
+    const std::string* value =
+        find_attribute_value(attributes, { "openexr:layout", "openexr:storageLayout", "openexr:storage_layout" });
+    if (value) {
+        const std::string normalized = to_lower_copy(*value);
+        if (normalized == "auto") {
+            layout = ExrStorageLayout::Auto;
+        } else if (normalized == "scanline" || normalized == "scanlines") {
+            layout = ExrStorageLayout::Scanlines;
+        } else if (normalized == "tile" || normalized == "tiles" || normalized == "tiled") {
+            layout = ExrStorageLayout::Tiles;
+        } else {
+            errorMessage = "unsupported OpenEXR storage layout";
+            return false;
+        }
+    }
+
+    bool tiledValue = false;
+    bool hasTiledAttribute = false;
+    if (!parse_bool_attribute(
+            attributes, { "openexr:tiled" }, tiledValue, hasTiledAttribute, errorMessage)) {
+        return false;
+    }
+    if (!hasTiledAttribute) {
+        return true;
+    }
+
+    if (tiledValue) {
+        if (layout == ExrStorageLayout::Scanlines) {
+            errorMessage = "conflicting OpenEXR layout options";
+            return false;
+        }
+        layout = ExrStorageLayout::Tiles;
+        return true;
+    }
+
+    if (layout == ExrStorageLayout::Tiles) {
+        errorMessage = "conflicting OpenEXR layout options";
+        return false;
+    }
+    layout = ExrStorageLayout::Scanlines;
+    return true;
+}
+
+static bool
 resolve_exr_tile_layout(const std::map<std::string, std::string>& attributes,
+                        const ExrStorageLayout storageLayout,
                         bool& useTiles,
                         uint32_t& tileWidth,
                         uint32_t& tileHeight,
                         std::string& errorMessage)
 {
-    bool tiledValue = false;
-    const bool hasTiledAttr = parse_bool_attribute(attributes, "openexr:tiled", tiledValue);
-
     bool hasTileWidth = false;
     uint32_t requestedTileWidth = 0u;
-    if (!parse_positive_u32_attribute(
-            attributes, "openexr:tileWidth", hasTileWidth, requestedTileWidth, errorMessage)) {
+    if (!parse_u32_attribute(attributes,
+                             { "openexr:tileWidth", "openexr:tile_width" },
+                             hasTileWidth,
+                             requestedTileWidth,
+                             "invalid positive OpenEXR tile width",
+                             errorMessage)) {
         return false;
     }
 
     bool hasTileHeight = false;
     uint32_t requestedTileHeight = 0u;
-    if (!parse_positive_u32_attribute(
-            attributes, "openexr:tileHeight", hasTileHeight, requestedTileHeight, errorMessage)) {
+    if (!parse_u32_attribute(attributes,
+                             { "openexr:tileHeight", "openexr:tile_height" },
+                             hasTileHeight,
+                             requestedTileHeight,
+                             "invalid positive OpenEXR tile height",
+                             errorMessage)) {
         return false;
     }
 
     if (!hasTileHeight) {
-        if (!parse_positive_u32_attribute(
-                attributes, "openexr:tileLength", hasTileHeight, requestedTileHeight, errorMessage)) {
+        if (!parse_u32_attribute(attributes,
+                                 { "openexr:tileLength", "openexr:tile_length" },
+                                 hasTileHeight,
+                                 requestedTileHeight,
+                                 "invalid positive OpenEXR tile length",
+                                 errorMessage)) {
             return false;
         }
     }
 
-    useTiles = (hasTiledAttr && tiledValue) || hasTileWidth || hasTileHeight;
+    if (storageLayout == ExrStorageLayout::Scanlines && (hasTileWidth || hasTileHeight)) {
+        errorMessage = "OpenEXR tile dimensions are not valid for scanline output";
+        return false;
+    }
+
+    useTiles = storageLayout == ExrStorageLayout::Tiles || hasTileWidth || hasTileHeight;
     if (!useTiles) {
         tileWidth = 0u;
         tileHeight = 0u;
@@ -661,10 +848,15 @@ encode_exr_file(const std::string& path,
         return false;
     }
 
+    ExrStorageLayout storageLayout = ExrStorageLayout::Auto;
+    if (!parse_exr_storage_layout(attributes, storageLayout, errorMessage)) {
+        return false;
+    }
+
     bool useTiles = false;
     uint32_t tileWidth = 0u;
     uint32_t tileHeight = 0u;
-    if (!resolve_exr_tile_layout(attributes, useTiles, tileWidth, tileHeight, errorMessage)) {
+    if (!resolve_exr_tile_layout(attributes, storageLayout, useTiles, tileWidth, tileHeight, errorMessage)) {
         return false;
     }
 
@@ -683,7 +875,9 @@ encode_exr_file(const std::string& path,
             header.setTileDescription(OPENEXR_IMF_NAMESPACE::TileDescription(
                 tileWidth, tileHeight, OPENEXR_IMF_NAMESPACE::ONE_LEVEL, OPENEXR_IMF_NAMESPACE::ROUND_DOWN));
         }
-        apply_exr_writer_attributes(header, attributes);
+        if (!apply_exr_writer_attributes(header, attributes, compression, errorMessage)) {
+            return false;
+        }
 
         OPENEXR_IMF_NAMESPACE::PixelType pixelType = OPENEXR_IMF_NAMESPACE::FLOAT;
         if (settings.componentType == ImageComponentType::F16) {

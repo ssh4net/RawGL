@@ -207,6 +207,8 @@ verify_jpeg_direct(const std::filesystem::path& path)
     std::map<std::string, std::string> attributes;
     attributes.insert({ "jpeg:quality", "97" });
     attributes.insert({ "jpeg:progressive", "true" });
+    attributes.insert({ "jpeg:optimize", "true" });
+    attributes.insert({ "jpeg:subsampling", "4:4:4" });
 
     std::string errorMessage;
     if (!rawgl::io::encode_jpg_file(path.string(), attributes, -1, source, errorMessage)) {
@@ -238,11 +240,21 @@ verify_jpeg_direct(const std::filesystem::path& path)
     jpeg_stdio_src(&cinfo, file);
     jpeg_read_header(&cinfo, TRUE);
     const bool progressive = cinfo.progressive_mode != 0;
+    const bool subsampling444 = cinfo.num_components == 3 && cinfo.comp_info[0].h_samp_factor == 1
+                                && cinfo.comp_info[0].v_samp_factor == 1
+                                && cinfo.comp_info[1].h_samp_factor == 1
+                                && cinfo.comp_info[1].v_samp_factor == 1
+                                && cinfo.comp_info[2].h_samp_factor == 1
+                                && cinfo.comp_info[2].v_samp_factor == 1;
     jpeg_destroy_decompress(&cinfo);
     std::fclose(file);
 
     if (!progressive) {
         std::cerr << "JPEG output is not progressive." << std::endl;
+        return false;
+    }
+    if (!subsampling444) {
+        std::cerr << "JPEG output does not use 4:4:4 subsampling." << std::endl;
         return false;
     }
 #endif
@@ -260,9 +272,10 @@ verify_exr_direct(const std::filesystem::path& path)
 
     std::map<std::string, std::string> attributes;
     attributes.insert({ "openexr:compression", "zip" });
-    attributes.insert({ "openexr:tiled", "true" });
-    attributes.insert({ "openexr:tileWidth", "8" });
-    attributes.insert({ "openexr:tileHeight", "8" });
+    attributes.insert({ "openexr:layout", "tiled" });
+    attributes.insert({ "openexr:tile_width", "8" });
+    attributes.insert({ "openexr:tile_height", "8" });
+    attributes.insert({ "openexr:line_order", "increasing_y" });
     attributes.insert({ "openexr:attribute:string:RawGLTest", "native-codecs" });
 
     std::string errorMessage;

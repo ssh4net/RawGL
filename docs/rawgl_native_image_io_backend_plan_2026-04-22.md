@@ -136,8 +136,8 @@ per-format option structs, for example:
 
 That lets RawGL expose real format controls directly:
 
-- JPEG quality, progressive mode, chroma subsampling, lossless JPEG paths when
-  supported, ICC packet handling
+- JPEG quality, progressive mode, Huffman optimization, and chroma subsampling
+  are in. Lossless JPEG paths and ICC packet handling are still future work.
   - future extension: high-bit-depth JPEG via newer `libjpeg-turbo`
     (`12-bit` lossy/lossless and `16-bit` lossless where the deployed library
     version supports it)
