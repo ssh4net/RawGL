@@ -27,7 +27,15 @@ def main() -> int:
     output_path.unlink(missing_ok=True)
     exr_output_path.unlink(missing_ok=True)
 
-    image = rawgl.io.load_image(input_path)
+    jpeg_options = rawgl.io.JpegLoadOptions()
+    jpeg_options.has_color_transform = True
+    jpeg_options.color_transform = rawgl.io.JpegLoadColorTransform.rgb
+    load_options = rawgl.io.ImageCodecLoadOptions()
+    load_options.has_backend_policy = True
+    load_options.backend_policy = rawgl.io.ImageLoadBackendPolicy.native_only
+    load_options.has_jpeg = True
+    load_options.jpeg = jpeg_options
+    image = rawgl.io.load_image(input_path, codec_options=load_options)
 
     entries = rawgl.io.read_metadata(
         input_path,

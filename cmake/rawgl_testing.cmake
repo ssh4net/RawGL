@@ -56,6 +56,7 @@ if(BUILD_TESTING)
     rawgl_add_cpp_smoke_test(rawgl_core_transient_output_reuse_smoke tests/rawgl_core_transient_output_reuse_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_io_workflow_smoke tests/rawgl_io_workflow_smoke.cpp)
     rawgl_add_cpp_io_smoke_test(rawgl_io_host_image_smoke tests/rawgl_io_host_image_smoke.cpp)
+    rawgl_add_cpp_io_smoke_test(rawgl_io_capabilities_smoke tests/rawgl_io_capabilities_smoke.cpp)
     if(TARGET PNG::PNG AND TARGET TIFF::TIFF AND TARGET OpenEXR::OpenEXR)
         rawgl_add_cpp_io_smoke_test(rawgl_io_native_codec_errors_smoke tests/rawgl_io_native_codec_errors_smoke.cpp)
         target_include_directories(rawgl_io_native_codec_errors_smoke PRIVATE
@@ -144,6 +145,11 @@ if(BUILD_TESTING)
     add_test(NAME rawgl_io_host_image_smoke
         COMMAND rawgl_io_host_image_smoke)
     set_tests_properties(rawgl_io_host_image_smoke PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+    add_test(NAME rawgl_io_capabilities_smoke
+        COMMAND rawgl_io_capabilities_smoke)
+    set_tests_properties(rawgl_io_capabilities_smoke PROPERTIES
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
     if(TARGET PNG::PNG AND TARGET TIFF::TIFF AND TARGET OpenEXR::OpenEXR)

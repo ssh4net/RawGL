@@ -40,6 +40,11 @@ main()
 
     rawgl::io::ImageLoadRequest loadRequest;
     loadRequest.path = inputPath.string();
+    loadRequest.codecOptions.hasBackendPolicy = true;
+    loadRequest.codecOptions.backendPolicy = rawgl::io::ImageLoadBackendPolicy::NativeOnly;
+    loadRequest.codecOptions.hasPng = true;
+    loadRequest.codecOptions.png.hasExpandTransparency = true;
+    loadRequest.codecOptions.png.expandTransparency = true;
 
     const rawgl::io::ImageLoadResult loadResult = rawgl::io::LoadImageFile(loadRequest);
     if (!loadResult.success) {
@@ -50,7 +55,9 @@ main()
     rawgl::io::ImageSaveRequest saveRequest;
     saveRequest.path  = outputPath.string();
     saveRequest.bits  = 8;
-    saveRequest.attributes.push_back({ "png:compressionLevel", "0" });
+    saveRequest.codecOptions.hasPng = true;
+    saveRequest.codecOptions.png.hasCompressionLevel = true;
+    saveRequest.codecOptions.png.compressionLevel = 0;
     saveRequest.image = loadResult.image;
 
     const rawgl::io::ImageSaveResult saveResult = rawgl::io::SaveImageFile(saveRequest);
@@ -86,6 +93,11 @@ main()
 
     rawgl::io::ImageLoadRequest jpegLoadRequest;
     jpegLoadRequest.path = jpegInputPath.string();
+    jpegLoadRequest.codecOptions.hasBackendPolicy = true;
+    jpegLoadRequest.codecOptions.backendPolicy = rawgl::io::ImageLoadBackendPolicy::NativeOnly;
+    jpegLoadRequest.codecOptions.hasJpeg = true;
+    jpegLoadRequest.codecOptions.jpeg.hasColorTransform = true;
+    jpegLoadRequest.codecOptions.jpeg.colorTransform = rawgl::io::JpegLoadColorTransform::Rgb;
 
     const rawgl::io::ImageLoadResult jpegLoadResult = rawgl::io::LoadImageFile(jpegLoadRequest);
     if (!jpegLoadResult.success) {
@@ -93,11 +105,34 @@ main()
         return 1;
     }
 
+    rawgl::io::ImageLoadRequest jpegGrayLoadRequest;
+    jpegGrayLoadRequest.path = jpegInputPath.string();
+    jpegGrayLoadRequest.codecOptions.hasBackendPolicy = true;
+    jpegGrayLoadRequest.codecOptions.backendPolicy = rawgl::io::ImageLoadBackendPolicy::NativeOnly;
+    jpegGrayLoadRequest.codecOptions.hasJpeg = true;
+    jpegGrayLoadRequest.codecOptions.jpeg.hasColorTransform = true;
+    jpegGrayLoadRequest.codecOptions.jpeg.colorTransform = rawgl::io::JpegLoadColorTransform::Grayscale;
+
+    const rawgl::io::ImageLoadResult jpegGrayLoadResult = rawgl::io::LoadImageFile(jpegGrayLoadRequest);
+    if (!jpegGrayLoadResult.success) {
+        std::cerr << "Grayscale JPEG load failed: " << jpegGrayLoadResult.errorMessage << std::endl;
+        return 1;
+    }
+    if (jpegGrayLoadResult.image.width != jpegLoadResult.image.width
+        || jpegGrayLoadResult.image.height != jpegLoadResult.image.height
+        || jpegGrayLoadResult.image.channels != 1) {
+        std::cerr << "Grayscale JPEG load shape is unexpected." << std::endl;
+        return 1;
+    }
+
     rawgl::io::ImageSaveRequest jpegSaveRequest;
     jpegSaveRequest.path = jpegOutputPath.string();
     jpegSaveRequest.bits = 8;
-    jpegSaveRequest.attributes.push_back({ "jpeg:quality", "100" });
-    jpegSaveRequest.attributes.push_back({ "jpeg:progressive", "true" });
+    jpegSaveRequest.codecOptions.hasJpeg = true;
+    jpegSaveRequest.codecOptions.jpeg.hasQuality = true;
+    jpegSaveRequest.codecOptions.jpeg.quality = 100;
+    jpegSaveRequest.codecOptions.jpeg.hasProgressive = true;
+    jpegSaveRequest.codecOptions.jpeg.progressive = true;
     jpegSaveRequest.image = jpegLoadResult.image;
 
     const rawgl::io::ImageSaveResult jpegSaveResult = rawgl::io::SaveImageFile(jpegSaveRequest);
@@ -134,10 +169,16 @@ main()
     rawgl::io::ImageSaveRequest tiffSaveRequest;
     tiffSaveRequest.path = tiffOutputPath.string();
     tiffSaveRequest.bits = 16;
-    tiffSaveRequest.attributes.push_back({ "tiff:compression", "ZIP" });
-    tiffSaveRequest.attributes.push_back({ "tiff:tiled", "true" });
-    tiffSaveRequest.attributes.push_back({ "tiff:tileWidth", "256" });
-    tiffSaveRequest.attributes.push_back({ "tiff:tileLength", "128" });
+    tiffSaveRequest.attributes.push_back({ "tiff:layout", "strips" });
+    tiffSaveRequest.codecOptions.hasTiff = true;
+    tiffSaveRequest.codecOptions.tiff.hasCompression = true;
+    tiffSaveRequest.codecOptions.tiff.compression = rawgl::io::TiffCompressionMode::Deflate;
+    tiffSaveRequest.codecOptions.tiff.hasLayout = true;
+    tiffSaveRequest.codecOptions.tiff.layout = rawgl::io::TiffStorageLayout::Tiled;
+    tiffSaveRequest.codecOptions.tiff.hasTileWidth = true;
+    tiffSaveRequest.codecOptions.tiff.tileWidth = 256u;
+    tiffSaveRequest.codecOptions.tiff.hasTileHeight = true;
+    tiffSaveRequest.codecOptions.tiff.tileHeight = 128u;
     tiffSaveRequest.image = jpegLoadResult.image;
 
     const rawgl::io::ImageSaveResult tiffSaveResult = rawgl::io::SaveImageFile(tiffSaveRequest);
@@ -153,6 +194,11 @@ main()
 
     rawgl::io::ImageLoadRequest tiffReloadRequest;
     tiffReloadRequest.path = tiffOutputPath.string();
+    tiffReloadRequest.codecOptions.hasBackendPolicy = true;
+    tiffReloadRequest.codecOptions.backendPolicy = rawgl::io::ImageLoadBackendPolicy::NativeOnly;
+    tiffReloadRequest.codecOptions.hasTiff = true;
+    tiffReloadRequest.codecOptions.tiff.hasDirectoryIndex = true;
+    tiffReloadRequest.codecOptions.tiff.directoryIndex = 0u;
 
     const rawgl::io::ImageLoadResult tiffReloadResult = rawgl::io::LoadImageFile(tiffReloadRequest);
     if (!tiffReloadResult.success) {
@@ -202,10 +248,15 @@ main()
     rawgl::io::ImageSaveRequest tiffBigSaveRequest;
     tiffBigSaveRequest.path = tiffBigOutputPath.string();
     tiffBigSaveRequest.bits = 32;
-    tiffBigSaveRequest.attributes.push_back({ "tiff:compression", "ZIP" });
-    tiffBigSaveRequest.attributes.push_back({ "tiff:predictor", "float" });
-    tiffBigSaveRequest.attributes.push_back({ "tiff:rowsPerStrip", "17" });
-    tiffBigSaveRequest.attributes.push_back({ "tiff:bigTiff", "true" });
+    tiffBigSaveRequest.codecOptions.hasTiff = true;
+    tiffBigSaveRequest.codecOptions.tiff.hasCompression = true;
+    tiffBigSaveRequest.codecOptions.tiff.compression = rawgl::io::TiffCompressionMode::Deflate;
+    tiffBigSaveRequest.codecOptions.tiff.hasPredictor = true;
+    tiffBigSaveRequest.codecOptions.tiff.predictor = rawgl::io::TiffPredictorMode::Float;
+    tiffBigSaveRequest.codecOptions.tiff.hasRowsPerStrip = true;
+    tiffBigSaveRequest.codecOptions.tiff.rowsPerStrip = 17u;
+    tiffBigSaveRequest.codecOptions.tiff.hasForceBigTiff = true;
+    tiffBigSaveRequest.codecOptions.tiff.forceBigTiff = true;
     tiffBigSaveRequest.image = jpegLoadResult.image;
 
     const rawgl::io::ImageSaveResult tiffBigSaveResult = rawgl::io::SaveImageFile(tiffBigSaveRequest);
@@ -282,10 +333,15 @@ main()
     rawgl::io::ImageSaveRequest exrSaveRequest;
     exrSaveRequest.path = exrOutputPath.string();
     exrSaveRequest.bits = 16;
-    exrSaveRequest.attributes.push_back({ "openexr:compression", "zip" });
-    exrSaveRequest.attributes.push_back({ "openexr:tiled", "true" });
-    exrSaveRequest.attributes.push_back({ "openexr:tileWidth", "64" });
-    exrSaveRequest.attributes.push_back({ "openexr:tileHeight", "32" });
+    exrSaveRequest.codecOptions.hasOpenExr = true;
+    exrSaveRequest.codecOptions.openExr.hasCompression = true;
+    exrSaveRequest.codecOptions.openExr.compression = rawgl::io::OpenExrCompressionMode::Zip;
+    exrSaveRequest.codecOptions.openExr.hasLayout = true;
+    exrSaveRequest.codecOptions.openExr.layout = rawgl::io::OpenExrStorageLayout::Tiled;
+    exrSaveRequest.codecOptions.openExr.hasTileWidth = true;
+    exrSaveRequest.codecOptions.openExr.tileWidth = 64u;
+    exrSaveRequest.codecOptions.openExr.hasTileHeight = true;
+    exrSaveRequest.codecOptions.openExr.tileHeight = 32u;
     exrSaveRequest.image = jpegLoadResult.image;
 
     const rawgl::io::ImageSaveResult exrSaveResult = rawgl::io::SaveImageFile(exrSaveRequest);
@@ -301,6 +357,11 @@ main()
 
     rawgl::io::ImageLoadRequest exrReloadRequest;
     exrReloadRequest.path = exrOutputPath.string();
+    exrReloadRequest.codecOptions.hasBackendPolicy = true;
+    exrReloadRequest.codecOptions.backendPolicy = rawgl::io::ImageLoadBackendPolicy::NativeOnly;
+    exrReloadRequest.codecOptions.hasOpenExr = true;
+    exrReloadRequest.codecOptions.openExr.hasChannelSelection = true;
+    exrReloadRequest.codecOptions.openExr.channelSelection = rawgl::io::OpenExrChannelSelection::Rgb;
 
     const rawgl::io::ImageLoadResult exrReloadResult = rawgl::io::LoadImageFile(exrReloadRequest);
     if (!exrReloadResult.success) {

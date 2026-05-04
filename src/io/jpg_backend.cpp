@@ -42,6 +42,22 @@ enum class JpegSubsampling
     S411,
 };
 
+enum class JpegLoadColorMode
+{
+    Auto,
+    Grayscale,
+    Rgb,
+};
+
+struct JpegSaveOptions {
+    int quality = 95;
+    bool progressive = false;
+    bool optimizeCoding = false;
+    bool hasOptimizeCoding = false;
+    JpegSubsampling subsampling = JpegSubsampling::Default;
+    bool hasSubsampling = false;
+};
+
 static bool
 host_is_little_endian()
 {
@@ -111,12 +127,10 @@ parse_unsigned_decimal_setting(const std::string& text,
 }
 
 static bool
-parse_jpeg_quality(const std::map<std::string, std::string>& attributes,
-                   int& quality,
-                   std::string& errorMessage)
+parse_jpeg_quality_option(const std::map<std::string, std::string>& attributes,
+                          JpegSaveOptions& options,
+                          std::string& errorMessage)
 {
-    quality = 95;
-
     const std::string* value = nullptr;
     const auto explicitJpeg = attributes.find("jpeg:quality");
     if (explicitJpeg != attributes.end()) {
@@ -157,7 +171,7 @@ parse_jpeg_quality(const std::map<std::string, std::string>& attributes,
         return false;
     }
 
-    quality = static_cast<int>(parsedValue);
+    options.quality = static_cast<int>(parsedValue);
     return true;
 }
 
@@ -204,12 +218,11 @@ parse_jpeg_bool_setting(const std::map<std::string, std::string>& attributes,
 
 static bool
 parse_jpeg_subsampling(const std::map<std::string, std::string>& attributes,
-                       JpegSubsampling& subsampling,
-                       bool& present,
+                       JpegSaveOptions& options,
                        std::string& errorMessage)
 {
-    present = false;
-    subsampling = JpegSubsampling::Default;
+    options.hasSubsampling = false;
+    options.subsampling = JpegSubsampling::Default;
 
     const std::string* attribute = nullptr;
     const auto jpegValue = attributes.find("jpeg:subsampling");
@@ -225,20 +238,20 @@ parse_jpeg_subsampling(const std::map<std::string, std::string>& attributes,
         return true;
     }
 
-    present = true;
+    options.hasSubsampling = true;
     const std::string normalized = to_lower_copy(*attribute);
     if (normalized == "default" || normalized == "auto") {
-        subsampling = JpegSubsampling::Default;
+        options.subsampling = JpegSubsampling::Default;
     } else if (normalized == "444" || normalized == "4:4:4" || normalized == "none") {
-        subsampling = JpegSubsampling::S444;
+        options.subsampling = JpegSubsampling::S444;
     } else if (normalized == "422" || normalized == "4:2:2") {
-        subsampling = JpegSubsampling::S422;
+        options.subsampling = JpegSubsampling::S422;
     } else if (normalized == "420" || normalized == "4:2:0") {
-        subsampling = JpegSubsampling::S420;
+        options.subsampling = JpegSubsampling::S420;
     } else if (normalized == "440" || normalized == "4:4:0") {
-        subsampling = JpegSubsampling::S440;
+        options.subsampling = JpegSubsampling::S440;
     } else if (normalized == "411" || normalized == "4:1:1") {
-        subsampling = JpegSubsampling::S411;
+        options.subsampling = JpegSubsampling::S411;
     } else {
         errorMessage = "unsupported JPEG chroma subsampling mode";
         return false;
@@ -248,13 +261,49 @@ parse_jpeg_subsampling(const std::map<std::string, std::string>& attributes,
 }
 
 static bool
+parse_jpeg_save_options(const std::map<std::string, std::string>& attributes,
+                        JpegSaveOptions& options,
+                        std::string& errorMessage)
+{
+    options = JpegSaveOptions();
+
+    if (!parse_jpeg_quality_option(attributes, options, errorMessage)) {
+        return false;
+    }
+    bool hasProgressive = false;
+    if (!parse_jpeg_bool_setting(attributes,
+                                 "jpeg:progressive",
+                                 "jpg:progressive",
+                                 options.progressive,
+                                 hasProgressive,
+                                 "invalid JPEG progressive value",
+                                 errorMessage)) {
+        return false;
+    }
+    (void)hasProgressive;
+    if (!parse_jpeg_bool_setting(attributes,
+                                 "jpeg:optimize",
+                                 "jpg:optimize",
+                                 options.optimizeCoding,
+                                 options.hasOptimizeCoding,
+                                 "invalid JPEG optimize value",
+                                 errorMessage)) {
+        return false;
+    }
+    if (!parse_jpeg_subsampling(attributes, options, errorMessage)) {
+        return false;
+    }
+
+    return true;
+}
+
+static bool
 apply_jpeg_subsampling(jpeg_compress_struct& cinfo,
                        const int outputChannels,
-                       const JpegSubsampling subsampling,
-                       const bool present,
+                       const JpegSaveOptions& options,
                        std::string& errorMessage)
 {
-    if (!present || subsampling == JpegSubsampling::Default) {
+    if (!options.hasSubsampling || options.subsampling == JpegSubsampling::Default) {
         return true;
     }
     if (outputChannels != 3 || cinfo.num_components < 3) {
@@ -264,7 +313,7 @@ apply_jpeg_subsampling(jpeg_compress_struct& cinfo,
 
     int yHorizontal = 1;
     int yVertical = 1;
-    switch (subsampling) {
+    switch (options.subsampling) {
     case JpegSubsampling::S444:
         yHorizontal = 1;
         yVertical = 1;
@@ -439,6 +488,35 @@ convert_host_image_to_jpeg_bytes(const HostImageData& image,
 }
 
 static bool
+parse_jpeg_load_color_mode(const std::map<std::string, std::string>& attributes,
+                           JpegLoadColorMode& colorMode,
+                           std::string& errorMessage)
+{
+    colorMode = JpegLoadColorMode::Auto;
+    const auto transformValue = attributes.find("jpeg:color_transform");
+    if (transformValue == attributes.end()) {
+        return true;
+    }
+
+    const std::string normalized = to_lower_copy(transformValue->second);
+    if (normalized == "auto") {
+        colorMode = JpegLoadColorMode::Auto;
+        return true;
+    }
+    if (normalized == "grayscale" || normalized == "gray") {
+        colorMode = JpegLoadColorMode::Grayscale;
+        return true;
+    }
+    if (normalized == "rgb") {
+        colorMode = JpegLoadColorMode::Rgb;
+        return true;
+    }
+
+    errorMessage = "unsupported JPEG load color transform";
+    return false;
+}
+
+static bool
 close_file(FILE* file)
 {
     if (file != nullptr) {
@@ -451,11 +529,13 @@ close_file(FILE* file)
 }  // namespace
 
 DecodedImageData
-decode_jpg_file(const std::string& path)
+decode_jpg_file(const std::string& path, const std::map<std::string, std::string>& attributes)
 {
     DecodedImageData result;
 
 #if !defined(RAWGL_HAS_LIBJPEG)
+    (void)path;
+    (void)attributes;
     result.errorMessage = "libjpeg support is not available";
     return result;
 #else
@@ -481,7 +561,18 @@ decode_jpg_file(const std::string& path)
     jpeg_stdio_src(&cinfo, file);
     jpeg_read_header(&cinfo, TRUE);
 
-    if (cinfo.jpeg_color_space == JCS_GRAYSCALE) {
+    JpegLoadColorMode colorMode = JpegLoadColorMode::Auto;
+    if (!parse_jpeg_load_color_mode(attributes, colorMode, result.errorMessage)) {
+        jpeg_destroy_decompress(&cinfo);
+        close_file(file);
+        return result;
+    }
+
+    if (colorMode == JpegLoadColorMode::Grayscale) {
+        cinfo.out_color_space = JCS_GRAYSCALE;
+    } else if (colorMode == JpegLoadColorMode::Rgb) {
+        cinfo.out_color_space = JCS_RGB;
+    } else if (cinfo.jpeg_color_space == JCS_GRAYSCALE) {
         cinfo.out_color_space = JCS_GRAYSCALE;
     } else if (cinfo.jpeg_color_space == JCS_RGB || cinfo.jpeg_color_space == JCS_YCbCr) {
         cinfo.out_color_space = JCS_RGB;
@@ -538,6 +629,11 @@ encode_jpg_file(const std::string& path,
         return false;
     }
 
+    JpegSaveOptions options;
+    if (!parse_jpeg_save_options(attributes, options, errorMessage)) {
+        return false;
+    }
+
     FILE* file = fopen(path.c_str(), "wb");
     if (file == nullptr) {
         errorMessage = "can't open JPEG file for writing";
@@ -566,57 +662,17 @@ encode_jpg_file(const std::string& path,
 
     jpeg_set_defaults(&cinfo);
 
-    int quality = 95;
-    if (!parse_jpeg_quality(attributes, quality, errorMessage)) {
-        jpeg_destroy_compress(&cinfo);
-        close_file(file);
-        return false;
-    }
-    jpeg_set_quality(&cinfo, quality, TRUE);
+    jpeg_set_quality(&cinfo, options.quality, TRUE);
 
-    bool progressive = false;
-    bool hasProgressive = false;
-    if (!parse_jpeg_bool_setting(attributes,
-                                 "jpeg:progressive",
-                                 "jpg:progressive",
-                                 progressive,
-                                 hasProgressive,
-                                 "invalid JPEG progressive value",
-                                 errorMessage)) {
-        jpeg_destroy_compress(&cinfo);
-        close_file(file);
-        return false;
-    }
-    (void)hasProgressive;
-    if (progressive) {
+    if (options.progressive) {
         jpeg_simple_progression(&cinfo);
     }
 
-    bool optimizeCoding = false;
-    bool hasOptimizeCoding = false;
-    if (!parse_jpeg_bool_setting(attributes,
-                                 "jpeg:optimize",
-                                 "jpg:optimize",
-                                 optimizeCoding,
-                                 hasOptimizeCoding,
-                                 "invalid JPEG optimize value",
-                                 errorMessage)) {
-        jpeg_destroy_compress(&cinfo);
-        close_file(file);
-        return false;
-    }
-    if (hasOptimizeCoding) {
-        cinfo.optimize_coding = optimizeCoding ? TRUE : FALSE;
+    if (options.hasOptimizeCoding) {
+        cinfo.optimize_coding = options.optimizeCoding ? TRUE : FALSE;
     }
 
-    JpegSubsampling subsampling = JpegSubsampling::Default;
-    bool hasSubsampling = false;
-    if (!parse_jpeg_subsampling(attributes, subsampling, hasSubsampling, errorMessage)) {
-        jpeg_destroy_compress(&cinfo);
-        close_file(file);
-        return false;
-    }
-    if (!apply_jpeg_subsampling(cinfo, outputChannels, subsampling, hasSubsampling, errorMessage)) {
+    if (!apply_jpeg_subsampling(cinfo, outputChannels, options, errorMessage)) {
         jpeg_destroy_compress(&cinfo);
         close_file(file);
         return false;

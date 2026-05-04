@@ -144,6 +144,7 @@ main()
 
     rawgl::io::ImageMetadataTransferRequest transferRequest;
     transferRequest.sourceMetadata = documentResult.document;
+    transferRequest.safety = rawgl::io::MetadataTransferSafety::RenderedImage;
     transferRequest.path = tiffOutputPath.string();
 
     const rawgl::io::ImageMetadataTransferResult tiffPatchResult =

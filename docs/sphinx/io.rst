@@ -44,8 +44,122 @@ silently retrying the write through OpenImageIO. The read path may still fall
 back to OpenImageIO when a native reader cannot decode a supported format
 variant.
 
+Codec capability query
+----------------------
+
+Use ``rawgl::io::GetImageIoCapabilities()`` when an application needs to decide
+which file formats and writer controls are available in the current RawGL
+build. The query reports native read/write routing, OpenImageIO fallback
+availability, supported native component types, native read/write option names,
+native compression modes, unavailable optional compression modes, and library
+version details.
+
+.. code-block:: cpp
+
+   const rawgl::io::ImageIoCapabilities capabilities =
+       rawgl::io::GetImageIoCapabilities();
+
+   for (const rawgl::io::ImageCodecCapabilities& codec : capabilities.codecs) {
+       if (codec.name == "tiff" && codec.nativeWrite) {
+           // codec.nativeWriteCompressionModes contains the libtiff codecs
+           // configured in this dependency build.
+       }
+   }
+
+Python exposes the same information through ``rawgl.io.capabilities()``:
+
+.. code-block:: python
+
+   caps = rawgl.io.capabilities()
+   for codec in caps.codecs:
+       print(codec.name, codec.native_read_options, codec.native_write_options)
+
 Native codec options
 --------------------
+
+Use typed options for direct C++ and Python loads/saves. String attributes
+remain supported for CLI options, legacy scripts, and backend-specific escape
+hatches. If typed options and string attributes set the same native option, the
+typed option wins.
+
+Typed load example:
+
+.. code-block:: cpp
+
+   rawgl::io::ImageLoadRequest request;
+   request.path = "input.jpg";
+   request.codecOptions.hasBackendPolicy = true;
+   request.codecOptions.backendPolicy = rawgl::io::ImageLoadBackendPolicy::NativeOnly;
+   request.codecOptions.hasJpeg = true;
+   request.codecOptions.jpeg.hasColorTransform = true;
+   request.codecOptions.jpeg.colorTransform = rawgl::io::JpegLoadColorTransform::Rgb;
+
+   const rawgl::io::ImageLoadResult result = rawgl::io::LoadImageFile(request);
+
+.. code-block:: python
+
+   jpeg = rawgl.io.JpegLoadOptions()
+   jpeg.has_color_transform = True
+   jpeg.color_transform = rawgl.io.JpegLoadColorTransform.rgb
+
+   codec = rawgl.io.ImageCodecLoadOptions()
+   codec.has_backend_policy = True
+   codec.backend_policy = rawgl.io.ImageLoadBackendPolicy.native_only
+   codec.has_jpeg = True
+   codec.jpeg = jpeg
+
+   image = rawgl.io.load_image("input.jpg", codec_options=codec)
+
+Typed save example:
+
+.. code-block:: cpp
+
+   rawgl::io::ImageSaveRequest request;
+   request.path = "output.tif";
+   request.bits = 16;
+   request.image = image;
+   request.codecOptions.hasTiff = true;
+   request.codecOptions.tiff.hasCompression = true;
+   request.codecOptions.tiff.compression = rawgl::io::TiffCompressionMode::Deflate;
+   request.codecOptions.tiff.hasLayout = true;
+   request.codecOptions.tiff.layout = rawgl::io::TiffStorageLayout::Tiled;
+   request.codecOptions.tiff.hasTileWidth = true;
+   request.codecOptions.tiff.tileWidth = 256;
+   request.codecOptions.tiff.hasTileHeight = true;
+   request.codecOptions.tiff.tileHeight = 256;
+
+   const rawgl::io::ImageSaveResult result = rawgl::io::SaveImageFile(request);
+
+.. code-block:: python
+
+   exr = rawgl.io.OpenExrSaveOptions()
+   exr.has_compression = True
+   exr.compression = rawgl.io.OpenExrCompressionMode.zip
+   exr.has_layout = True
+   exr.layout = rawgl.io.OpenExrStorageLayout.tiled
+   exr.has_tile_width = True
+   exr.tile_width = 64
+   exr.has_tile_height = True
+   exr.tile_height = 64
+
+   codec = rawgl.io.ImageCodecSaveOptions()
+   codec.has_openexr = True
+   codec.openexr = exr
+
+   rawgl.io.save_image(image, "output.exr", bits=16, codec_options=codec)
+
+Compatibility load attribute keys are still accepted:
+
+- ``rawgl:load_backend`` or ``rawgl:decode_backend``: ``auto``, ``native`` /
+  ``native_only``, or ``openimageio`` / ``openimageio_only``
+- ``jpeg:color_transform``: ``auto``, ``rgb``, or ``grayscale``
+- ``png:expand_transparency``: ``true`` expands ``tRNS`` chunks to alpha
+- ``tiff:directory_index`` / ``tiff:directoryIndex`` / ``tiff:subimage``:
+  zero-based TIFF directory
+- ``openexr:channel_selection`` / ``openexr:channelSelection``: ``auto``,
+  ``luminance``, ``rgb``, ``rgba``, or ``all``
+
+Compatibility save attribute keys are still accepted:
 
 JPEG output accepts:
 
@@ -185,6 +299,7 @@ Direct file helpers
 
 - ``LoadImageFile(...)``
 - ``SaveImageFile(...)``
+- ``GetImageIoCapabilities()``
 - ``ReadMetadataFile(...)``
 - ``ReadMetadataDocumentFile(...)``
 
@@ -218,6 +333,12 @@ Use metadata readback when:
 
 Current support includes preview reads, typed metadata documents for
 inspection, and transfer into already-written JPEG, TIFF, PNG, and EXR targets.
+Transfers default to rendered-image safety, which keeps general descriptive,
+capture, GPS, IPTC, and portable XMP metadata while filtering source-specific
+RAW processing data, source ICC profiles, opaque MakerNotes, and non-C2PA JUMBF
+payloads. Use ``MetadataTransferSafety::CompatibleFile`` only for compatible
+metadata repackaging or recompression where source camera/color metadata still
+matches the target pixels.
 
 Python exposes the same path through:
 
@@ -236,6 +357,13 @@ Use ``TransferImageMetadataFile(...)`` or Python ``save_image(...,
 source_metadata=document)`` when a generated target should inherit metadata
 from a source document. The transfer path uses OpenMeta internally, but OpenMeta
 types do not appear in RawGL public headers.
+
+``metadata_safety`` can be set to
+``rawgl.MetadataTransferSafety.compatible_file`` for a true compatible file
+transfer; otherwise rendered-image safety is used. Advanced callers may pass an
+exact target image to ``transfer_image_metadata(...)`` when the in-memory
+payload matches the encoded target layout; otherwise RawGL inspects the written
+target file before applying metadata.
 
 When to prefer IoRuntime
 ------------------------

@@ -53,6 +53,7 @@ _OUTPUT_SPEC_KEYS = frozenset({
     "persistent_texture_name",
     "attributes",
     "attrs",
+    "codec_options",
     "array_element",
 })
 
@@ -308,7 +309,9 @@ def save_image(
     bits=16,
     alpha_channel=None,
     attributes=None,
+    codec_options=None,
     source_metadata=None,
+    metadata_safety=None,
     io_runtime=None,
 ):
     """Save one HostImageData or NumPy image to disk through rawgl.io."""
@@ -333,17 +336,24 @@ def save_image(
     request.bits = int(bits)
     request.alpha_channel = -1 if alpha_channel is None else int(alpha_channel)
     request.attributes = _coerce_attributes(attributes)
+    if codec_options is not None:
+        request.codec_options = codec_options
     request.image = host_image
 
     result = io_runtime.save_image_file(request)
     if not result.success:
         raise RuntimeError(result.error_message or f"failed to save image '{path}'")
     if source_metadata is not None:
-        transfer_image_metadata(path, source_metadata, io_runtime=io_runtime)
+        transfer_image_metadata(
+            path,
+            source_metadata,
+            safety=metadata_safety,
+            io_runtime=io_runtime,
+        )
     return result
 
 
-def transfer_image_metadata(path, source_metadata, *, target_image=None, io_runtime=None):
+def transfer_image_metadata(path, source_metadata, *, target_image=None, safety=None, io_runtime=None):
     """Transfer a RawGL MetadataDocument into an already-written image file."""
 
     io_runtime_type = globals().get("IoRuntime")
@@ -357,6 +367,8 @@ def transfer_image_metadata(path, source_metadata, *, target_image=None, io_runt
     request = transfer_request_type()
     request.path = str(path)
     request.source_metadata = source_metadata
+    if safety is not None:
+        request.safety = safety
     if target_image is not None:
         if _is_numpy_array(target_image):
             request.target_image = make_host_image(target_image)
@@ -372,7 +384,7 @@ def transfer_image_metadata(path, source_metadata, *, target_image=None, io_runt
     return result
 
 
-def load_image(path, *, attributes=None, io_runtime=None):
+def load_image(path, *, attributes=None, codec_options=None, io_runtime=None):
     """Load one file-backed image into HostImageData through rawgl.io."""
 
     io_runtime_type = globals().get("IoRuntime")
@@ -386,11 +398,22 @@ def load_image(path, *, attributes=None, io_runtime=None):
     request = image_load_request_type()
     request.path = str(path)
     request.attributes = _coerce_attributes(attributes)
+    if codec_options is not None:
+        request.codec_options = codec_options
 
     result = io_runtime.load_image_file(request)
     if not result.success:
         raise RuntimeError(result.error_message or f"failed to load image '{path}'")
     return result.image
+
+
+def image_io_capabilities():
+    """Return image IO capabilities for the loaded RawGL extension build."""
+
+    capabilities_func = globals().get("get_image_io_capabilities")
+    if capabilities_func is None:
+        raise RuntimeError("rawgl.image_io_capabilities() requires the core Python bindings")
+    return capabilities_func()
 
 
 def read_metadata(
@@ -621,6 +644,8 @@ def _coerce_file_input_binding(pass_index: int, name, spec):
     if not binding.path:
         raise TypeError(f"file input specification for '{name}' requires 'path'")
     binding.attributes = _coerce_attributes(spec.get("attributes", spec.get("attrs")))
+    if spec.get("codec_options") is not None:
+        binding.codec_options = spec["codec_options"]
     if "array_element" in spec:
         binding.uses_array_element = True
         binding.array_element = int(spec["array_element"])
@@ -645,6 +670,8 @@ def _coerce_file_input_override(pass_index: int, name, spec):
     if not override.path:
         raise TypeError(f"file input override specification for '{name}' requires 'path'")
     override.attributes = _coerce_attributes(spec.get("attributes", spec.get("attrs")))
+    if spec.get("codec_options") is not None:
+        override.codec_options = spec["codec_options"]
     if "array_element" in spec:
         override.uses_array_element = True
         override.array_element = int(spec["array_element"])
@@ -676,6 +703,8 @@ def _coerce_file_output_binding(pass_index: int, name, spec):
     binding.alpha_channel = int(spec.get("alpha_channel", binding.alpha_channel))
     binding.bits = int(spec.get("bits", binding.bits))
     binding.attributes = _coerce_attributes(spec.get("attributes", spec.get("attrs")))
+    if spec.get("codec_options") is not None:
+        binding.codec_options = spec["codec_options"]
     if "array_element" in spec:
         binding.uses_array_element = True
         binding.array_element = int(spec["array_element"])
@@ -2014,6 +2043,7 @@ class _IoNamespace:
         self.MetadataValueKind = globals().get("MetadataValueKind")
         self.MetadataElementType = globals().get("MetadataElementType")
         self.MetadataTextEncoding = globals().get("MetadataTextEncoding")
+        self.MetadataTransferSafety = globals().get("MetadataTransferSafety")
         self.MetadataEntryFlags = globals().get("MetadataEntryFlags")
         self.MetadataEntry = globals().get("MetadataEntry")
         self.MetadataValue = globals().get("MetadataValue")
@@ -2025,6 +2055,29 @@ class _IoNamespace:
         self.MetadataDocumentReadResult = globals().get("MetadataDocumentReadResult")
         self.ImageMetadataTransferRequest = globals().get("ImageMetadataTransferRequest")
         self.ImageMetadataTransferResult = globals().get("ImageMetadataTransferResult")
+        self.ImageIoCapabilityDetail = globals().get("ImageIoCapabilityDetail")
+        self.ImageCodecCapabilities = globals().get("ImageCodecCapabilities")
+        self.ImageIoCapabilities = globals().get("ImageIoCapabilities")
+        self.ImageLoadBackendPolicy = globals().get("ImageLoadBackendPolicy")
+        self.JpegLoadColorTransform = globals().get("JpegLoadColorTransform")
+        self.JpegLoadOptions = globals().get("JpegLoadOptions")
+        self.PngLoadOptions = globals().get("PngLoadOptions")
+        self.TiffLoadOptions = globals().get("TiffLoadOptions")
+        self.OpenExrChannelSelection = globals().get("OpenExrChannelSelection")
+        self.OpenExrLoadOptions = globals().get("OpenExrLoadOptions")
+        self.ImageCodecLoadOptions = globals().get("ImageCodecLoadOptions")
+        self.JpegChromaSubsampling = globals().get("JpegChromaSubsampling")
+        self.JpegSaveOptions = globals().get("JpegSaveOptions")
+        self.PngSaveOptions = globals().get("PngSaveOptions")
+        self.TiffCompressionMode = globals().get("TiffCompressionMode")
+        self.TiffPredictorMode = globals().get("TiffPredictorMode")
+        self.TiffStorageLayout = globals().get("TiffStorageLayout")
+        self.TiffSaveOptions = globals().get("TiffSaveOptions")
+        self.OpenExrCompressionMode = globals().get("OpenExrCompressionMode")
+        self.OpenExrStorageLayout = globals().get("OpenExrStorageLayout")
+        self.OpenExrLineOrder = globals().get("OpenExrLineOrder")
+        self.OpenExrSaveOptions = globals().get("OpenExrSaveOptions")
+        self.ImageCodecSaveOptions = globals().get("ImageCodecSaveOptions")
 
     def _resolve_runtime(self, io_runtime=None):
         if io_runtime is not None:
@@ -2034,8 +2087,13 @@ class _IoNamespace:
             raise RuntimeError("rawgl.io helpers require IoRuntime bindings in this build")
         return resolved
 
-    def load_image(self, path, *, attributes=None, io_runtime=None):
-        return load_image(path, attributes=attributes, io_runtime=self._resolve_runtime(io_runtime))
+    def load_image(self, path, *, attributes=None, codec_options=None, io_runtime=None):
+        return load_image(
+            path,
+            attributes=attributes,
+            codec_options=codec_options,
+            io_runtime=self._resolve_runtime(io_runtime),
+        )
 
     def save_image(
         self,
@@ -2045,7 +2103,9 @@ class _IoNamespace:
         bits=16,
         alpha_channel=None,
         attributes=None,
+        codec_options=None,
         source_metadata=None,
+        metadata_safety=None,
         io_runtime=None,
     ):
         return save_image(
@@ -2054,15 +2114,21 @@ class _IoNamespace:
             bits=bits,
             alpha_channel=alpha_channel,
             attributes=attributes,
+            codec_options=codec_options,
             source_metadata=source_metadata,
+            metadata_safety=metadata_safety,
             io_runtime=self._resolve_runtime(io_runtime),
         )
 
-    def transfer_image_metadata(self, path, source_metadata, *, target_image=None, io_runtime=None):
+    def capabilities(self):
+        return image_io_capabilities()
+
+    def transfer_image_metadata(self, path, source_metadata, *, target_image=None, safety=None, io_runtime=None):
         return transfer_image_metadata(
             path,
             source_metadata,
             target_image=target_image,
+            safety=safety,
             io_runtime=self._resolve_runtime(io_runtime),
         )
 

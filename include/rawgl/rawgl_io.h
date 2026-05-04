@@ -22,12 +22,79 @@ struct IoRuntimeOptions {
     int encodeWorkerCount = 0;
 };
 
+/// Decode backend policy for file-backed image loads.
+enum class ImageLoadBackendPolicy : uint8_t {
+    Auto,
+    NativeOnly,
+    OpenImageIoOnly,
+};
+
+/// JPEG output color transform for native JPEG loads.
+enum class JpegLoadColorTransform : uint8_t {
+    Auto,
+    Grayscale,
+    Rgb,
+};
+
+/// Typed native JPEG reader options.
+struct JpegLoadOptions {
+    bool hasColorTransform = false;
+    JpegLoadColorTransform colorTransform = JpegLoadColorTransform::Auto;
+};
+
+/// Typed native PNG reader options.
+struct PngLoadOptions {
+    bool hasExpandTransparency = false;
+    bool expandTransparency = true;
+};
+
+/// Typed native TIFF reader options.
+struct TiffLoadOptions {
+    bool hasDirectoryIndex = false;
+    uint32_t directoryIndex = 0;
+};
+
+/// OpenEXR channel selection policy for native OpenEXR loads.
+enum class OpenExrChannelSelection : uint8_t {
+    Auto,
+    Luminance,
+    Rgb,
+    Rgba,
+    All,
+};
+
+/// Typed native OpenEXR reader options.
+struct OpenExrLoadOptions {
+    bool hasChannelSelection = false;
+    OpenExrChannelSelection channelSelection = OpenExrChannelSelection::Auto;
+};
+
+/// Typed native codec reader options.
+///
+/// Legacy string \ref Attribute entries remain supported. When both typed
+/// options and string attributes set the same native reader option, the typed
+/// option wins.
+struct ImageCodecLoadOptions {
+    bool hasBackendPolicy = false;
+    ImageLoadBackendPolicy backendPolicy = ImageLoadBackendPolicy::Auto;
+    bool hasJpeg = false;
+    JpegLoadOptions jpeg;
+    bool hasPng = false;
+    PngLoadOptions png;
+    bool hasTiff = false;
+    TiffLoadOptions tiff;
+    bool hasOpenExr = false;
+    OpenExrLoadOptions openExr;
+};
+
 /// Describes one file-backed image load request.
 struct ImageLoadRequest {
     /// Source image path.
     std::string path;
-    /// Loader attributes such as colorspace hints.
+    /// Compatibility loader attributes such as colorspace hints.
     std::vector<Attribute> attributes;
+    /// Typed native codec-specific reader options.
+    ImageCodecLoadOptions codecOptions;
 };
 
 /// Result of loading one file-backed image into host memory.
@@ -40,12 +107,168 @@ struct ImageLoadResult {
     HostImageData image;
 };
 
+/// JPEG chroma subsampling policy for native JPEG output.
+enum class JpegChromaSubsampling : uint8_t {
+    Default,
+    S444,
+    S422,
+    S420,
+    S440,
+    S411,
+};
+
+/// Typed native JPEG writer options.
+struct JpegSaveOptions {
+    bool hasQuality = false;
+    int quality = 95;
+    bool hasProgressive = false;
+    bool progressive = false;
+    bool hasOptimize = false;
+    bool optimize = false;
+    bool hasSubsampling = false;
+    JpegChromaSubsampling subsampling = JpegChromaSubsampling::Default;
+};
+
+/// Typed native PNG writer options.
+struct PngSaveOptions {
+    bool hasCompressionLevel = false;
+    int compressionLevel = -1;
+    bool hasInterlaced = false;
+    bool interlaced = false;
+};
+
+/// TIFF compression policy for native TIFF output.
+enum class TiffCompressionMode : uint8_t {
+    None,
+    Lzw,
+    PackBits,
+    Deflate,
+    AdobeDeflate,
+    Jpeg,
+    Lzma,
+    Zstd,
+    Webp,
+    Jxl,
+    JxlDng,
+    Lerc,
+};
+
+/// TIFF predictor policy for native TIFF output.
+enum class TiffPredictorMode : uint8_t {
+    None,
+    Horizontal,
+    Float,
+};
+
+/// TIFF storage layout for native TIFF output.
+enum class TiffStorageLayout : uint8_t {
+    Strips,
+    Tiled,
+};
+
+/// Typed native TIFF writer options.
+struct TiffSaveOptions {
+    bool hasCompression = false;
+    TiffCompressionMode compression = TiffCompressionMode::None;
+    bool hasPredictor = false;
+    TiffPredictorMode predictor = TiffPredictorMode::None;
+    bool hasLayout = false;
+    TiffStorageLayout layout = TiffStorageLayout::Strips;
+    bool hasForceBigTiff = false;
+    bool forceBigTiff = false;
+    bool hasUnassociatedAlpha = false;
+    bool unassociatedAlpha = false;
+    bool hasRowsPerStrip = false;
+    uint32_t rowsPerStrip = 0;
+    bool hasTileWidth = false;
+    uint32_t tileWidth = 0;
+    bool hasTileHeight = false;
+    uint32_t tileHeight = 0;
+    bool hasJpegQuality = false;
+    uint32_t jpegQuality = 0;
+    bool hasDeflateLevel = false;
+    uint32_t deflateLevel = 0;
+    bool hasZstdLevel = false;
+    uint32_t zstdLevel = 0;
+    bool hasLzmaPreset = false;
+    uint32_t lzmaPreset = 0;
+    bool hasWebpLevel = false;
+    uint32_t webpLevel = 0;
+    bool hasWebpLossless = false;
+    bool webpLossless = false;
+    bool hasWebpLosslessExact = false;
+    bool webpLosslessExact = false;
+};
+
+/// OpenEXR compression policy for native OpenEXR output.
+enum class OpenExrCompressionMode : uint8_t {
+    None,
+    Rle,
+    Zips,
+    Zip,
+    Piz,
+    Pxr24,
+    B44,
+    B44A,
+    Dwaa,
+    Dwab,
+    Htj2k256,
+    Htj2k32,
+};
+
+/// OpenEXR storage layout for native OpenEXR output.
+enum class OpenExrStorageLayout : uint8_t {
+    Scanlines,
+    Tiled,
+};
+
+/// OpenEXR line order policy for native OpenEXR output.
+enum class OpenExrLineOrder : uint8_t {
+    IncreasingY,
+    DecreasingY,
+    RandomY,
+};
+
+/// Typed native OpenEXR writer options.
+struct OpenExrSaveOptions {
+    bool hasCompression = false;
+    OpenExrCompressionMode compression = OpenExrCompressionMode::Zip;
+    bool hasLayout = false;
+    OpenExrStorageLayout layout = OpenExrStorageLayout::Scanlines;
+    bool hasTileWidth = false;
+    uint32_t tileWidth = 0;
+    bool hasTileHeight = false;
+    uint32_t tileHeight = 0;
+    bool hasLineOrder = false;
+    OpenExrLineOrder lineOrder = OpenExrLineOrder::IncreasingY;
+    bool hasDwaCompressionLevel = false;
+    float dwaCompressionLevel = 0.0f;
+};
+
+/// Typed native codec writer options.
+///
+/// Legacy string \ref Attribute entries remain supported. When both typed
+/// options and string attributes set the same native writer option, the typed
+/// option wins.
+struct ImageCodecSaveOptions {
+    bool hasJpeg = false;
+    JpegSaveOptions jpeg;
+    bool hasPng = false;
+    PngSaveOptions png;
+    bool hasTiff = false;
+    TiffSaveOptions tiff;
+    bool hasOpenExr = false;
+    OpenExrSaveOptions openExr;
+};
+
 /// Describes one file-backed image save request.
 struct ImageSaveRequest {
     /// Destination image path.
     std::string path;
-    /// Codec-specific writer hints.
+    /// Compatibility codec-specific writer hints.
     std::vector<Attribute> attributes;
+    /// Typed native codec-specific writer options.
+    ImageCodecSaveOptions codecOptions;
     /// Explicit alpha channel, or -1 to use \ref HostImageData::alphaChannel.
     int alphaChannel = -1;
     /// Preferred output bit depth when the target format supports it.
@@ -60,6 +283,48 @@ struct ImageSaveResult {
     bool success = false;
     /// Failure details when \ref success is false.
     std::string errorMessage;
+};
+
+/// One name/value detail reported by the image IO capability query.
+struct ImageIoCapabilityDetail {
+    std::string name;
+    std::string value;
+};
+
+/// Build-time and run-time capabilities for one image codec family.
+struct ImageCodecCapabilities {
+    /// Stable family name such as `jpeg`, `png`, `tiff`, `openexr`, or `webp`.
+    std::string name;
+    /// Common file extensions handled by this codec family.
+    std::vector<std::string> extensions;
+    /// True when RawGL routes decode through a native backend first.
+    bool nativeRead = false;
+    /// True when RawGL routes encode through a native backend first.
+    bool nativeWrite = false;
+    /// True when OpenImageIO fallback read is available for this family.
+    bool fallbackRead = false;
+    /// True when OpenImageIO fallback write is available for this family.
+    bool fallbackWrite = false;
+    /// Component types RawGL can currently return for this native reader.
+    std::vector<std::string> nativeReadComponentTypes;
+    /// Component types RawGL can currently write through this native writer.
+    std::vector<std::string> nativeWriteComponentTypes;
+    /// Attribute names accepted by RawGL's native reader for this family.
+    std::vector<std::string> nativeReadOptions;
+    /// Compression names accepted by RawGL's native writer for this family.
+    std::vector<std::string> nativeWriteCompressionModes;
+    /// Compression names known but unavailable in the current dependency build.
+    std::vector<std::string> unavailableNativeWriteCompressionModes;
+    /// Attribute names accepted by RawGL's native writer for this family.
+    std::vector<std::string> nativeWriteOptions;
+    /// Additional build/library details.
+    std::vector<ImageIoCapabilityDetail> details;
+};
+
+/// Image IO capabilities for the current RawGL build.
+struct ImageIoCapabilities {
+    bool openImageIoFallback = false;
+    std::vector<ImageCodecCapabilities> codecs;
 };
 
 /// Export name style for metadata readback.
@@ -126,6 +391,14 @@ enum class MetadataTextEncoding : uint8_t {
     Utf8,
     Utf16LE,
     Utf16BE,
+};
+
+/// Coarse policy for transferring source metadata into a target image.
+enum class MetadataTransferSafety : uint8_t {
+    /// Preserve source camera/color metadata for compatible file repackaging or recompression.
+    CompatibleFile,
+    /// Drop source-specific RAW, ICC, MakerNote, and non-C2PA JUMBF data for rendered outputs.
+    RenderedImage,
 };
 
 /// Per-entry metadata flags preserved from the decode layer.
@@ -247,6 +520,8 @@ struct ImageMetadataTransferRequest {
     std::string path;
     /// Source metadata document read from the original file/container.
     MetadataDocument sourceMetadata;
+    /// Coarse transfer safety policy. RawGL-generated outputs default to rendered-image safety.
+    MetadataTransferSafety safety = MetadataTransferSafety::RenderedImage;
     /// True when \ref targetImage contains the exact target pixel layout.
     bool hasTargetImage = false;
     /// Optional target image facts used to write target-correct image-layout metadata.
@@ -267,6 +542,7 @@ struct FileInputBinding {
     std::string name;
     std::string path;
     std::vector<Attribute> attributes;
+    ImageCodecLoadOptions codecOptions;
     bool usesArrayElement = false;
     size_t arrayElement = 0;
 };
@@ -277,6 +553,7 @@ struct FileInputOverride {
     std::string name;
     std::string path;
     std::vector<Attribute> attributes;
+    ImageCodecLoadOptions codecOptions;
     bool usesArrayElement = false;
     size_t arrayElement = 0;
 };
@@ -291,6 +568,7 @@ struct FileOutputBinding {
     int alphaChannel = -1;
     int bits = 16;
     std::vector<Attribute> attributes;
+    ImageCodecSaveOptions codecOptions;
     bool usesArrayElement = false;
     size_t arrayElement = 0;
 };
@@ -353,25 +631,35 @@ struct PrepareWorkflowResult {
 
 /// Builds one file-backed image input binding for use with \ref IoRuntime.
 inline FileInputBinding
-FileTextureInput(size_t passIndex, std::string name, std::string path, std::vector<Attribute> attributes = {})
+FileTextureInput(size_t passIndex,
+                 std::string name,
+                 std::string path,
+                 std::vector<Attribute> attributes = {},
+                 ImageCodecLoadOptions codecOptions = {})
 {
     FileInputBinding result;
     result.passIndex = passIndex;
     result.name = std::move(name);
     result.path = std::move(path);
     result.attributes = std::move(attributes);
+    result.codecOptions = codecOptions;
     return result;
 }
 
 /// Builds one file-backed image per-run override for use with \ref IoRuntime.
 inline FileInputOverride
-FileTextureOverride(size_t passIndex, std::string name, std::string path, std::vector<Attribute> attributes = {})
+FileTextureOverride(size_t passIndex,
+                    std::string name,
+                    std::string path,
+                    std::vector<Attribute> attributes = {},
+                    ImageCodecLoadOptions codecOptions = {})
 {
     FileInputOverride result;
     result.passIndex = passIndex;
     result.name = std::move(name);
     result.path = std::move(path);
     result.attributes = std::move(attributes);
+    result.codecOptions = codecOptions;
     return result;
 }
 
@@ -384,7 +672,8 @@ FileOutput(size_t passIndex,
            int channels = 3,
            int alphaChannel = -1,
            int bits = 16,
-           std::vector<Attribute> attributes = {})
+           std::vector<Attribute> attributes = {},
+           ImageCodecSaveOptions codecOptions = {})
 {
     FileOutputBinding result;
     result.passIndex = passIndex;
@@ -395,6 +684,7 @@ FileOutput(size_t passIndex,
     result.alphaChannel = alphaChannel;
     result.bits = bits;
     result.attributes = std::move(attributes);
+    result.codecOptions = codecOptions;
     return result;
 }
 
@@ -538,6 +828,10 @@ LoadImageFile(const ImageLoadRequest& request);
 /// Saves one \ref HostImageData payload to a file-backed image using a default \ref IoRuntime.
 ImageSaveResult
 SaveImageFile(const ImageSaveRequest& request);
+
+/// Returns image IO capabilities for this RawGL build.
+ImageIoCapabilities
+GetImageIoCapabilities();
 
 /// Reads metadata from one file-backed image or container using a default \ref IoRuntime.
 MetadataReadResult

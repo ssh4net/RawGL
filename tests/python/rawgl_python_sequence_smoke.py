@@ -53,6 +53,12 @@ def main() -> int:
 
     previous_bytes = None
     output_dir = Path("tests/outputs")
+    png_options = rawgl.io.PngSaveOptions()
+    png_options.has_compression_level = True
+    png_options.compression_level = 0
+    codec_options = rawgl.io.ImageCodecSaveOptions()
+    codec_options.has_png = True
+    codec_options.png = png_options
 
     for frame_index in range(3):
         result = prepared.run(
@@ -79,9 +85,7 @@ def main() -> int:
             image,
             frame_path,
             bits=16,
-            attributes={
-                "png:compressionLevel": 0,
-            },
+            codec_options=codec_options,
         )
         if not frame_path.exists():
             return fail(f"sequence workflow did not write {frame_path}")

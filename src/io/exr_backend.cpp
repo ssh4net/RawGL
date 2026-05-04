@@ -81,6 +81,65 @@ enum class ExrStorageLayout
     Tiles,
 };
 
+struct ExrSaveOptions {
+    OPENEXR_IMF_NAMESPACE::Compression compression = OPENEXR_IMF_NAMESPACE::ZIP_COMPRESSION;
+    ExrStorageLayout storageLayout = ExrStorageLayout::Auto;
+    bool useTiles = false;
+    uint32_t tileWidth = 0u;
+    uint32_t tileHeight = 0u;
+    bool hasLineOrder = false;
+    OPENEXR_IMF_NAMESPACE::LineOrder lineOrder = OPENEXR_IMF_NAMESPACE::INCREASING_Y;
+    bool hasDwaLevel = false;
+    float dwaLevel = 45.0f;
+};
+
+enum class ExrChannelSelection
+{
+    Auto,
+    Luminance,
+    Rgb,
+    Rgba,
+    All,
+};
+
+static bool
+parse_exr_channel_selection(const std::map<std::string, std::string>& attributes,
+                            ExrChannelSelection& selection,
+                            std::string& errorMessage)
+{
+    selection = ExrChannelSelection::Auto;
+    const std::string* value =
+        find_attribute_value(attributes, { "openexr:channelSelection", "openexr:channel_selection" });
+    if (!value) {
+        return true;
+    }
+
+    const std::string normalized = to_lower_copy(*value);
+    if (normalized == "auto") {
+        selection = ExrChannelSelection::Auto;
+        return true;
+    }
+    if (normalized == "luminance" || normalized == "y") {
+        selection = ExrChannelSelection::Luminance;
+        return true;
+    }
+    if (normalized == "rgb") {
+        selection = ExrChannelSelection::Rgb;
+        return true;
+    }
+    if (normalized == "rgba") {
+        selection = ExrChannelSelection::Rgba;
+        return true;
+    }
+    if (normalized == "all") {
+        selection = ExrChannelSelection::All;
+        return true;
+    }
+
+    errorMessage = "unsupported OpenEXR channel selection";
+    return false;
+}
+
 static OPENEXR_IMF_NAMESPACE::Compression
 default_exr_compression()
 {
@@ -112,12 +171,11 @@ parse_exr_compression(const std::map<std::string, std::string>& attributes,
 
 static bool
 parse_exr_line_order(const std::map<std::string, std::string>& attributes,
-                     OPENEXR_IMF_NAMESPACE::LineOrder& lineOrder,
-                     bool& present,
+                     ExrSaveOptions& options,
                      std::string& errorMessage)
 {
-    present = false;
-    lineOrder = OPENEXR_IMF_NAMESPACE::INCREASING_Y;
+    options.hasLineOrder = false;
+    options.lineOrder = OPENEXR_IMF_NAMESPACE::INCREASING_Y;
 
     const std::string* lineOrderValue =
         find_attribute_value(attributes, { "openexr:lineOrder", "openexr:line_order" });
@@ -125,14 +183,14 @@ parse_exr_line_order(const std::map<std::string, std::string>& attributes,
         return true;
     }
 
-    present = true;
+    options.hasLineOrder = true;
     const std::string normalized = to_lower_copy(*lineOrderValue);
     if (normalized == "increasing_y" || normalized == "increasing") {
-        lineOrder = OPENEXR_IMF_NAMESPACE::INCREASING_Y;
+        options.lineOrder = OPENEXR_IMF_NAMESPACE::INCREASING_Y;
     } else if (normalized == "decreasing_y" || normalized == "decreasing") {
-        lineOrder = OPENEXR_IMF_NAMESPACE::DECREASING_Y;
+        options.lineOrder = OPENEXR_IMF_NAMESPACE::DECREASING_Y;
     } else if (normalized == "random_y" || normalized == "random") {
-        lineOrder = OPENEXR_IMF_NAMESPACE::RANDOM_Y;
+        options.lineOrder = OPENEXR_IMF_NAMESPACE::RANDOM_Y;
     } else {
         errorMessage = "unsupported OpenEXR line order";
         return false;
@@ -143,21 +201,19 @@ parse_exr_line_order(const std::map<std::string, std::string>& attributes,
 
 static bool
 parse_exr_dwa_level(const std::map<std::string, std::string>& attributes,
-                    const OPENEXR_IMF_NAMESPACE::Compression compression,
-                    float& dwaLevel,
-                    bool& present,
+                    ExrSaveOptions& options,
                     std::string& errorMessage)
 {
-    present = false;
-    dwaLevel = 45.0f;
+    options.hasDwaLevel = false;
+    options.dwaLevel = 45.0f;
 
     const std::string* dwaLevelValue =
         find_attribute_value(attributes, { "openexr:dwaCompressionLevel", "openexr:dwa_compression_level" });
     if (!dwaLevelValue) {
         return true;
     }
-    if (compression != OPENEXR_IMF_NAMESPACE::DWAA_COMPRESSION
-        && compression != OPENEXR_IMF_NAMESPACE::DWAB_COMPRESSION) {
+    if (options.compression != OPENEXR_IMF_NAMESPACE::DWAA_COMPRESSION
+        && options.compression != OPENEXR_IMF_NAMESPACE::DWAB_COMPRESSION) {
         errorMessage = "OpenEXR DWA compression level requires DWAA or DWAB compression";
         return false;
     }
@@ -172,33 +228,21 @@ parse_exr_dwa_level(const std::map<std::string, std::string>& attributes,
         return false;
     }
 
-    present = true;
-    dwaLevel = parsedValue;
+    options.hasDwaLevel = true;
+    options.dwaLevel = parsedValue;
     return true;
 }
 
-static bool
+static void
 apply_exr_writer_attributes(OPENEXR_IMF_NAMESPACE::Header& header,
                             const std::map<std::string, std::string>& attributes,
-                            const OPENEXR_IMF_NAMESPACE::Compression compression,
-                            std::string& errorMessage)
+                            const ExrSaveOptions& options)
 {
-    OPENEXR_IMF_NAMESPACE::LineOrder lineOrder = OPENEXR_IMF_NAMESPACE::INCREASING_Y;
-    bool hasLineOrder = false;
-    if (!parse_exr_line_order(attributes, lineOrder, hasLineOrder, errorMessage)) {
-        return false;
+    if (options.hasLineOrder) {
+        header.lineOrder() = options.lineOrder;
     }
-    if (hasLineOrder) {
-        header.lineOrder() = lineOrder;
-    }
-
-    float dwaLevel = 45.0f;
-    bool hasDwaLevel = false;
-    if (!parse_exr_dwa_level(attributes, compression, dwaLevel, hasDwaLevel, errorMessage)) {
-        return false;
-    }
-    if (hasDwaLevel) {
-        header.dwaCompressionLevel() = dwaLevel;
+    if (options.hasDwaLevel) {
+        header.dwaCompressionLevel() = options.dwaLevel;
     }
 
     for (const auto& attribute : attributes) {
@@ -213,8 +257,6 @@ apply_exr_writer_attributes(OPENEXR_IMF_NAMESPACE::Header& header,
 
         header.insert(attributeName, OPENEXR_IMF_NAMESPACE::StringAttribute(attribute.second));
     }
-
-    return true;
 }
 
 static bool
@@ -290,21 +332,21 @@ parse_u32_attribute(const std::map<std::string, std::string>& attributes,
 
 static bool
 parse_exr_storage_layout(const std::map<std::string, std::string>& attributes,
-                         ExrStorageLayout& layout,
+                         ExrSaveOptions& options,
                          std::string& errorMessage)
 {
-    layout = ExrStorageLayout::Auto;
+    options.storageLayout = ExrStorageLayout::Auto;
 
     const std::string* value =
         find_attribute_value(attributes, { "openexr:layout", "openexr:storageLayout", "openexr:storage_layout" });
     if (value) {
         const std::string normalized = to_lower_copy(*value);
         if (normalized == "auto") {
-            layout = ExrStorageLayout::Auto;
+            options.storageLayout = ExrStorageLayout::Auto;
         } else if (normalized == "scanline" || normalized == "scanlines") {
-            layout = ExrStorageLayout::Scanlines;
+            options.storageLayout = ExrStorageLayout::Scanlines;
         } else if (normalized == "tile" || normalized == "tiles" || normalized == "tiled") {
-            layout = ExrStorageLayout::Tiles;
+            options.storageLayout = ExrStorageLayout::Tiles;
         } else {
             errorMessage = "unsupported OpenEXR storage layout";
             return false;
@@ -322,28 +364,25 @@ parse_exr_storage_layout(const std::map<std::string, std::string>& attributes,
     }
 
     if (tiledValue) {
-        if (layout == ExrStorageLayout::Scanlines) {
+        if (options.storageLayout == ExrStorageLayout::Scanlines) {
             errorMessage = "conflicting OpenEXR layout options";
             return false;
         }
-        layout = ExrStorageLayout::Tiles;
+        options.storageLayout = ExrStorageLayout::Tiles;
         return true;
     }
 
-    if (layout == ExrStorageLayout::Tiles) {
+    if (options.storageLayout == ExrStorageLayout::Tiles) {
         errorMessage = "conflicting OpenEXR layout options";
         return false;
     }
-    layout = ExrStorageLayout::Scanlines;
+    options.storageLayout = ExrStorageLayout::Scanlines;
     return true;
 }
 
 static bool
 resolve_exr_tile_layout(const std::map<std::string, std::string>& attributes,
-                        const ExrStorageLayout storageLayout,
-                        bool& useTiles,
-                        uint32_t& tileWidth,
-                        uint32_t& tileHeight,
+                        ExrSaveOptions& options,
                         std::string& errorMessage)
 {
     bool hasTileWidth = false;
@@ -379,25 +418,50 @@ resolve_exr_tile_layout(const std::map<std::string, std::string>& attributes,
         }
     }
 
-    if (storageLayout == ExrStorageLayout::Scanlines && (hasTileWidth || hasTileHeight)) {
+    if (options.storageLayout == ExrStorageLayout::Scanlines && (hasTileWidth || hasTileHeight)) {
         errorMessage = "OpenEXR tile dimensions are not valid for scanline output";
         return false;
     }
 
-    useTiles = storageLayout == ExrStorageLayout::Tiles || hasTileWidth || hasTileHeight;
-    if (!useTiles) {
-        tileWidth = 0u;
-        tileHeight = 0u;
+    options.useTiles = options.storageLayout == ExrStorageLayout::Tiles || hasTileWidth || hasTileHeight;
+    if (!options.useTiles) {
+        options.tileWidth = 0u;
+        options.tileHeight = 0u;
         return true;
     }
 
     constexpr uint32_t defaultTileSize = 64u;
-    tileWidth = hasTileWidth ? requestedTileWidth
-                             : (hasTileHeight ? requestedTileHeight : defaultTileSize);
-    tileHeight = hasTileHeight ? requestedTileHeight : tileWidth;
+    options.tileWidth = hasTileWidth ? requestedTileWidth
+                                     : (hasTileHeight ? requestedTileHeight : defaultTileSize);
+    options.tileHeight = hasTileHeight ? requestedTileHeight : options.tileWidth;
 
-    if (tileWidth == 0u || tileHeight == 0u) {
+    if (options.tileWidth == 0u || options.tileHeight == 0u) {
         errorMessage = "invalid OpenEXR tile dimensions";
+        return false;
+    }
+
+    return true;
+}
+
+static bool
+parse_exr_save_options(const std::map<std::string, std::string>& attributes,
+                       ExrSaveOptions& options,
+                       std::string& errorMessage)
+{
+    options = ExrSaveOptions();
+    if (!parse_exr_compression(attributes, options.compression, errorMessage)) {
+        return false;
+    }
+    if (!parse_exr_storage_layout(attributes, options, errorMessage)) {
+        return false;
+    }
+    if (!resolve_exr_tile_layout(attributes, options, errorMessage)) {
+        return false;
+    }
+    if (!parse_exr_line_order(attributes, options, errorMessage)) {
+        return false;
+    }
+    if (!parse_exr_dwa_level(attributes, options, errorMessage)) {
         return false;
     }
 
@@ -419,6 +483,7 @@ to_exr_line_order_name(const OPENEXR_IMF_NAMESPACE::LineOrder lineOrder) noexcep
 
 static bool
 select_exr_channels(const OPENEXR_IMF_NAMESPACE::ChannelList& channelList,
+                    const ExrChannelSelection selection,
                     std::vector<std::string>& selectedNames,
                     int& alphaChannel,
                     std::string& errorMessage)
@@ -432,7 +497,51 @@ select_exr_channels(const OPENEXR_IMF_NAMESPACE::ChannelList& channelList,
     const OPENEXR_IMF_NAMESPACE::Channel* channelA = channelList.findChannel("A");
     const OPENEXR_IMF_NAMESPACE::Channel* channelY = channelList.findChannel("Y");
 
-    if (channelR && channelG && channelB) {
+    if (selection == ExrChannelSelection::Luminance) {
+        if (!channelY) {
+            errorMessage = "requested OpenEXR luminance channel was not found";
+            return false;
+        }
+        selectedNames.push_back("Y");
+    } else if (selection == ExrChannelSelection::Rgb) {
+        if (!channelR || !channelG || !channelB) {
+            errorMessage = "requested OpenEXR RGB channels were not found";
+            return false;
+        }
+        selectedNames.push_back("R");
+        selectedNames.push_back("G");
+        selectedNames.push_back("B");
+    } else if (selection == ExrChannelSelection::Rgba) {
+        if (!channelR || !channelG || !channelB || !channelA) {
+            errorMessage = "requested OpenEXR RGBA channels were not found";
+            return false;
+        }
+        selectedNames.push_back("R");
+        selectedNames.push_back("G");
+        selectedNames.push_back("B");
+        selectedNames.push_back("A");
+        alphaChannel = 3;
+    } else if (selection == ExrChannelSelection::All) {
+        for (OPENEXR_IMF_NAMESPACE::ChannelList::ConstIterator it = channelList.begin(); it != channelList.end(); ++it) {
+            if (selectedNames.size() == 4u) {
+                errorMessage = "native OpenEXR decode supports at most four selected channels";
+                return false;
+            }
+            selectedNames.push_back(it.name());
+        }
+
+        if (selectedNames.empty()) {
+            errorMessage = "OpenEXR file has no channels";
+            return false;
+        }
+
+        for (size_t index = 0; index < selectedNames.size(); ++index) {
+            if (selectedNames[index] == "A") {
+                alphaChannel = static_cast<int>(index);
+                break;
+            }
+        }
+    } else if (channelR && channelG && channelB) {
         selectedNames.push_back("R");
         selectedNames.push_back("G");
         selectedNames.push_back("B");
@@ -527,6 +636,7 @@ resolve_exr_component_type(const OPENEXR_IMF_NAMESPACE::ChannelList& channelList
 
 static bool
 prepare_exr_decode_target(const OPENEXR_IMF_NAMESPACE::Header& header,
+                          const std::map<std::string, std::string>& attributes,
                           IMATH_NAMESPACE::Box2i& dataWindow,
                           std::vector<std::string>& selectedNames,
                           OPENEXR_IMF_NAMESPACE::PixelType& pixelType,
@@ -542,7 +652,11 @@ prepare_exr_decode_target(const OPENEXR_IMF_NAMESPACE::Header& header,
     }
 
     int alphaChannel = -1;
-    if (!select_exr_channels(header.channels(), selectedNames, alphaChannel, errorMessage)) {
+    ExrChannelSelection channelSelection = ExrChannelSelection::Auto;
+    if (!parse_exr_channel_selection(attributes, channelSelection, errorMessage)) {
+        return false;
+    }
+    if (!select_exr_channels(header.channels(), channelSelection, selectedNames, alphaChannel, errorMessage)) {
         return false;
     }
 
@@ -774,12 +888,13 @@ convert_host_image_to_exr_bytes(const HostImageData& image,
 }  // namespace
 
 DecodedImageData
-decode_exr_file(const std::string& path)
+decode_exr_file(const std::string& path, const std::map<std::string, std::string>& attributes)
 {
     DecodedImageData result;
 
 #if !defined(RAWGL_HAS_OPENEXR)
     (void)path;
+    (void)attributes;
     result.errorMessage = "OpenEXR support is not available";
     return result;
 #else
@@ -790,7 +905,7 @@ decode_exr_file(const std::string& path)
         std::vector<std::string> selectedNames;
         std::string errorMessage;
         OPENEXR_IMF_NAMESPACE::PixelType pixelType = OPENEXR_IMF_NAMESPACE::NUM_PIXELTYPES;
-        if (!prepare_exr_decode_target(header, dataWindow, selectedNames, pixelType, result, errorMessage)) {
+        if (!prepare_exr_decode_target(header, attributes, dataWindow, selectedNames, pixelType, result, errorMessage)) {
             result.errorMessage = errorMessage;
             return result;
         }
@@ -843,20 +958,8 @@ encode_exr_file(const std::string& path,
     errorMessage = "OpenEXR support is not available";
     return false;
 #else
-    OPENEXR_IMF_NAMESPACE::Compression compression = default_exr_compression();
-    if (!parse_exr_compression(attributes, compression, errorMessage)) {
-        return false;
-    }
-
-    ExrStorageLayout storageLayout = ExrStorageLayout::Auto;
-    if (!parse_exr_storage_layout(attributes, storageLayout, errorMessage)) {
-        return false;
-    }
-
-    bool useTiles = false;
-    uint32_t tileWidth = 0u;
-    uint32_t tileHeight = 0u;
-    if (!resolve_exr_tile_layout(attributes, storageLayout, useTiles, tileWidth, tileHeight, errorMessage)) {
+    ExrSaveOptions options;
+    if (!parse_exr_save_options(attributes, options, errorMessage)) {
         return false;
     }
 
@@ -870,14 +973,12 @@ encode_exr_file(const std::string& path,
 
     try {
         OPENEXR_IMF_NAMESPACE::Header header(image.width, image.height);
-        header.compression() = compression;
-        if (useTiles) {
+        header.compression() = options.compression;
+        if (options.useTiles) {
             header.setTileDescription(OPENEXR_IMF_NAMESPACE::TileDescription(
-                tileWidth, tileHeight, OPENEXR_IMF_NAMESPACE::ONE_LEVEL, OPENEXR_IMF_NAMESPACE::ROUND_DOWN));
+                options.tileWidth, options.tileHeight, OPENEXR_IMF_NAMESPACE::ONE_LEVEL, OPENEXR_IMF_NAMESPACE::ROUND_DOWN));
         }
-        if (!apply_exr_writer_attributes(header, attributes, compression, errorMessage)) {
-            return false;
-        }
+        apply_exr_writer_attributes(header, attributes, options);
 
         OPENEXR_IMF_NAMESPACE::PixelType pixelType = OPENEXR_IMF_NAMESPACE::FLOAT;
         if (settings.componentType == ImageComponentType::F16) {
@@ -904,7 +1005,7 @@ encode_exr_file(const std::string& path,
         OPENEXR_IMF_NAMESPACE::FrameBuffer frameBuffer =
             build_exr_interleaved_frame_buffer(dataWindow, selectedNames, pixelType, bytesPerComponent, encodedBytes.data());
 
-        if (useTiles) {
+        if (options.useTiles) {
             OPENEXR_IMF_NAMESPACE::TiledOutputFile output(path.c_str(), header);
             output.setFrameBuffer(frameBuffer);
             output.writeTiles(0, output.numXTiles(0) - 1, 0, output.numYTiles(0) - 1, 0);

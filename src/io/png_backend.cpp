@@ -198,6 +198,11 @@ convert_host_image_to_png_bytes(const HostImageData& image,
 }
 
 #if defined(RAWGL_HAS_LIBPNG)
+struct PngSaveOptions {
+    int compressionLevel = -1;
+    bool interlaced = false;
+};
+
 static char
 to_lower_ascii(const unsigned char c)
 {
@@ -221,11 +226,40 @@ to_lower_copy(const std::string& value)
 }
 
 static bool
-parse_png_compression_level(const std::map<std::string, std::string>& attributes,
-                            int& compressionLevel,
-                            std::string& errorMessage)
+parse_bool_attribute(const std::map<std::string, std::string>& attributes,
+                     const char* key,
+                     bool& value,
+                     bool& present,
+                     std::string& errorMessage)
 {
-    compressionLevel = -1;
+    present = false;
+    value = false;
+    const auto attribute = attributes.find(key);
+    if (attribute == attributes.end()) {
+        return true;
+    }
+
+    present = true;
+    const std::string normalized = to_lower_copy(attribute->second);
+    if (normalized == "1" || normalized == "true" || normalized == "on" || normalized == "yes") {
+        value = true;
+        return true;
+    }
+    if (normalized == "0" || normalized == "false" || normalized == "off" || normalized == "no") {
+        value = false;
+        return true;
+    }
+
+    errorMessage = "invalid PNG boolean option";
+    return false;
+}
+
+static bool
+parse_png_save_options(const std::map<std::string, std::string>& attributes,
+                       PngSaveOptions& options,
+                       std::string& errorMessage)
+{
+    options = PngSaveOptions();
 
     const std::string* attribute = nullptr;
     const auto camelCase = attributes.find("png:compressionLevel");
@@ -238,41 +272,31 @@ parse_png_compression_level(const std::map<std::string, std::string>& attributes
         }
     }
 
-    if (attribute == nullptr) {
-        return true;
-    }
-    if (attribute->empty()) {
-        errorMessage = "invalid PNG compression level";
-        return false;
-    }
-
-    for (const char digit : *attribute) {
-        if (!std::isdigit(static_cast<unsigned char>(digit))) {
+    if (attribute != nullptr) {
+        if (attribute->empty()) {
             errorMessage = "invalid PNG compression level";
             return false;
         }
+
+        for (const char digit : *attribute) {
+            if (!std::isdigit(static_cast<unsigned char>(digit))) {
+                errorMessage = "invalid PNG compression level";
+                return false;
+            }
+        }
+
+        errno = 0;
+        char* end = nullptr;
+        const unsigned long parsedValue = std::strtoul(attribute->c_str(), &end, 10);
+        if (errno != 0 || end == nullptr || *end != '\0' || parsedValue > 9ul) {
+            errorMessage = "invalid PNG compression level";
+            return false;
+        }
+
+        options.compressionLevel = static_cast<int>(parsedValue);
     }
 
-    errno = 0;
-    char* end = nullptr;
-    const unsigned long parsedValue = std::strtoul(attribute->c_str(), &end, 10);
-    if (errno != 0 || end == nullptr || *end != '\0' || parsedValue > 9ul) {
-        errorMessage = "invalid PNG compression level";
-        return false;
-    }
-
-    compressionLevel = static_cast<int>(parsedValue);
-    return true;
-}
-
-static bool
-parse_png_interlaced(const std::map<std::string, std::string>& attributes,
-                     bool& interlaced,
-                     std::string& errorMessage)
-{
-    interlaced = false;
-
-    const std::string* attribute = nullptr;
+    attribute = nullptr;
     const auto interlacedValue = attributes.find("png:interlaced");
     if (interlacedValue != attributes.end()) {
         attribute = &interlacedValue->second;
@@ -283,33 +307,35 @@ parse_png_interlaced(const std::map<std::string, std::string>& attributes,
         }
     }
 
-    if (attribute == nullptr) {
-        return true;
+    if (attribute != nullptr) {
+        const std::string normalized = to_lower_copy(*attribute);
+        if (normalized == "1" || normalized == "true" || normalized == "on" || normalized == "yes") {
+            options.interlaced = true;
+            return true;
+        }
+        if (normalized == "0" || normalized == "false" || normalized == "off" || normalized == "no") {
+            options.interlaced = false;
+            return true;
+        }
+
+        errorMessage = "invalid PNG interlace value";
+        return false;
     }
 
-    const std::string normalized = to_lower_copy(*attribute);
-    if (normalized == "1" || normalized == "true" || normalized == "on" || normalized == "yes") {
-        interlaced = true;
-        return true;
-    }
-    if (normalized == "0" || normalized == "false" || normalized == "off" || normalized == "no") {
-        interlaced = false;
-        return true;
-    }
-
-    errorMessage = "invalid PNG interlace value";
-    return false;
+    return true;
 }
 #endif
 
 }  // namespace
 
 DecodedImageData
-decode_png_file(const std::string& path)
+decode_png_file(const std::string& path, const std::map<std::string, std::string>& attributes)
 {
     DecodedImageData result;
 
 #if !defined(RAWGL_HAS_LIBPNG)
+    (void)path;
+    (void)attributes;
     result.errorMessage = "libpng support is not available";
     return result;
 #else
@@ -368,7 +394,19 @@ decode_png_file(const std::string& path)
     if (colorType == PNG_COLOR_TYPE_GRAY && bitDepth < 8) {
         png_set_expand_gray_1_2_4_to_8(pngPtr);
     }
-    if (png_get_valid(pngPtr, infoPtr, PNG_INFO_tRNS) != 0u) {
+    bool expandTransparency = true;
+    bool hasExpandTransparency = false;
+    if (!parse_bool_attribute(attributes,
+                              "png:expand_transparency",
+                              expandTransparency,
+                              hasExpandTransparency,
+                              result.errorMessage)) {
+        png_destroy_read_struct(&pngPtr, &infoPtr, nullptr);
+        close_file(file);
+        return result;
+    }
+    (void)hasExpandTransparency;
+    if (expandTransparency && png_get_valid(pngPtr, infoPtr, PNG_INFO_tRNS) != 0u) {
         png_set_tRNS_to_alpha(pngPtr);
     }
     if (interlaceType != PNG_INTERLACE_NONE) {
@@ -439,6 +477,11 @@ encode_png_file(const std::string& path,
         return false;
     }
 
+    PngSaveOptions options;
+    if (!parse_png_save_options(attributes, options, errorMessage)) {
+        return false;
+    }
+
     std::vector<std::byte> encodedBytes;
     if (!convert_host_image_to_png_bytes(image, settings.componentType, encodedBytes, errorMessage)) {
         return false;
@@ -474,24 +517,10 @@ encode_png_file(const std::string& path,
         return false;
     }
 
-    int compressionLevel = -1;
-    if (!parse_png_compression_level(attributes, compressionLevel, errorMessage)) {
-        png_destroy_write_struct(&pngPtr, &infoPtr);
-        close_file(file);
-        return false;
-    }
-
-    bool interlaced = false;
-    if (!parse_png_interlaced(attributes, interlaced, errorMessage)) {
-        png_destroy_write_struct(&pngPtr, &infoPtr);
-        close_file(file);
-        return false;
-    }
-
     png_init_io(pngPtr, file);
-    png_set_compression_level(pngPtr, compressionLevel);
+    png_set_compression_level(pngPtr, options.compressionLevel);
 
-    const int interlaceType = interlaced ? PNG_INTERLACE_ADAM7 : PNG_INTERLACE_NONE;
+    const int interlaceType = options.interlaced ? PNG_INTERLACE_ADAM7 : PNG_INTERLACE_NONE;
     const int bitDepth = settings.componentType == ImageComponentType::U16 ? 16 : 8;
     png_set_IHDR(pngPtr,
                  infoPtr,

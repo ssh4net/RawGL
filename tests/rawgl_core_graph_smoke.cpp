@@ -3,18 +3,12 @@
 
 #include "rawgl/rawgl.h"
 
-#include <OpenImageIO/imageio.h>
-
-#include <filesystem>
+#include <cstring>
 #include <iostream>
 
 int
 main()
 {
-    const std::filesystem::path outputPath = "tests/outputs/rawgl_core_graph_smoke.exr";
-    std::error_code removeError;
-    std::filesystem::remove(outputPath, removeError);
-
     rawgl::Pass pass;
     pass.programKind              = rawgl::ShaderProgramKind::compute;
     pass.shaderModules.push_back(rawgl::ShaderModuleDefinition {
@@ -43,19 +37,7 @@ void main()
     pass.workGroupSizeX           = 1;
     pass.workGroupSizeY           = 1;
     pass.hasExplicitWorkGroupSize = true;
-    pass.outputs.push_back(rawgl::OutputBinding {
-        "o_out0",
-        outputPath.string(),
-        "rgba32f",
-        4,
-        3,
-        16,
-        "",
-        false,
-        0,
-        {},
-        false,
-    });
+    pass.outputs.push_back(rawgl::CapturedOutput("o_out0", "rgba32f", 4, 3, 16));
 
     rawgl::Workflow workflow;
     workflow.verbosity = 0;
@@ -76,33 +58,21 @@ void main()
         return 1;
     }
 
-    if (!std::filesystem::exists(outputPath)) {
-        std::cerr << "Graph execution did not produce output image: " << outputPath << std::endl;
+    const auto outputIt = executionResult.capturedOutputs.find("o_out0::0");
+    if (outputIt == executionResult.capturedOutputs.end()) {
+        std::cerr << "Graph execution did not capture output image." << std::endl;
         return 1;
     }
 
-    std::unique_ptr<OIIO::ImageInput> input = OIIO::ImageInput::open(outputPath.string());
-    if (!input) {
-        std::cerr << "Unable to read graph smoke output image: " << outputPath << std::endl;
+    const rawgl::HostImageData& output = outputIt->second;
+    if (output.width != 1 || output.height != 1 || output.channels != 4
+        || output.bytes.size() != sizeof(float) * 4U) {
+        std::cerr << "Unexpected graph smoke output dimensions or layout." << std::endl;
         return 1;
     }
 
-    const OIIO::ImageSpec spec = input->spec();
-    float pixel[4]             = { 0.0f, 0.0f, 0.0f, 0.0f };
-    if (!input->read_image(0, 0, 0, 4, OIIO::TypeDesc::FLOAT, pixel)) {
-        std::cerr << "Unable to read graph smoke output pixel." << std::endl;
-        return 1;
-    }
-
-    if (!input->close()) {
-        std::cerr << "Unable to close graph smoke image input." << std::endl;
-        return 1;
-    }
-
-    if (spec.width != 1 || spec.height != 1) {
-        std::cerr << "Unexpected graph smoke output dimensions." << std::endl;
-        return 1;
-    }
+    float pixel[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    std::memcpy(pixel, output.bytes.data(), sizeof(pixel));
     if (pixel[0] != 1.0f || pixel[1] != 24.0f || pixel[2] != 0.0f || pixel[3] != 1.0f) {
         std::cerr << "Unexpected graph smoke output pixel: [" << pixel[0] << ", " << pixel[1] << ", " << pixel[2]
                   << ", " << pixel[3] << "]" << std::endl;

@@ -15,6 +15,8 @@
 
 #include <OpenImageIO/imageio.h>
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -29,6 +31,68 @@ enum class ImageBackendKind : uint8_t {
     NativeTiff,
     NativeOpenExr,
 };
+
+enum class DecodeBackendPolicy : uint8_t {
+    Auto,
+    NativeOnly,
+    OpenImageIoOnly,
+};
+
+static char
+to_lower_ascii(const unsigned char c)
+{
+    return static_cast<char>(std::tolower(c));
+}
+
+static std::string
+to_lower_copy(const std::string& value)
+{
+    std::string result = value;
+    std::transform(result.begin(), result.end(), result.begin(), to_lower_ascii);
+    return result;
+}
+
+static const std::string*
+find_attribute_value(const std::map<std::string, std::string>& attributes, const char* key)
+{
+    const auto it = attributes.find(key);
+    if (it == attributes.end()) {
+        return nullptr;
+    }
+    return &it->second;
+}
+
+static bool
+parse_decode_backend_policy(const std::map<std::string, std::string>& attributes,
+                            DecodeBackendPolicy& policy,
+                            std::string& errorMessage)
+{
+    policy = DecodeBackendPolicy::Auto;
+    const std::string* attribute = find_attribute_value(attributes, "rawgl:load_backend");
+    if (attribute == nullptr) {
+        attribute = find_attribute_value(attributes, "rawgl:decode_backend");
+    }
+    if (attribute == nullptr) {
+        return true;
+    }
+
+    const std::string normalized = to_lower_copy(*attribute);
+    if (normalized == "auto") {
+        policy = DecodeBackendPolicy::Auto;
+        return true;
+    }
+    if (normalized == "native" || normalized == "native_only") {
+        policy = DecodeBackendPolicy::NativeOnly;
+        return true;
+    }
+    if (normalized == "oiio" || normalized == "openimageio" || normalized == "openimageio_only") {
+        policy = DecodeBackendPolicy::OpenImageIoOnly;
+        return true;
+    }
+
+    errorMessage = "unsupported image load backend policy";
+    return false;
+}
 
 static ImageCodecFamily
 get_image_codec_family_from_extension(const std::string& extension)
@@ -376,38 +440,70 @@ byte_size_for_image_component(const ImageComponentType componentType)
 DecodedImageData
 decode_image_file(const std::string& path, const std::map<std::string, std::string>& attributes)
 {
-    const ImageBackendKind backend = select_decode_backend(get_image_codec_family(path));
+    DecodeBackendPolicy policy = DecodeBackendPolicy::Auto;
+    std::string policyErrorMessage;
+    if (!parse_decode_backend_policy(attributes, policy, policyErrorMessage)) {
+        DecodedImageData result;
+        result.errorMessage = policyErrorMessage;
+        return result;
+    }
+
+    const ImageCodecFamily codec = get_image_codec_family(path);
+    if (policy == DecodeBackendPolicy::OpenImageIoOnly) {
+        LOG(debug) << "Image decode backend selected: OpenImageIO for " << path;
+        return decode_image_file_oiio(path, attributes);
+    }
+
+    const ImageBackendKind backend = select_decode_backend(codec);
     LOG(debug) << "Image decode backend selected: " << image_backend_kind_name(backend) << " for " << path;
 
     switch (backend) {
-    case ImageBackendKind::OiioFallback: return decode_image_file_oiio(path, attributes);
+    case ImageBackendKind::OiioFallback:
+        if (policy == DecodeBackendPolicy::NativeOnly) {
+            DecodedImageData result;
+            result.errorMessage = "native decode backend is not available for this image family";
+            return result;
+        }
+        return decode_image_file_oiio(path, attributes);
     case ImageBackendKind::NativeJpegTurbo: {
-        DecodedImageData result = decode_jpg_file(path);
+        DecodedImageData result = decode_jpg_file(path, attributes);
         if (result.success) {
+            return result;
+        }
+        if (policy == DecodeBackendPolicy::NativeOnly) {
             return result;
         }
         LOG(warning) << "Native JPEG decode failed for " << path << ", falling back to OIIO: " << result.errorMessage;
         return decode_image_file_oiio(path, attributes);
     }
     case ImageBackendKind::NativePng: {
-        DecodedImageData result = decode_png_file(path);
+        DecodedImageData result = decode_png_file(path, attributes);
         if (result.success) {
+            return result;
+        }
+        if (policy == DecodeBackendPolicy::NativeOnly) {
             return result;
         }
         LOG(warning) << "Native PNG decode failed for " << path << ", falling back to OIIO: " << result.errorMessage;
         return decode_image_file_oiio(path, attributes);
     }
     case ImageBackendKind::NativeTiff: {
-        DecodedImageData result = decode_tiff_file(path);
+        DecodedImageData result = decode_tiff_file(path, attributes);
         if (result.success) {
+            return result;
+        }
+        if (policy == DecodeBackendPolicy::NativeOnly) {
             return result;
         }
         LOG(warning) << "Native TIFF decode failed for " << path << ", falling back to OIIO: " << result.errorMessage;
         return decode_image_file_oiio(path, attributes);
     }
     case ImageBackendKind::NativeOpenExr: {
-        DecodedImageData result = decode_exr_file(path);
+        DecodedImageData result = decode_exr_file(path, attributes);
         if (result.success) {
+            return result;
+        }
+        if (policy == DecodeBackendPolicy::NativeOnly) {
             return result;
         }
         LOG(warning) << "Native OpenEXR decode failed for " << path << ", falling back to OIIO: " << result.errorMessage;

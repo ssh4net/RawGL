@@ -34,8 +34,37 @@ with files:
 - ``rawgl.io.prepare_compute(...)``
 - ``rawgl.io.load_image(...)``
 - ``rawgl.io.save_image(...)``
+- ``rawgl.io.capabilities()``
 - ``rawgl.io.read_metadata(...)``
 - ``rawgl.io.read_metadata_document(...)``
+
+``rawgl.io.load_image(...)`` and ``rawgl.io.save_image(...)`` accept
+``codec_options=`` for native JPEG, PNG, TIFF, and OpenEXR controls. Prefer
+this over string attributes in new Python code.
+
+.. code-block:: python
+
+   jpeg = rawgl.io.JpegLoadOptions()
+   jpeg.has_color_transform = True
+   jpeg.color_transform = rawgl.io.JpegLoadColorTransform.rgb
+
+   load_codec = rawgl.io.ImageCodecLoadOptions()
+   load_codec.has_backend_policy = True
+   load_codec.backend_policy = rawgl.io.ImageLoadBackendPolicy.native_only
+   load_codec.has_jpeg = True
+   load_codec.jpeg = jpeg
+
+   image = rawgl.io.load_image("input.jpg", codec_options=load_codec)
+
+   png = rawgl.io.PngSaveOptions()
+   png.has_compression_level = True
+   png.compression_level = 0
+
+   save_codec = rawgl.io.ImageCodecSaveOptions()
+   save_codec.has_png = True
+   save_codec.png = png
+
+   rawgl.io.save_image(image, "output.png", bits=16, codec_options=save_codec)
 
 This layer is intended for:
 
@@ -136,6 +165,8 @@ Current Python metadata support includes:
   already-written JPEG, TIFF, PNG, or EXR target
 - ``rawgl.io.save_image(..., source_metadata=document)`` for the common save
   then transfer workflow
+- ``rawgl.MetadataTransferSafety`` for choosing rendered-image or compatible
+  file transfer policy
 - ``rawgl.MetadataReadRequest`` and ``rawgl.IoRuntime.read_metadata_file(...)``
   for explicit preview control
 - ``rawgl.MetadataDocumentReadRequest`` and
@@ -157,6 +188,10 @@ Typical transfer shape:
        name_policy=rawgl.MetadataNamePolicy.exif_tool_alias,
    )
    rawgl.io.save_image(image, "output.tif", bits=16, source_metadata=document)
+
+The default metadata safety mode is rendered-image transfer. Use
+``metadata_safety=rawgl.MetadataTransferSafety.compatible_file`` only when the
+output is a compatible repackage or recompression of the source pixels.
 
 Mesh inspection
 ---------------

@@ -11,7 +11,7 @@
 namespace rawgl::io {
 
 DecodedImageData
-decode_jpg_file(const std::string& path);
+decode_jpg_file(const std::string& path, const std::map<std::string, std::string>& attributes = {});
 
 bool
 encode_jpg_file(const std::string& path,

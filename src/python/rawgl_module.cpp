@@ -502,12 +502,194 @@ NB_MODULE(_rawgl, module)
              "Prepare and run one workflow in a single call.")
         .def("stats", &rawgl::Session::stats);
 
+    nb::enum_<rawgl::io::ImageLoadBackendPolicy>(module, "ImageLoadBackendPolicy")
+        .value("auto", rawgl::io::ImageLoadBackendPolicy::Auto)
+        .value("native_only", rawgl::io::ImageLoadBackendPolicy::NativeOnly)
+        .value("openimageio_only", rawgl::io::ImageLoadBackendPolicy::OpenImageIoOnly);
+
+    nb::enum_<rawgl::io::JpegLoadColorTransform>(module, "JpegLoadColorTransform")
+        .value("auto", rawgl::io::JpegLoadColorTransform::Auto)
+        .value("grayscale", rawgl::io::JpegLoadColorTransform::Grayscale)
+        .value("rgb", rawgl::io::JpegLoadColorTransform::Rgb);
+
+    nb::class_<rawgl::io::JpegLoadOptions>(module, "JpegLoadOptions")
+        .def(nb::init<>())
+        .def_rw("has_color_transform", &rawgl::io::JpegLoadOptions::hasColorTransform)
+        .def_rw("color_transform", &rawgl::io::JpegLoadOptions::colorTransform);
+
+    nb::class_<rawgl::io::PngLoadOptions>(module, "PngLoadOptions")
+        .def(nb::init<>())
+        .def_rw("has_expand_transparency", &rawgl::io::PngLoadOptions::hasExpandTransparency)
+        .def_rw("expand_transparency", &rawgl::io::PngLoadOptions::expandTransparency);
+
+    nb::class_<rawgl::io::TiffLoadOptions>(module, "TiffLoadOptions")
+        .def(nb::init<>())
+        .def_rw("has_directory_index", &rawgl::io::TiffLoadOptions::hasDirectoryIndex)
+        .def_rw("directory_index", &rawgl::io::TiffLoadOptions::directoryIndex);
+
+    nb::enum_<rawgl::io::OpenExrChannelSelection>(module, "OpenExrChannelSelection")
+        .value("auto", rawgl::io::OpenExrChannelSelection::Auto)
+        .value("luminance", rawgl::io::OpenExrChannelSelection::Luminance)
+        .value("rgb", rawgl::io::OpenExrChannelSelection::Rgb)
+        .value("rgba", rawgl::io::OpenExrChannelSelection::Rgba)
+        .value("all", rawgl::io::OpenExrChannelSelection::All);
+
+    nb::class_<rawgl::io::OpenExrLoadOptions>(module, "OpenExrLoadOptions")
+        .def(nb::init<>())
+        .def_rw("has_channel_selection", &rawgl::io::OpenExrLoadOptions::hasChannelSelection)
+        .def_rw("channel_selection", &rawgl::io::OpenExrLoadOptions::channelSelection);
+
+    nb::class_<rawgl::io::ImageCodecLoadOptions>(module, "ImageCodecLoadOptions")
+        .def(nb::init<>())
+        .def_rw("has_backend_policy", &rawgl::io::ImageCodecLoadOptions::hasBackendPolicy)
+        .def_rw("backend_policy", &rawgl::io::ImageCodecLoadOptions::backendPolicy)
+        .def_rw("has_jpeg", &rawgl::io::ImageCodecLoadOptions::hasJpeg)
+        .def_rw("jpeg", &rawgl::io::ImageCodecLoadOptions::jpeg)
+        .def_rw("has_png", &rawgl::io::ImageCodecLoadOptions::hasPng)
+        .def_rw("png", &rawgl::io::ImageCodecLoadOptions::png)
+        .def_rw("has_tiff", &rawgl::io::ImageCodecLoadOptions::hasTiff)
+        .def_rw("tiff", &rawgl::io::ImageCodecLoadOptions::tiff)
+        .def_rw("has_openexr", &rawgl::io::ImageCodecLoadOptions::hasOpenExr)
+        .def_rw("openexr", &rawgl::io::ImageCodecLoadOptions::openExr);
+
+    nb::enum_<rawgl::io::JpegChromaSubsampling>(module, "JpegChromaSubsampling")
+        .value("default", rawgl::io::JpegChromaSubsampling::Default)
+        .value("s444", rawgl::io::JpegChromaSubsampling::S444)
+        .value("s422", rawgl::io::JpegChromaSubsampling::S422)
+        .value("s420", rawgl::io::JpegChromaSubsampling::S420)
+        .value("s440", rawgl::io::JpegChromaSubsampling::S440)
+        .value("s411", rawgl::io::JpegChromaSubsampling::S411);
+
+    nb::class_<rawgl::io::JpegSaveOptions>(module, "JpegSaveOptions")
+        .def(nb::init<>())
+        .def_rw("has_quality", &rawgl::io::JpegSaveOptions::hasQuality)
+        .def_rw("quality", &rawgl::io::JpegSaveOptions::quality)
+        .def_rw("has_progressive", &rawgl::io::JpegSaveOptions::hasProgressive)
+        .def_rw("progressive", &rawgl::io::JpegSaveOptions::progressive)
+        .def_rw("has_optimize", &rawgl::io::JpegSaveOptions::hasOptimize)
+        .def_rw("optimize", &rawgl::io::JpegSaveOptions::optimize)
+        .def_rw("has_subsampling", &rawgl::io::JpegSaveOptions::hasSubsampling)
+        .def_rw("subsampling", &rawgl::io::JpegSaveOptions::subsampling);
+
+    nb::class_<rawgl::io::PngSaveOptions>(module, "PngSaveOptions")
+        .def(nb::init<>())
+        .def_rw("has_compression_level", &rawgl::io::PngSaveOptions::hasCompressionLevel)
+        .def_rw("compression_level", &rawgl::io::PngSaveOptions::compressionLevel)
+        .def_rw("has_interlaced", &rawgl::io::PngSaveOptions::hasInterlaced)
+        .def_rw("interlaced", &rawgl::io::PngSaveOptions::interlaced);
+
+    nb::enum_<rawgl::io::TiffCompressionMode>(module, "TiffCompressionMode")
+        .value("none", rawgl::io::TiffCompressionMode::None)
+        .value("lzw", rawgl::io::TiffCompressionMode::Lzw)
+        .value("packbits", rawgl::io::TiffCompressionMode::PackBits)
+        .value("deflate", rawgl::io::TiffCompressionMode::Deflate)
+        .value("adobe_deflate", rawgl::io::TiffCompressionMode::AdobeDeflate)
+        .value("jpeg", rawgl::io::TiffCompressionMode::Jpeg)
+        .value("lzma", rawgl::io::TiffCompressionMode::Lzma)
+        .value("zstd", rawgl::io::TiffCompressionMode::Zstd)
+        .value("webp", rawgl::io::TiffCompressionMode::Webp)
+        .value("jxl", rawgl::io::TiffCompressionMode::Jxl)
+        .value("jxl_dng", rawgl::io::TiffCompressionMode::JxlDng)
+        .value("lerc", rawgl::io::TiffCompressionMode::Lerc);
+
+    nb::enum_<rawgl::io::TiffPredictorMode>(module, "TiffPredictorMode")
+        .value("none", rawgl::io::TiffPredictorMode::None)
+        .value("horizontal", rawgl::io::TiffPredictorMode::Horizontal)
+        .value("float", rawgl::io::TiffPredictorMode::Float);
+
+    nb::enum_<rawgl::io::TiffStorageLayout>(module, "TiffStorageLayout")
+        .value("strips", rawgl::io::TiffStorageLayout::Strips)
+        .value("tiled", rawgl::io::TiffStorageLayout::Tiled);
+
+    nb::class_<rawgl::io::TiffSaveOptions>(module, "TiffSaveOptions")
+        .def(nb::init<>())
+        .def_rw("has_compression", &rawgl::io::TiffSaveOptions::hasCompression)
+        .def_rw("compression", &rawgl::io::TiffSaveOptions::compression)
+        .def_rw("has_predictor", &rawgl::io::TiffSaveOptions::hasPredictor)
+        .def_rw("predictor", &rawgl::io::TiffSaveOptions::predictor)
+        .def_rw("has_layout", &rawgl::io::TiffSaveOptions::hasLayout)
+        .def_rw("layout", &rawgl::io::TiffSaveOptions::layout)
+        .def_rw("has_force_big_tiff", &rawgl::io::TiffSaveOptions::hasForceBigTiff)
+        .def_rw("force_big_tiff", &rawgl::io::TiffSaveOptions::forceBigTiff)
+        .def_rw("has_unassociated_alpha", &rawgl::io::TiffSaveOptions::hasUnassociatedAlpha)
+        .def_rw("unassociated_alpha", &rawgl::io::TiffSaveOptions::unassociatedAlpha)
+        .def_rw("has_rows_per_strip", &rawgl::io::TiffSaveOptions::hasRowsPerStrip)
+        .def_rw("rows_per_strip", &rawgl::io::TiffSaveOptions::rowsPerStrip)
+        .def_rw("has_tile_width", &rawgl::io::TiffSaveOptions::hasTileWidth)
+        .def_rw("tile_width", &rawgl::io::TiffSaveOptions::tileWidth)
+        .def_rw("has_tile_height", &rawgl::io::TiffSaveOptions::hasTileHeight)
+        .def_rw("tile_height", &rawgl::io::TiffSaveOptions::tileHeight)
+        .def_rw("has_jpeg_quality", &rawgl::io::TiffSaveOptions::hasJpegQuality)
+        .def_rw("jpeg_quality", &rawgl::io::TiffSaveOptions::jpegQuality)
+        .def_rw("has_deflate_level", &rawgl::io::TiffSaveOptions::hasDeflateLevel)
+        .def_rw("deflate_level", &rawgl::io::TiffSaveOptions::deflateLevel)
+        .def_rw("has_zstd_level", &rawgl::io::TiffSaveOptions::hasZstdLevel)
+        .def_rw("zstd_level", &rawgl::io::TiffSaveOptions::zstdLevel)
+        .def_rw("has_lzma_preset", &rawgl::io::TiffSaveOptions::hasLzmaPreset)
+        .def_rw("lzma_preset", &rawgl::io::TiffSaveOptions::lzmaPreset)
+        .def_rw("has_webp_level", &rawgl::io::TiffSaveOptions::hasWebpLevel)
+        .def_rw("webp_level", &rawgl::io::TiffSaveOptions::webpLevel)
+        .def_rw("has_webp_lossless", &rawgl::io::TiffSaveOptions::hasWebpLossless)
+        .def_rw("webp_lossless", &rawgl::io::TiffSaveOptions::webpLossless)
+        .def_rw("has_webp_lossless_exact", &rawgl::io::TiffSaveOptions::hasWebpLosslessExact)
+        .def_rw("webp_lossless_exact", &rawgl::io::TiffSaveOptions::webpLosslessExact);
+
+    nb::enum_<rawgl::io::OpenExrCompressionMode>(module, "OpenExrCompressionMode")
+        .value("none", rawgl::io::OpenExrCompressionMode::None)
+        .value("rle", rawgl::io::OpenExrCompressionMode::Rle)
+        .value("zips", rawgl::io::OpenExrCompressionMode::Zips)
+        .value("zip", rawgl::io::OpenExrCompressionMode::Zip)
+        .value("piz", rawgl::io::OpenExrCompressionMode::Piz)
+        .value("pxr24", rawgl::io::OpenExrCompressionMode::Pxr24)
+        .value("b44", rawgl::io::OpenExrCompressionMode::B44)
+        .value("b44a", rawgl::io::OpenExrCompressionMode::B44A)
+        .value("dwaa", rawgl::io::OpenExrCompressionMode::Dwaa)
+        .value("dwab", rawgl::io::OpenExrCompressionMode::Dwab)
+        .value("htj2k256", rawgl::io::OpenExrCompressionMode::Htj2k256)
+        .value("htj2k32", rawgl::io::OpenExrCompressionMode::Htj2k32);
+
+    nb::enum_<rawgl::io::OpenExrStorageLayout>(module, "OpenExrStorageLayout")
+        .value("scanlines", rawgl::io::OpenExrStorageLayout::Scanlines)
+        .value("tiled", rawgl::io::OpenExrStorageLayout::Tiled);
+
+    nb::enum_<rawgl::io::OpenExrLineOrder>(module, "OpenExrLineOrder")
+        .value("increasing_y", rawgl::io::OpenExrLineOrder::IncreasingY)
+        .value("decreasing_y", rawgl::io::OpenExrLineOrder::DecreasingY)
+        .value("random_y", rawgl::io::OpenExrLineOrder::RandomY);
+
+    nb::class_<rawgl::io::OpenExrSaveOptions>(module, "OpenExrSaveOptions")
+        .def(nb::init<>())
+        .def_rw("has_compression", &rawgl::io::OpenExrSaveOptions::hasCompression)
+        .def_rw("compression", &rawgl::io::OpenExrSaveOptions::compression)
+        .def_rw("has_layout", &rawgl::io::OpenExrSaveOptions::hasLayout)
+        .def_rw("layout", &rawgl::io::OpenExrSaveOptions::layout)
+        .def_rw("has_tile_width", &rawgl::io::OpenExrSaveOptions::hasTileWidth)
+        .def_rw("tile_width", &rawgl::io::OpenExrSaveOptions::tileWidth)
+        .def_rw("has_tile_height", &rawgl::io::OpenExrSaveOptions::hasTileHeight)
+        .def_rw("tile_height", &rawgl::io::OpenExrSaveOptions::tileHeight)
+        .def_rw("has_line_order", &rawgl::io::OpenExrSaveOptions::hasLineOrder)
+        .def_rw("line_order", &rawgl::io::OpenExrSaveOptions::lineOrder)
+        .def_rw("has_dwa_compression_level", &rawgl::io::OpenExrSaveOptions::hasDwaCompressionLevel)
+        .def_rw("dwa_compression_level", &rawgl::io::OpenExrSaveOptions::dwaCompressionLevel);
+
+    nb::class_<rawgl::io::ImageCodecSaveOptions>(module, "ImageCodecSaveOptions")
+        .def(nb::init<>())
+        .def_rw("has_jpeg", &rawgl::io::ImageCodecSaveOptions::hasJpeg)
+        .def_rw("jpeg", &rawgl::io::ImageCodecSaveOptions::jpeg)
+        .def_rw("has_png", &rawgl::io::ImageCodecSaveOptions::hasPng)
+        .def_rw("png", &rawgl::io::ImageCodecSaveOptions::png)
+        .def_rw("has_tiff", &rawgl::io::ImageCodecSaveOptions::hasTiff)
+        .def_rw("tiff", &rawgl::io::ImageCodecSaveOptions::tiff)
+        .def_rw("has_openexr", &rawgl::io::ImageCodecSaveOptions::hasOpenExr)
+        .def_rw("openexr", &rawgl::io::ImageCodecSaveOptions::openExr);
+
     nb::class_<rawgl::io::FileInputBinding>(module, "FileInputBinding")
         .def(nb::init<>())
         .def_rw("pass_index", &rawgl::io::FileInputBinding::passIndex)
         .def_rw("name", &rawgl::io::FileInputBinding::name)
         .def_rw("path", &rawgl::io::FileInputBinding::path)
         .def_rw("attributes", &rawgl::io::FileInputBinding::attributes)
+        .def_rw("codec_options", &rawgl::io::FileInputBinding::codecOptions)
         .def_rw("uses_array_element", &rawgl::io::FileInputBinding::usesArrayElement)
         .def_rw("array_element", &rawgl::io::FileInputBinding::arrayElement);
 
@@ -517,6 +699,7 @@ NB_MODULE(_rawgl, module)
         .def_rw("name", &rawgl::io::FileInputOverride::name)
         .def_rw("path", &rawgl::io::FileInputOverride::path)
         .def_rw("attributes", &rawgl::io::FileInputOverride::attributes)
+        .def_rw("codec_options", &rawgl::io::FileInputOverride::codecOptions)
         .def_rw("uses_array_element", &rawgl::io::FileInputOverride::usesArrayElement)
         .def_rw("array_element", &rawgl::io::FileInputOverride::arrayElement);
 
@@ -530,6 +713,7 @@ NB_MODULE(_rawgl, module)
         .def_rw("alpha_channel", &rawgl::io::FileOutputBinding::alphaChannel)
         .def_rw("bits", &rawgl::io::FileOutputBinding::bits)
         .def_rw("attributes", &rawgl::io::FileOutputBinding::attributes)
+        .def_rw("codec_options", &rawgl::io::FileOutputBinding::codecOptions)
         .def_rw("uses_array_element", &rawgl::io::FileOutputBinding::usesArrayElement)
         .def_rw("array_element", &rawgl::io::FileOutputBinding::arrayElement);
 
@@ -541,7 +725,8 @@ NB_MODULE(_rawgl, module)
     nb::class_<rawgl::io::ImageLoadRequest>(module, "ImageLoadRequest")
         .def(nb::init<>())
         .def_rw("path", &rawgl::io::ImageLoadRequest::path)
-        .def_rw("attributes", &rawgl::io::ImageLoadRequest::attributes);
+        .def_rw("attributes", &rawgl::io::ImageLoadRequest::attributes)
+        .def_rw("codec_options", &rawgl::io::ImageLoadRequest::codecOptions);
 
     nb::class_<rawgl::io::ImageLoadResult>(module, "ImageLoadResult")
         .def(nb::init<>())
@@ -553,6 +738,7 @@ NB_MODULE(_rawgl, module)
         .def(nb::init<>())
         .def_rw("path", &rawgl::io::ImageSaveRequest::path)
         .def_rw("attributes", &rawgl::io::ImageSaveRequest::attributes)
+        .def_rw("codec_options", &rawgl::io::ImageSaveRequest::codecOptions)
         .def_rw("alpha_channel", &rawgl::io::ImageSaveRequest::alphaChannel)
         .def_rw("bits", &rawgl::io::ImageSaveRequest::bits)
         .def_rw("image", &rawgl::io::ImageSaveRequest::image);
@@ -561,6 +747,33 @@ NB_MODULE(_rawgl, module)
         .def(nb::init<>())
         .def_rw("success", &rawgl::io::ImageSaveResult::success)
         .def_rw("error_message", &rawgl::io::ImageSaveResult::errorMessage);
+
+    nb::class_<rawgl::io::ImageIoCapabilityDetail>(module, "ImageIoCapabilityDetail")
+        .def(nb::init<>())
+        .def_rw("name", &rawgl::io::ImageIoCapabilityDetail::name)
+        .def_rw("value", &rawgl::io::ImageIoCapabilityDetail::value);
+
+    nb::class_<rawgl::io::ImageCodecCapabilities>(module, "ImageCodecCapabilities")
+        .def(nb::init<>())
+        .def_rw("name", &rawgl::io::ImageCodecCapabilities::name)
+        .def_rw("extensions", &rawgl::io::ImageCodecCapabilities::extensions)
+        .def_rw("native_read", &rawgl::io::ImageCodecCapabilities::nativeRead)
+        .def_rw("native_write", &rawgl::io::ImageCodecCapabilities::nativeWrite)
+        .def_rw("fallback_read", &rawgl::io::ImageCodecCapabilities::fallbackRead)
+        .def_rw("fallback_write", &rawgl::io::ImageCodecCapabilities::fallbackWrite)
+        .def_rw("native_read_component_types", &rawgl::io::ImageCodecCapabilities::nativeReadComponentTypes)
+        .def_rw("native_write_component_types", &rawgl::io::ImageCodecCapabilities::nativeWriteComponentTypes)
+        .def_rw("native_read_options", &rawgl::io::ImageCodecCapabilities::nativeReadOptions)
+        .def_rw("native_write_compression_modes", &rawgl::io::ImageCodecCapabilities::nativeWriteCompressionModes)
+        .def_rw("unavailable_native_write_compression_modes",
+                &rawgl::io::ImageCodecCapabilities::unavailableNativeWriteCompressionModes)
+        .def_rw("native_write_options", &rawgl::io::ImageCodecCapabilities::nativeWriteOptions)
+        .def_rw("details", &rawgl::io::ImageCodecCapabilities::details);
+
+    nb::class_<rawgl::io::ImageIoCapabilities>(module, "ImageIoCapabilities")
+        .def(nb::init<>())
+        .def_rw("open_image_io_fallback", &rawgl::io::ImageIoCapabilities::openImageIoFallback)
+        .def_rw("codecs", &rawgl::io::ImageIoCapabilities::codecs);
 
     nb::enum_<rawgl::io::MetadataNameStyle>(module, "MetadataNameStyle")
         .value("canonical", rawgl::io::MetadataNameStyle::Canonical)
@@ -615,6 +828,10 @@ NB_MODULE(_rawgl, module)
         .value("utf8", rawgl::io::MetadataTextEncoding::Utf8)
         .value("utf16le", rawgl::io::MetadataTextEncoding::Utf16LE)
         .value("utf16be", rawgl::io::MetadataTextEncoding::Utf16BE);
+
+    nb::enum_<rawgl::io::MetadataTransferSafety>(module, "MetadataTransferSafety")
+        .value("compatible_file", rawgl::io::MetadataTransferSafety::CompatibleFile)
+        .value("rendered_image", rawgl::io::MetadataTransferSafety::RenderedImage);
 
     nb::enum_<rawgl::io::MetadataEntryFlags>(module, "MetadataEntryFlags")
         .value("none", rawgl::io::MetadataEntryFlags::None)
@@ -690,6 +907,7 @@ NB_MODULE(_rawgl, module)
         .def(nb::init<>())
         .def_rw("path", &rawgl::io::ImageMetadataTransferRequest::path)
         .def_rw("source_metadata", &rawgl::io::ImageMetadataTransferRequest::sourceMetadata)
+        .def_rw("safety", &rawgl::io::ImageMetadataTransferRequest::safety)
         .def_rw("has_target_image", &rawgl::io::ImageMetadataTransferRequest::hasTargetImage)
         .def_rw("target_image", &rawgl::io::ImageMetadataTransferRequest::targetImage);
 
@@ -739,6 +957,7 @@ NB_MODULE(_rawgl, module)
 
     module.def("load_image_file", &rawgl::io::LoadImageFile, nb::arg("request"));
     module.def("save_image_file", &rawgl::io::SaveImageFile, nb::arg("request"));
+    module.def("get_image_io_capabilities", &rawgl::io::GetImageIoCapabilities);
     module.def("read_metadata_file", &rawgl::io::ReadMetadataFile, nb::arg("request"));
     module.def("read_metadata_document_file", &rawgl::io::ReadMetadataDocumentFile, nb::arg("request"));
     module.def("transfer_image_metadata_file",

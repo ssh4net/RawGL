@@ -71,8 +71,13 @@ Rule:
    The active public surface remains:
    - `ImageLoadRequest`
    - `ImageLoadResult`
+   - `ImageCodecLoadOptions`
    - `ImageSaveRequest`
    - `ImageSaveResult`
+   - `ImageCodecSaveOptions`
+   - `ImageIoCapabilities`
+   - `ImageCodecCapabilities`
+   - `GetImageIoCapabilities()`
 
 2. Move OIIO types out of the loader/writer seam immediately.
    `texture_loader.cpp` and `output_writer.cpp` should depend only on
@@ -86,9 +91,9 @@ Rule:
    JPEG/TIFF native metadata write must target native packets, not generic OIIO
    attributes.
 
-5. Do not expose per-format option structs publicly until at least one native
-   backend is proven.
-   The internal model should prepare for them now.
+5. Expose typed load/save options only through RawGL-owned structs.
+   Do not leak OpenEXR, libtiff, libjpeg, or libpng native constants into the
+   public API.
 
 ## 4. Internal shape
 
@@ -119,20 +124,42 @@ Rule:
 
 ## 5. Option model direction
 
-Current public requests still use generic `Attribute` lists.
+Current public load/save requests support typed codec options plus generic
+`Attribute` lists.
 
-That remains acceptable as a compatibility layer, but it should not be the
-long-term control surface for native codecs. The long-term direction is
-per-format option structs, for example:
+The typed option structs are the preferred long-term control surface for native
+codecs. The generic `Attribute` list remains a compatibility layer for the CLI,
+older scripts, and backend-specific escape hatches. When both forms set the
+same native option, typed options win.
+
+Current typed load structs:
 
 - `JpegLoadOptions`
-- `JpegSaveOptions`
 - `PngLoadOptions`
-- `PngSaveOptions`
 - `TiffLoadOptions`
+- `OpenExrLoadOptions`
+- `ImageCodecLoadOptions`
+
+Current typed save structs:
+
+- `JpegSaveOptions`
+- `PngSaveOptions`
 - `TiffSaveOptions`
-- `ExrLoadOptions`
+- `OpenExrSaveOptions`
+- `ImageCodecSaveOptions`
+
+The native reader/writer backends now parse the public attribute list into
+internal option structs before touching codec state:
+
+- `JpegSaveOptions`
+- `PngSaveOptions`
+- `TiffSaveOptions`
 - `ExrSaveOptions`
+
+The public capability query is now in place. It reports native read/write
+routing, OIIO fallback availability, native component types, writer option
+names, available compression modes, unavailable optional compression modes, and
+library version details.
 
 That lets RawGL expose real format controls directly:
 
