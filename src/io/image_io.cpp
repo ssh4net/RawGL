@@ -29,7 +29,7 @@ get_file_format(const std::string& ext)
         return image_utils::ImageFileFormat::HDR;
     } else if (ext == "tif" || ext == "tiff" || ext == "tx" || ext == "env" || ext == "sm" || ext == "vsm") {
         return image_utils::ImageFileFormat::TIF;
-    } else if (ext == "jp2" || ext == "j2k") {
+    } else if (ext == "jp2" || ext == "j2k" || ext == "j2c" || ext == "jpc") {
         return image_utils::ImageFileFormat::JP2;
     } else if (ext == "webp") {
         return image_utils::ImageFileFormat::WEBP;

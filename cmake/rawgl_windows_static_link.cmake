@@ -24,6 +24,11 @@ function(rawgl_windows_append_file_library out_var release_path debug_path)
 endfunction()
 
 function(rawgl_windows_append_vendor_library out_var release_name debug_name)
+    if(NOT RAWGL_WINDOWS_DEPS_ROOT)
+        set(${out_var} "${${out_var}}" PARENT_SCOPE)
+        return()
+    endif()
+
     rawgl_windows_append_file_library(${out_var}
         "${RAWGL_WINDOWS_DEPS_ROOT}/lib/${release_name}.lib"
         "${RAWGL_WINDOWS_DEPS_ROOT}/lib/${debug_name}.lib")
@@ -55,10 +60,17 @@ function(rawgl_windows_patch_imported_interface_library target_name release_name
     endif()
 
     rawgl_windows_config_library_expr(rawgl_expr "${rawgl_release_path}" "${rawgl_debug_path}")
-    set(rawgl_search_paths
-        "E:/DVS/lib/${release_name}.lib"
-        "e:/DVS/lib/${release_name}.lib"
-        "${RAWGL_WINDOWS_DEPS_ROOT}/lib/${release_name}.lib")
+    set(rawgl_search_paths)
+    if(RAWGL_WINDOWS_DEPS_ROOT)
+        list(APPEND rawgl_search_paths
+            "${RAWGL_WINDOWS_DEPS_ROOT}/lib/${release_name}.lib")
+    endif()
+    foreach(rawgl_rewrite_root IN LISTS RAWGL_WINDOWS_IMPORTED_CONFIG_REWRITE_ROOTS)
+        if(rawgl_rewrite_root)
+            list(APPEND rawgl_search_paths
+                "${rawgl_rewrite_root}/lib/${release_name}.lib")
+        endif()
+    endforeach()
     list(REMOVE_DUPLICATES rawgl_search_paths)
 
     foreach(rawgl_search_path IN LISTS rawgl_search_paths)

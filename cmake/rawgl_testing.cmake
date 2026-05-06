@@ -72,6 +72,10 @@ if(BUILD_TESTING)
     endif()
     if(TARGET JPEG::JPEG AND TARGET PNG::PNG AND TARGET TIFF::TIFF AND TARGET OpenEXR::OpenEXR)
         rawgl_add_cpp_io_smoke_test(rawgl_io_typed_options_matrix_smoke tests/rawgl_io_typed_options_matrix_smoke.cpp)
+        rawgl_add_cpp_io_smoke_test(rawgl_io_sky_codec_conversion_smoke tests/rawgl_io_sky_codec_conversion_smoke.cpp)
+    endif()
+    if(TARGET openjp2)
+        rawgl_add_cpp_io_smoke_test(rawgl_io_jpeg2000_native_smoke tests/rawgl_io_jpeg2000_native_smoke.cpp)
     endif()
     if(TARGET TIFF::TIFF)
         rawgl_add_cpp_io_smoke_test(rawgl_io_tiff_native_smoke tests/rawgl_io_tiff_native_smoke.cpp)
@@ -182,6 +186,18 @@ if(BUILD_TESTING)
             COMMAND rawgl_io_typed_options_matrix_smoke)
         set_tests_properties(rawgl_io_typed_options_matrix_smoke PROPERTIES
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+        add_test(NAME rawgl_io_sky_codec_conversion_smoke
+            COMMAND rawgl_io_sky_codec_conversion_smoke)
+        set_tests_properties(rawgl_io_sky_codec_conversion_smoke PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    endif()
+
+    if(TARGET openjp2)
+        add_test(NAME rawgl_io_jpeg2000_native_smoke
+            COMMAND rawgl_io_jpeg2000_native_smoke)
+        set_tests_properties(rawgl_io_jpeg2000_native_smoke PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     endif()
 
     if(TARGET TIFF::TIFF)
@@ -235,6 +251,9 @@ if(BUILD_TESTING)
     if(TARGET rawgl)
         rawgl_add_script_test(rawgl_atomic_counter test_atomic_counter)
         rawgl_add_script_test(rawgl_compute_image_chain test_compute_image_chain)
+        if(TARGET JPEG::JPEG AND TARGET PNG::PNG AND TARGET TIFF::TIFF AND TARGET OpenEXR::OpenEXR AND TARGET openjp2)
+            rawgl_add_script_test(rawgl_cli_native_codec_outputs test_cli_native_codec_outputs)
+        endif()
         rawgl_add_script_test(rawgl_cull_parser test_cull_parser)
         rawgl_add_script_test(rawgl_frag_pass test_frag_pass)
         rawgl_add_script_test(rawgl_invalid_atomic_input test_invalid_atomic_input)
@@ -291,6 +310,13 @@ if(BUILD_TESTING)
                     "RAWGL_NUMPY_TYPED_IO_OUTPUT_DIR=${CMAKE_SOURCE_DIR}/tests/outputs"
                     "${RAWGL_PYTHON_EXECUTABLE_EFFECTIVE}" "${CMAKE_SOURCE_DIR}/examples/NumPy/NumpyTypedIoPipeline.py")
             set_tests_properties(rawgl_python_numpy_typed_io_example PROPERTIES
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+            add_test(NAME rawgl_python_sky_codec_conversion_smoke
+                COMMAND ${CMAKE_COMMAND} -E env
+                    "PYTHONPATH=${CMAKE_BINARY_DIR}/python"
+                    "${RAWGL_PYTHON_EXECUTABLE_EFFECTIVE}" "${CMAKE_SOURCE_DIR}/tests/python/rawgl_python_sky_codec_conversion_smoke.py")
+            set_tests_properties(rawgl_python_sky_codec_conversion_smoke PROPERTIES
                 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
         endif()
 

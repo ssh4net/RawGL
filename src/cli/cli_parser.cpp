@@ -45,6 +45,8 @@ static const ParsedOptionSpec RAWGL_OPTION_SPECS[] = {
     { "in_png_expand_transparency", '\0', ParsedOptionMode::single },
     { "in_tiff_directory_index", '\0', ParsedOptionMode::single },
     { "in_exr_channels", '\0', ParsedOptionMode::single },
+    { "in_jpeg2000_reduce_factor", '\0', ParsedOptionMode::single },
+    { "in_jpeg2000_layer_limit", '\0', ParsedOptionMode::single },
     { "atomic", 'B', ParsedOptionMode::multi },
     { "in_attr", 't', ParsedOptionMode::multi },
     { "out", 'o', ParsedOptionMode::multi },
@@ -78,6 +80,9 @@ static const ParsedOptionSpec RAWGL_OPTION_SPECS[] = {
     { "out_exr_tile_size", '\0', ParsedOptionMode::multi },
     { "out_exr_line_order", '\0', ParsedOptionMode::single },
     { "out_exr_dwa_level", '\0', ParsedOptionMode::single },
+    { "out_jpeg2000_lossless", '\0', ParsedOptionMode::single },
+    { "out_jpeg2000_compression_ratio", '\0', ParsedOptionMode::single },
+    { "out_jpeg2000_quality", '\0', ParsedOptionMode::single },
 };
 
 static const ParsedOptionSpec*
@@ -143,6 +148,8 @@ build_help_text()
            << "  --in_png_expand_transparency <true|false>\n"
            << "  --in_tiff_directory_index <index>\n"
            << "  --in_exr_channels <auto|luminance|rgb|rgba|all>\n"
+           << "  --in_jpeg2000_reduce_factor <levels>\n"
+           << "  --in_jpeg2000_layer_limit <layers>\n"
            << "  --atomic, -B <mode> <args...>\n"
            << "  --in_attr, -t <name> <value>\n"
            << "  --out, -o <name> <path>\n"
@@ -175,7 +182,10 @@ build_help_text()
            << "  --out_exr_layout <scanlines|tiled>\n"
            << "  --out_exr_tile_size <width> [height]\n"
            << "  --out_exr_line_order <increasing_y|decreasing_y|random_y>\n"
-           << "  --out_exr_dwa_level <float>\n\n"
+           << "  --out_exr_dwa_level <float>\n"
+           << "  --out_jpeg2000_lossless <true|false>\n"
+           << "  --out_jpeg2000_compression_ratio <float>\n"
+           << "  --out_jpeg2000_quality <float>\n\n"
            << "Supported texture attributes:\n"
            << GetTextureAttributeHelpText() << '\n'
            << "Supported mesh attributes:\n"

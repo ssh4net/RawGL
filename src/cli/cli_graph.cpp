@@ -717,7 +717,8 @@ is_input_codec_option(const std::string& optionName)
 {
     return optionName == "in_backend" || optionName == "in_jpeg_color_transform"
         || optionName == "in_png_expand_transparency" || optionName == "in_tiff_directory_index"
-        || optionName == "in_exr_channels";
+        || optionName == "in_exr_channels" || optionName == "in_jpeg2000_reduce_factor"
+        || optionName == "in_jpeg2000_layer_limit";
 }
 
 static bool
@@ -735,7 +736,8 @@ is_output_codec_option(const std::string& optionName)
         || optionName == "out_tiff_webp_lossless" || optionName == "out_tiff_webp_lossless_exact"
         || optionName == "out_exr_compression" || optionName == "out_exr_layout"
         || optionName == "out_exr_tile_size" || optionName == "out_exr_line_order"
-        || optionName == "out_exr_dwa_level";
+        || optionName == "out_exr_dwa_level" || optionName == "out_jpeg2000_lossless"
+        || optionName == "out_jpeg2000_compression_ratio" || optionName == "out_jpeg2000_quality";
 }
 
 static void
@@ -782,6 +784,20 @@ translate_input_codec_option(const CommandLineParsedOption& option, GraphTransla
         codecOptions.openExr.hasChannelSelection = true;
         codecOptions.openExr.channelSelection =
             parse_openexr_channel_selection(option.value[0], "in_exr_channels");
+        return;
+    }
+
+    if (option.string_key == "in_jpeg2000_reduce_factor") {
+        codecOptions.hasJpeg2000 = true;
+        codecOptions.jpeg2000.hasReduceFactor = true;
+        codecOptions.jpeg2000.reduceFactor = parse_non_negative_u32(option.value[0], "in_jpeg2000_reduce_factor");
+        return;
+    }
+
+    if (option.string_key == "in_jpeg2000_layer_limit") {
+        codecOptions.hasJpeg2000 = true;
+        codecOptions.jpeg2000.hasLayerLimit = true;
+        codecOptions.jpeg2000.layerLimit = parse_non_negative_u32(option.value[0], "in_jpeg2000_layer_limit");
         return;
     }
 }
@@ -1003,6 +1019,28 @@ translate_output_codec_option(const CommandLineParsedOption& option, GraphTransl
         codecOptions.openExr.hasDwaCompressionLevel = true;
         codecOptions.openExr.dwaCompressionLevel =
             parse_numeric_value<float_t>(option.value[0], "out_exr_dwa_level");
+        return;
+    }
+
+    if (option.string_key == "out_jpeg2000_lossless") {
+        codecOptions.hasJpeg2000 = true;
+        codecOptions.jpeg2000.hasLossless = true;
+        codecOptions.jpeg2000.lossless = parse_bool_value(option.value[0], "out_jpeg2000_lossless");
+        return;
+    }
+
+    if (option.string_key == "out_jpeg2000_compression_ratio") {
+        codecOptions.hasJpeg2000 = true;
+        codecOptions.jpeg2000.hasCompressionRatio = true;
+        codecOptions.jpeg2000.compressionRatio =
+            parse_numeric_value<float_t>(option.value[0], "out_jpeg2000_compression_ratio");
+        return;
+    }
+
+    if (option.string_key == "out_jpeg2000_quality") {
+        codecOptions.hasJpeg2000 = true;
+        codecOptions.jpeg2000.hasQuality = true;
+        codecOptions.jpeg2000.quality = parse_numeric_value<float_t>(option.value[0], "out_jpeg2000_quality");
         return;
     }
 }

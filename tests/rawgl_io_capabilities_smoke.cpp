@@ -68,7 +68,16 @@ main()
         return 1;
     }
 
-    const char* requiredCodecs[] = { "jpeg", "png", "tiff", "openexr", "openimageio" };
+    const char* requiredCodecs[] = {
+        "jpeg",
+        "png",
+        "tiff",
+        "openexr",
+        "jpeg2000",
+        "jpegxl",
+        "camera_raw",
+        "openimageio",
+    };
     for (const char* codecName : requiredCodecs) {
         if (!expect_codec(capabilities, codecName)) {
             return 1;
@@ -114,6 +123,32 @@ main()
     }
     if (openexr->nativeRead && !contains_string(openexr->nativeReadOptions, "openexr:channel_selection")) {
         std::cerr << "Native OpenEXR reader did not report channel selection options." << std::endl;
+        return 1;
+    }
+
+    const rawgl::io::ImageCodecCapabilities* jpeg2000 = find_codec(capabilities, "jpeg2000");
+    if (!contains_string(jpeg2000->extensions, "jp2") || !has_detail(*jpeg2000, "openjpeg.enabled")) {
+        std::cerr << "JPEG-2000 capability entry is missing expected details." << std::endl;
+        return 1;
+    }
+    if (jpeg2000->nativeRead && !contains_string(jpeg2000->nativeReadOptions, "jpeg2000:reduce_factor")) {
+        std::cerr << "Native JPEG-2000 reader did not report reduce-factor options." << std::endl;
+        return 1;
+    }
+    if (jpeg2000->nativeWrite && !contains_string(jpeg2000->nativeWriteOptions, "jpeg2000:lossless")) {
+        std::cerr << "Native JPEG-2000 writer did not report lossless options." << std::endl;
+        return 1;
+    }
+
+    const rawgl::io::ImageCodecCapabilities* jpegxl = find_codec(capabilities, "jpegxl");
+    if (!contains_string(jpegxl->extensions, "jxl") || !has_detail(*jpegxl, "libjxl.headers")) {
+        std::cerr << "JPEG XL capability entry is missing expected details." << std::endl;
+        return 1;
+    }
+
+    const rawgl::io::ImageCodecCapabilities* cameraRaw = find_codec(capabilities, "camera_raw");
+    if (!contains_string(cameraRaw->extensions, "dng") || !has_detail(*cameraRaw, "libraw.headers")) {
+        std::cerr << "Camera RAW capability entry is missing expected details." << std::endl;
         return 1;
     }
 

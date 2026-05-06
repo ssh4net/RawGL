@@ -2094,6 +2094,7 @@ class _IoNamespace:
         self.TiffLoadOptions = globals().get("TiffLoadOptions")
         self.OpenExrChannelSelection = globals().get("OpenExrChannelSelection")
         self.OpenExrLoadOptions = globals().get("OpenExrLoadOptions")
+        self.Jpeg2000LoadOptions = globals().get("Jpeg2000LoadOptions")
         self.ImageCodecLoadOptions = globals().get("ImageCodecLoadOptions")
         self.JpegChromaSubsampling = globals().get("JpegChromaSubsampling")
         self.JpegSaveOptions = globals().get("JpegSaveOptions")
@@ -2106,6 +2107,7 @@ class _IoNamespace:
         self.OpenExrStorageLayout = globals().get("OpenExrStorageLayout")
         self.OpenExrLineOrder = globals().get("OpenExrLineOrder")
         self.OpenExrSaveOptions = globals().get("OpenExrSaveOptions")
+        self.Jpeg2000SaveOptions = globals().get("Jpeg2000SaveOptions")
         self.ImageCodecSaveOptions = globals().get("ImageCodecSaveOptions")
 
     def _resolve_runtime(self, io_runtime=None):

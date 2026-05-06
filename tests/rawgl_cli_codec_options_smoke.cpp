@@ -47,6 +47,10 @@ main()
         "2",
         "--in_exr_channels",
         "rgba",
+        "--in_jpeg2000_reduce_factor",
+        "1",
+        "--in_jpeg2000_layer_limit",
+        "2",
         "--out",
         "OutSample",
         "output.exr",
@@ -110,6 +114,12 @@ main()
         "decreasing_y",
         "--out_exr_dwa_level",
         "45.5",
+        "--out_jpeg2000_lossless",
+        "false",
+        "--out_jpeg2000_compression_ratio",
+        "8.5",
+        "--out_jpeg2000_quality",
+        "42.0",
     };
 
     rawgl::CommandLineRequest request;
@@ -129,7 +139,8 @@ main()
     if (!load.hasBackendPolicy || load.backendPolicy != rawgl::io::ImageLoadBackendPolicy::NativeOnly
         || !load.hasJpeg || load.jpeg.colorTransform != rawgl::io::JpegLoadColorTransform::Rgb
         || !load.hasPng || load.png.expandTransparency || !load.hasTiff || load.tiff.directoryIndex != 2u
-        || !load.hasOpenExr || load.openExr.channelSelection != rawgl::io::OpenExrChannelSelection::Rgba) {
+        || !load.hasOpenExr || load.openExr.channelSelection != rawgl::io::OpenExrChannelSelection::Rgba
+        || !load.hasJpeg2000 || load.jpeg2000.reduceFactor != 1u || load.jpeg2000.layerLimit != 2u) {
         std::cerr << "Input codec options were not translated correctly." << std::endl;
         return 1;
     }
@@ -154,7 +165,8 @@ main()
         || save.openExr.compression != rawgl::io::OpenExrCompressionMode::Zip
         || save.openExr.layout != rawgl::io::OpenExrStorageLayout::Tiled || save.openExr.tileWidth != 64u
         || save.openExr.tileHeight != 32u || save.openExr.lineOrder != rawgl::io::OpenExrLineOrder::DecreasingY
-        || save.openExr.dwaCompressionLevel != 45.5f) {
+        || save.openExr.dwaCompressionLevel != 45.5f || !save.hasJpeg2000 || save.jpeg2000.lossless
+        || save.jpeg2000.compressionRatio != 8.5f || save.jpeg2000.quality != 42.0f) {
         std::cerr << "Output codec options were not translated correctly." << std::endl;
         return 1;
     }

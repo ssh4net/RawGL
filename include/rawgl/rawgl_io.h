@@ -69,6 +69,14 @@ struct OpenExrLoadOptions {
     OpenExrChannelSelection channelSelection = OpenExrChannelSelection::Auto;
 };
 
+/// Typed native JPEG-2000 reader options.
+struct Jpeg2000LoadOptions {
+    bool hasReduceFactor = false;
+    uint32_t reduceFactor = 0;
+    bool hasLayerLimit = false;
+    uint32_t layerLimit = 0;
+};
+
 /// Typed native codec reader options.
 ///
 /// Legacy string \ref Attribute entries remain supported. When both typed
@@ -85,6 +93,8 @@ struct ImageCodecLoadOptions {
     TiffLoadOptions tiff;
     bool hasOpenExr = false;
     OpenExrLoadOptions openExr;
+    bool hasJpeg2000 = false;
+    Jpeg2000LoadOptions jpeg2000;
 };
 
 /// Describes one file-backed image load request.
@@ -245,6 +255,16 @@ struct OpenExrSaveOptions {
     float dwaCompressionLevel = 0.0f;
 };
 
+/// Typed native JPEG-2000 writer options.
+struct Jpeg2000SaveOptions {
+    bool hasLossless = false;
+    bool lossless = true;
+    bool hasCompressionRatio = false;
+    float compressionRatio = 0.0f;
+    bool hasQuality = false;
+    float quality = 0.0f;
+};
+
 /// Typed native codec writer options.
 ///
 /// Legacy string \ref Attribute entries remain supported. When both typed
@@ -259,6 +279,8 @@ struct ImageCodecSaveOptions {
     TiffSaveOptions tiff;
     bool hasOpenExr = false;
     OpenExrSaveOptions openExr;
+    bool hasJpeg2000 = false;
+    Jpeg2000SaveOptions jpeg2000;
 };
 
 /// Describes one file-backed image save request.

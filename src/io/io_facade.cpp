@@ -26,6 +26,18 @@
 #    include <OpenEXR/ImfCompression.h>
 #    include <OpenEXR/OpenEXRConfig.h>
 #endif
+#if defined(RAWGL_HAS_OPENJPEG)
+#    include <openjpeg.h>
+#endif
+#if defined(RAWGL_HAS_OPENJPH)
+#    include <openjph/ojph_version.h>
+#endif
+#if defined(RAWGL_HAS_JPEGXL_HEADERS)
+#    include <jxl/version.h>
+#endif
+#if defined(RAWGL_HAS_LIBRAW_HEADERS)
+#    include <libraw/libraw_version.h>
+#endif
 
 #define RAWGL_STRINGIFY_DETAIL(value) #value
 #define RAWGL_STRINGIFY(value) RAWGL_STRINGIFY_DETAIL(value)
@@ -273,6 +285,17 @@ apply_openexr_load_options(std::map<std::string, std::string>& attributes, const
     }
 }
 
+static void
+apply_jpeg2000_load_options(std::map<std::string, std::string>& attributes, const Jpeg2000LoadOptions& options)
+{
+    if (options.hasReduceFactor) {
+        attributes["jpeg2000:reduce_factor"] = std::to_string(options.reduceFactor);
+    }
+    if (options.hasLayerLimit) {
+        attributes["jpeg2000:layer_limit"] = std::to_string(options.layerLimit);
+    }
+}
+
 static std::map<std::string, std::string>
 to_load_attribute_map(const ImageLoadRequest& request)
 {
@@ -291,6 +314,9 @@ to_load_attribute_map(const ImageLoadRequest& request)
     }
     if (request.codecOptions.hasOpenExr) {
         apply_openexr_load_options(result, request.codecOptions.openExr);
+    }
+    if (request.codecOptions.hasJpeg2000) {
+        apply_jpeg2000_load_options(result, request.codecOptions.jpeg2000);
     }
     return result;
 }
@@ -396,6 +422,20 @@ apply_openexr_codec_options(std::map<std::string, std::string>& attributes, cons
     }
 }
 
+static void
+apply_jpeg2000_codec_options(std::map<std::string, std::string>& attributes, const Jpeg2000SaveOptions& options)
+{
+    if (options.hasLossless) {
+        attributes["jpeg2000:lossless"] = to_attribute_value(options.lossless);
+    }
+    if (options.hasCompressionRatio) {
+        attributes["jpeg2000:compression_ratio"] = std::to_string(options.compressionRatio);
+    }
+    if (options.hasQuality) {
+        attributes["jpeg2000:quality"] = std::to_string(options.quality);
+    }
+}
+
 static std::map<std::string, std::string>
 to_save_attribute_map(const ImageSaveRequest& request)
 {
@@ -411,6 +451,9 @@ to_save_attribute_map(const ImageSaveRequest& request)
     }
     if (request.codecOptions.hasOpenExr) {
         apply_openexr_codec_options(result, request.codecOptions.openExr);
+    }
+    if (request.codecOptions.hasJpeg2000) {
+        apply_jpeg2000_codec_options(result, request.codecOptions.jpeg2000);
     }
     return result;
 }
@@ -550,6 +593,12 @@ add_openexr_compression_modes(ImageCodecCapabilities& codec)
 #endif
 }
 
+static std::string
+format_version_triplet(const int major, const int minor, const int patch)
+{
+    return std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
+}
+
 static void
 add_jpeg_capabilities(ImageIoCapabilities& result)
 {
@@ -588,6 +637,39 @@ add_jpeg_capabilities(ImageIoCapabilities& result)
     codec.fallbackWrite = true;
     add_detail(codec, "libjpeg.enabled", "false");
     add_detail(codec, "rawgl.high_bit_depth_jpeg", "false");
+#endif
+    result.codecs.push_back(std::move(codec));
+}
+
+static void
+add_jpeg2000_capabilities(ImageIoCapabilities& result)
+{
+    ImageCodecCapabilities codec = make_codec_base("jpeg2000");
+    codec.extensions = { "jp2", "j2k", "j2c", "jpc" };
+#if defined(RAWGL_HAS_OPENJPEG)
+    codec.nativeRead = true;
+    codec.nativeWrite = true;
+    codec.fallbackWrite = false;
+    codec.nativeReadComponentTypes = { "u8", "u16" };
+    codec.nativeWriteComponentTypes = { "u8", "u16" };
+    codec.nativeReadOptions = { "rawgl:load_backend", "rawgl:decode_backend",
+                                "jpeg2000:reduce_factor", "jpeg2000:layer_limit" };
+    codec.nativeWriteOptions = { "jpeg2000:lossless", "jpeg2000:compression_ratio", "jpeg2000:quality" };
+    codec.nativeWriteCompressionModes = { "lossless", "rate", "quality" };
+    add_detail(codec, "openjpeg.enabled", "true");
+    add_detail(codec, "openjpeg.version", opj_version());
+#else
+    codec.nativeWrite = false;
+    codec.fallbackWrite = true;
+    add_detail(codec, "openjpeg.enabled", "false");
+#endif
+#if defined(RAWGL_HAS_OPENJPH)
+    add_detail(codec, "openjph.headers", "true");
+    add_detail(codec,
+               "openjph.version",
+               format_version_triplet(OPENJPH_VERSION_MAJOR, OPENJPH_VERSION_MINOR, OPENJPH_VERSION_PATCH));
+#else
+    add_detail(codec, "openjph.headers", "false");
 #endif
     result.codecs.push_back(std::move(codec));
 }
@@ -673,6 +755,44 @@ add_openexr_capabilities(ImageIoCapabilities& result)
     add_detail(codec, "openexr.enabled", "false");
 #endif
     add_openexr_compression_modes(codec);
+    result.codecs.push_back(std::move(codec));
+}
+
+static void
+add_jpegxl_capabilities(ImageIoCapabilities& result)
+{
+    ImageCodecCapabilities codec = make_codec_base("jpegxl");
+    codec.extensions = { "jxl" };
+    codec.nativeRead = false;
+    codec.nativeWrite = false;
+    codec.fallbackRead = true;
+    codec.fallbackWrite = true;
+#if defined(RAWGL_HAS_JPEGXL_HEADERS)
+    add_detail(codec, "libjxl.headers", "true");
+    add_detail(codec,
+               "libjxl.version",
+               format_version_triplet(JPEGXL_MAJOR_VERSION, JPEGXL_MINOR_VERSION, JPEGXL_PATCH_VERSION));
+#else
+    add_detail(codec, "libjxl.headers", "false");
+#endif
+    result.codecs.push_back(std::move(codec));
+}
+
+static void
+add_camera_raw_capabilities(ImageIoCapabilities& result)
+{
+    ImageCodecCapabilities codec = make_codec_base("camera_raw");
+    codec.extensions = { "dng", "cr2", "cr3", "nef", "arw", "raf", "orf", "rw2", "pef", "sr2" };
+    codec.nativeRead = false;
+    codec.nativeWrite = false;
+    codec.fallbackRead = true;
+    codec.fallbackWrite = false;
+#if defined(RAWGL_HAS_LIBRAW_HEADERS)
+    add_detail(codec, "libraw.headers", "true");
+    add_detail(codec, "libraw.version", LIBRAW_VERSION_STR);
+#else
+    add_detail(codec, "libraw.headers", "false");
+#endif
     result.codecs.push_back(std::move(codec));
 }
 
@@ -954,10 +1074,12 @@ GetImageIoCapabilities()
     add_png_capabilities(result);
     add_tiff_capabilities(result);
     add_openexr_capabilities(result);
+    add_jpeg2000_capabilities(result);
+    add_jpegxl_capabilities(result);
+    add_camera_raw_capabilities(result);
     add_fallback_only_codec(result, "bmp", { "bmp" });
     add_fallback_only_codec(result, "tga", { "tga", "tpic" });
     add_fallback_only_codec(result, "hdr", { "hdr" });
-    add_fallback_only_codec(result, "jpeg2000", { "jp2", "j2k" });
     add_fallback_only_codec(result, "webp", { "webp" });
 
     ImageCodecCapabilities fallback = make_codec_base("openimageio");

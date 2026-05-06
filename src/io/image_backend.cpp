@@ -6,6 +6,7 @@
 #include "gl_utils.h"
 #include "exr_backend.h"
 #include "image_io.h"
+#include "jpeg2000_backend.h"
 #include "jpg_backend.h"
 #include "log.h"
 #include "path_utils.h"
@@ -30,6 +31,7 @@ enum class ImageBackendKind : uint8_t {
     NativePng,
     NativeTiff,
     NativeOpenExr,
+    NativeJpeg2000,
 };
 
 enum class DecodeBackendPolicy : uint8_t {
@@ -120,8 +122,15 @@ get_image_codec_family_from_extension(const std::string& extension)
         || extension == "vsm") {
         return ImageCodecFamily::Tiff;
     }
-    if (extension == "jp2" || extension == "j2k") {
+    if (extension == "jp2" || extension == "j2k" || extension == "j2c" || extension == "jpc") {
         return ImageCodecFamily::Jpeg2000;
+    }
+    if (extension == "jxl") {
+        return ImageCodecFamily::JpegXl;
+    }
+    if (extension == "dng" || extension == "cr2" || extension == "cr3" || extension == "nef" || extension == "arw"
+        || extension == "raf" || extension == "orf" || extension == "rw2" || extension == "pef" || extension == "sr2") {
+        return ImageCodecFamily::CameraRaw;
     }
     if (extension == "webp") {
         return ImageCodecFamily::Webp;
@@ -158,11 +167,18 @@ select_decode_backend(const ImageCodecFamily codec)
 #else
         return ImageBackendKind::OiioFallback;
 #endif
+    case ImageCodecFamily::Jpeg2000:
+#if defined(RAWGL_HAS_OPENJPEG)
+        return ImageBackendKind::NativeJpeg2000;
+#else
+        return ImageBackendKind::OiioFallback;
+#endif
     case ImageCodecFamily::Unknown:
     case ImageCodecFamily::Bmp:
     case ImageCodecFamily::Tga:
     case ImageCodecFamily::Hdr:
-    case ImageCodecFamily::Jpeg2000:
+    case ImageCodecFamily::JpegXl:
+    case ImageCodecFamily::CameraRaw:
     case ImageCodecFamily::Webp:
     default:
         return ImageBackendKind::OiioFallback;
@@ -197,11 +213,18 @@ select_encode_backend(const ImageCodecFamily codec)
 #else
         return ImageBackendKind::OiioFallback;
 #endif
+    case ImageCodecFamily::Jpeg2000:
+#if defined(RAWGL_HAS_OPENJPEG)
+        return ImageBackendKind::NativeJpeg2000;
+#else
+        return ImageBackendKind::OiioFallback;
+#endif
     case ImageCodecFamily::Unknown:
     case ImageCodecFamily::Bmp:
     case ImageCodecFamily::Tga:
     case ImageCodecFamily::Hdr:
-    case ImageCodecFamily::Jpeg2000:
+    case ImageCodecFamily::JpegXl:
+    case ImageCodecFamily::CameraRaw:
     case ImageCodecFamily::Webp:
     default:
         return ImageBackendKind::OiioFallback;
@@ -217,6 +240,7 @@ image_backend_kind_name(const ImageBackendKind backend)
     case ImageBackendKind::NativePng: return "native PNG";
     case ImageBackendKind::NativeTiff: return "native TIFF";
     case ImageBackendKind::NativeOpenExr: return "native OpenEXR";
+    case ImageBackendKind::NativeJpeg2000: return "native JPEG-2000";
     }
 
     return "unknown";
@@ -509,6 +533,18 @@ decode_image_file(const std::string& path, const std::map<std::string, std::stri
         LOG(warning) << "Native OpenEXR decode failed for " << path << ", falling back to OIIO: " << result.errorMessage;
         return decode_image_file_oiio(path, attributes);
     }
+    case ImageBackendKind::NativeJpeg2000: {
+        DecodedImageData result = decode_jpeg2000_file(path, attributes);
+        if (result.success) {
+            return result;
+        }
+        if (policy == DecodeBackendPolicy::NativeOnly) {
+            return result;
+        }
+        LOG(warning) << "Native JPEG-2000 decode failed for " << path << ", falling back to OIIO: "
+                     << result.errorMessage;
+        return decode_image_file_oiio(path, attributes);
+    }
     default:
         return decode_image_file_oiio(path, attributes);
     }
@@ -571,6 +607,14 @@ encode_image_file(const std::string& path,
             return true;
         }
         errorMessage = nativeErrorMessage.empty() ? "native OpenEXR write failed" : nativeErrorMessage;
+        return false;
+    }
+    case ImageBackendKind::NativeJpeg2000: {
+        std::string nativeErrorMessage;
+        if (encode_jpeg2000_file(path, attributes, alphaChannel, image, settings, nativeErrorMessage)) {
+            return true;
+        }
+        errorMessage = nativeErrorMessage.empty() ? "native JPEG-2000 write failed" : nativeErrorMessage;
         return false;
     }
     default:

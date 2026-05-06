@@ -540,6 +540,13 @@ NB_MODULE(_rawgl, module)
         .def_rw("has_channel_selection", &rawgl::io::OpenExrLoadOptions::hasChannelSelection)
         .def_rw("channel_selection", &rawgl::io::OpenExrLoadOptions::channelSelection);
 
+    nb::class_<rawgl::io::Jpeg2000LoadOptions>(module, "Jpeg2000LoadOptions")
+        .def(nb::init<>())
+        .def_rw("has_reduce_factor", &rawgl::io::Jpeg2000LoadOptions::hasReduceFactor)
+        .def_rw("reduce_factor", &rawgl::io::Jpeg2000LoadOptions::reduceFactor)
+        .def_rw("has_layer_limit", &rawgl::io::Jpeg2000LoadOptions::hasLayerLimit)
+        .def_rw("layer_limit", &rawgl::io::Jpeg2000LoadOptions::layerLimit);
+
     nb::class_<rawgl::io::ImageCodecLoadOptions>(module, "ImageCodecLoadOptions")
         .def(nb::init<>())
         .def_rw("has_backend_policy", &rawgl::io::ImageCodecLoadOptions::hasBackendPolicy)
@@ -551,7 +558,9 @@ NB_MODULE(_rawgl, module)
         .def_rw("has_tiff", &rawgl::io::ImageCodecLoadOptions::hasTiff)
         .def_rw("tiff", &rawgl::io::ImageCodecLoadOptions::tiff)
         .def_rw("has_openexr", &rawgl::io::ImageCodecLoadOptions::hasOpenExr)
-        .def_rw("openexr", &rawgl::io::ImageCodecLoadOptions::openExr);
+        .def_rw("openexr", &rawgl::io::ImageCodecLoadOptions::openExr)
+        .def_rw("has_jpeg2000", &rawgl::io::ImageCodecLoadOptions::hasJpeg2000)
+        .def_rw("jpeg2000", &rawgl::io::ImageCodecLoadOptions::jpeg2000);
 
     nb::enum_<rawgl::io::JpegChromaSubsampling>(module, "JpegChromaSubsampling")
         .value("default", rawgl::io::JpegChromaSubsampling::Default)
@@ -673,6 +682,15 @@ NB_MODULE(_rawgl, module)
         .def_rw("has_dwa_compression_level", &rawgl::io::OpenExrSaveOptions::hasDwaCompressionLevel)
         .def_rw("dwa_compression_level", &rawgl::io::OpenExrSaveOptions::dwaCompressionLevel);
 
+    nb::class_<rawgl::io::Jpeg2000SaveOptions>(module, "Jpeg2000SaveOptions")
+        .def(nb::init<>())
+        .def_rw("has_lossless", &rawgl::io::Jpeg2000SaveOptions::hasLossless)
+        .def_rw("lossless", &rawgl::io::Jpeg2000SaveOptions::lossless)
+        .def_rw("has_compression_ratio", &rawgl::io::Jpeg2000SaveOptions::hasCompressionRatio)
+        .def_rw("compression_ratio", &rawgl::io::Jpeg2000SaveOptions::compressionRatio)
+        .def_rw("has_quality", &rawgl::io::Jpeg2000SaveOptions::hasQuality)
+        .def_rw("quality", &rawgl::io::Jpeg2000SaveOptions::quality);
+
     nb::class_<rawgl::io::ImageCodecSaveOptions>(module, "ImageCodecSaveOptions")
         .def(nb::init<>())
         .def_rw("has_jpeg", &rawgl::io::ImageCodecSaveOptions::hasJpeg)
@@ -682,7 +700,9 @@ NB_MODULE(_rawgl, module)
         .def_rw("has_tiff", &rawgl::io::ImageCodecSaveOptions::hasTiff)
         .def_rw("tiff", &rawgl::io::ImageCodecSaveOptions::tiff)
         .def_rw("has_openexr", &rawgl::io::ImageCodecSaveOptions::hasOpenExr)
-        .def_rw("openexr", &rawgl::io::ImageCodecSaveOptions::openExr);
+        .def_rw("openexr", &rawgl::io::ImageCodecSaveOptions::openExr)
+        .def_rw("has_jpeg2000", &rawgl::io::ImageCodecSaveOptions::hasJpeg2000)
+        .def_rw("jpeg2000", &rawgl::io::ImageCodecSaveOptions::jpeg2000);
 
     nb::class_<rawgl::io::FileInputBinding>(module, "FileInputBinding")
         .def(nb::init<>())

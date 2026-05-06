@@ -1,44 +1,59 @@
 find_package(OpenGL REQUIRED)
+find_package(ZLIB QUIET)
 
 set(GLEW_USE_STATIC_LIBS ON)
 set(ZLIB_USE_STATIC_LIBS ON)
 
-if(NOT TARGET ZLIB::ZLIB)
+if(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET ZLIB::ZLIB)
     rawgl_add_windows_imported_library(ZLIB::ZLIB
         INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
         RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/zlibstatic.lib"
         DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/zlibstaticd.lib")
 endif()
-if(NOT TARGET ZLIB::ZLIBSTATIC)
+if(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET ZLIB::ZLIBSTATIC)
     rawgl_add_windows_imported_library(ZLIB::ZLIBSTATIC
         INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
         RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/zlibstatic.lib"
         DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/zlibstaticd.lib")
 endif()
-set(ZLIB_FOUND TRUE)
-set(ZLIB_INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include")
-set(ZLIB_INCLUDE_DIRS "${RAWGL_WINDOWS_DEPS_ROOT}/include")
-set(ZLIB_LIBRARIES ZLIB::ZLIB)
-
-set(PNG_LIBRARY_RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/libpng18_static.lib" CACHE FILEPATH "libpng release library" FORCE)
-set(PNG_LIBRARY_DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/libpng18_staticd.lib" CACHE FILEPATH "libpng debug library" FORCE)
-set(PNG_LIBRARY "optimized;${PNG_LIBRARY_RELEASE};debug;${PNG_LIBRARY_DEBUG}" CACHE STRING "libpng libraries" FORCE)
-set(PNG_INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include/libpng18" CACHE PATH "libpng include dir" FORCE)
-set(PNG_PNG_INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include/libpng18" CACHE PATH "libpng include dir (png.h)" FORCE)
-set(PNG_FOUND TRUE CACHE BOOL "libpng found manually for Windows static build" FORCE)
-
-if(NOT TARGET PNG::PNG)
-    add_library(PNG::PNG UNKNOWN IMPORTED)
-    set_target_properties(PNG::PNG PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${PNG_PNG_INCLUDE_DIR}")
-    set_property(TARGET PNG::PNG APPEND PROPERTY IMPORTED_CONFIGURATIONS Release)
-    set_target_properties(PNG::PNG PROPERTIES
-        IMPORTED_LOCATION_RELEASE "${PNG_LIBRARY_RELEASE}")
-    set_property(TARGET PNG::PNG APPEND PROPERTY IMPORTED_CONFIGURATIONS Debug)
-    set_target_properties(PNG::PNG PROPERTIES
-        IMPORTED_LOCATION_DEBUG "${PNG_LIBRARY_DEBUG}")
+if(TARGET ZLIB::ZLIB)
+    set(ZLIB_FOUND TRUE)
+    if(RAWGL_WINDOWS_DEPS_ROOT AND NOT ZLIB_INCLUDE_DIR)
+        set(ZLIB_INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include")
+        set(ZLIB_INCLUDE_DIRS "${RAWGL_WINDOWS_DEPS_ROOT}/include")
+    endif()
+    set(ZLIB_LIBRARIES ZLIB::ZLIB)
 endif()
-if(NOT TARGET PNG::png_static)
+
+if(RAWGL_WINDOWS_DEPS_ROOT)
+    set(rawgl_png_library_release "${RAWGL_WINDOWS_DEPS_ROOT}/lib/libpng18_static.lib")
+    set(rawgl_png_library_debug "${RAWGL_WINDOWS_DEPS_ROOT}/lib/libpng18_staticd.lib")
+    if(EXISTS "${rawgl_png_library_release}" OR EXISTS "${rawgl_png_library_debug}")
+        set(PNG_LIBRARY_RELEASE "${rawgl_png_library_release}" CACHE FILEPATH "libpng release library" FORCE)
+        set(PNG_LIBRARY_DEBUG "${rawgl_png_library_debug}" CACHE FILEPATH "libpng debug library" FORCE)
+        set(PNG_LIBRARY "optimized;${PNG_LIBRARY_RELEASE};debug;${PNG_LIBRARY_DEBUG}" CACHE STRING "libpng libraries" FORCE)
+        set(PNG_INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include/libpng18" CACHE PATH "libpng include dir" FORCE)
+        set(PNG_PNG_INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include/libpng18" CACHE PATH "libpng include dir (png.h)" FORCE)
+        set(PNG_FOUND TRUE CACHE BOOL "libpng found manually for Windows static build" FORCE)
+
+        if(NOT TARGET PNG::PNG)
+            add_library(PNG::PNG UNKNOWN IMPORTED)
+            set_target_properties(PNG::PNG PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES "${PNG_PNG_INCLUDE_DIR}")
+            if(EXISTS "${PNG_LIBRARY_RELEASE}")
+                set_property(TARGET PNG::PNG APPEND PROPERTY IMPORTED_CONFIGURATIONS Release)
+                set_target_properties(PNG::PNG PROPERTIES
+                    IMPORTED_LOCATION_RELEASE "${PNG_LIBRARY_RELEASE}")
+            endif()
+            if(EXISTS "${PNG_LIBRARY_DEBUG}")
+                set_property(TARGET PNG::PNG APPEND PROPERTY IMPORTED_CONFIGURATIONS Debug)
+                set_target_properties(PNG::PNG PROPERTIES
+                    IMPORTED_LOCATION_DEBUG "${PNG_LIBRARY_DEBUG}")
+            endif()
+        endif()
+    endif()
+endif()
+if(TARGET PNG::PNG AND NOT TARGET PNG::png_static)
     add_library(PNG::png_static INTERFACE IMPORTED)
     set_target_properties(PNG::png_static PROPERTIES
         INTERFACE_LINK_LIBRARIES "PNG::PNG")
@@ -59,7 +74,7 @@ elseif(TARGET zstd::libzstd AND NOT TARGET ZSTD::ZSTD)
     add_library(ZSTD::ZSTD INTERFACE IMPORTED)
     set_target_properties(ZSTD::ZSTD PROPERTIES
         INTERFACE_LINK_LIBRARIES "zstd::libzstd")
-elseif(NOT TARGET ZSTD::ZSTD)
+elseif(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET ZSTD::ZSTD)
     rawgl_add_windows_imported_library(ZSTD::ZSTD
         INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
         RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/zstd_static.lib"
@@ -70,14 +85,14 @@ if(TARGET libdeflate::libdeflate_static AND NOT TARGET Deflate::Deflate)
     add_library(Deflate::Deflate INTERFACE IMPORTED)
     set_target_properties(Deflate::Deflate PROPERTIES
         INTERFACE_LINK_LIBRARIES "libdeflate::libdeflate_static")
-elseif(NOT TARGET Deflate::Deflate)
+elseif(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET Deflate::Deflate)
     rawgl_add_windows_imported_library(Deflate::Deflate
         INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
         RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/deflatestatic.lib"
         DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/deflatestaticd.lib")
 endif()
 
-if(NOT TARGET liblzma::liblzma)
+if(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET liblzma::liblzma)
     rawgl_add_windows_imported_library(liblzma::liblzma
         INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
         RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/lzma.lib"
@@ -86,19 +101,19 @@ if(NOT TARGET liblzma::liblzma)
         INTERFACE_COMPILE_DEFINITIONS "LZMA_API_STATIC")
 endif()
 
-if(NOT TARGET ICU::uc)
+if(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET ICU::uc)
     rawgl_add_windows_imported_library(ICU::uc
         INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
         RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/icuuc.lib"
         DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/icuuc.lib")
 endif()
-if(NOT TARGET ICU::i18n AND EXISTS "${RAWGL_WINDOWS_DEPS_ROOT}/lib/icuin.lib")
+if(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET ICU::i18n AND EXISTS "${RAWGL_WINDOWS_DEPS_ROOT}/lib/icuin.lib")
     rawgl_add_windows_imported_library(ICU::i18n
         INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
         RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/icuin.lib"
         DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/icuin.lib")
 endif()
-if(NOT TARGET ICU::data AND EXISTS "${RAWGL_WINDOWS_DEPS_ROOT}/lib/icudt.lib")
+if(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET ICU::data AND EXISTS "${RAWGL_WINDOWS_DEPS_ROOT}/lib/icudt.lib")
     rawgl_add_windows_imported_library(ICU::data
         INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
         RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/icudt.lib"
@@ -119,8 +134,8 @@ if(NOT TARGET GIF::GIF)
         add_library(GIF::GIF INTERFACE IMPORTED)
         set_target_properties(GIF::GIF PROPERTIES
             INTERFACE_LINK_LIBRARIES "GIFLIB::GIFLIB")
-    elseif(EXISTS "${RAWGL_WINDOWS_DEPS_ROOT}/lib/gif.lib"
-       OR EXISTS "${RAWGL_WINDOWS_DEPS_ROOT}/lib/gifd.lib")
+    elseif(RAWGL_WINDOWS_DEPS_ROOT AND EXISTS "${RAWGL_WINDOWS_DEPS_ROOT}/lib/gif.lib"
+       OR RAWGL_WINDOWS_DEPS_ROOT AND EXISTS "${RAWGL_WINDOWS_DEPS_ROOT}/lib/gifd.lib")
         rawgl_add_windows_imported_library(GIF::GIF
             INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
             RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/gif.lib"
@@ -135,7 +150,7 @@ find_package(AOM CONFIG QUIET)
 find_package(harfbuzz CONFIG QUIET)
 find_package(freetype CONFIG QUIET)
 find_package(libheif CONFIG QUIET)
-if(NOT TARGET pystring::pystring)
+if(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET pystring::pystring)
     rawgl_add_windows_imported_library(pystring::pystring
         INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
         RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/pystring.lib"
@@ -187,31 +202,32 @@ if(TARGET harfbuzz::harfbuzz AND NOT TARGET HarfBuzz::HarfBuzz)
         INTERFACE_LINK_LIBRARIES "harfbuzz::harfbuzz")
 endif()
 
-if(NOT TARGET BZip2::BZip2)
+if(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET BZip2::BZip2)
     rawgl_add_windows_imported_library(BZip2::BZip2
         INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
         RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/bz2.lib"
         DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/bz2d.lib")
 endif()
-if(NOT TARGET WebP::webp)
+if(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET WebP::webp)
     rawgl_add_windows_imported_library(WebP::webp
         INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
         RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/libwebp.lib"
         DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/libwebpd.lib")
 endif()
-if(NOT TARGET WebP::webpdemux)
+if(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET WebP::webpdemux)
     rawgl_add_windows_imported_library(WebP::webpdemux
         INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
         RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/libwebpdemux.lib"
         DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/libwebpdemuxd.lib")
 endif()
-if(NOT TARGET WebP::libwebpmux)
+if(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET WebP::libwebpmux)
     rawgl_add_windows_imported_library(WebP::libwebpmux
         INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
         RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/libwebpmux.lib"
         DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/libwebpmuxd.lib")
 endif()
 if(NOT TARGET libuhdr::libuhdr
+   AND RAWGL_WINDOWS_DEPS_ROOT
    AND EXISTS "${RAWGL_WINDOWS_DEPS_ROOT}/lib/uhdr.lib")
     rawgl_add_windows_imported_library(libuhdr::libuhdr
         INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"

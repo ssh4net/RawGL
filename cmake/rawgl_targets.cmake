@@ -28,6 +28,7 @@ set(RAWGL_IO_SOURCES
     src/io/image_io.cpp
     src/io/io_facade.cpp
     src/io/io_runtime.cpp
+    src/io/jpeg2000_backend.cpp
     src/io/jpg_backend.cpp
     src/io/metadata_reader.cpp
     src/io/openmeta_bridge.cpp
@@ -151,6 +152,19 @@ endif()
 if(TARGET OpenEXR::OpenEXR)
     target_compile_definitions(rawgl_io PRIVATE RAWGL_HAS_OPENEXR=1)
 endif()
+if(TARGET openjp2)
+    target_compile_definitions(rawgl_io PRIVATE RAWGL_HAS_OPENJPEG=1)
+endif()
+if(TARGET openjph)
+    target_compile_definitions(rawgl_io PRIVATE RAWGL_HAS_OPENJPH=1)
+endif()
+if(RAWGL_LIBRAW_INCLUDE_DIR)
+    target_compile_definitions(rawgl_io PRIVATE RAWGL_HAS_LIBRAW_HEADERS=1)
+endif()
+if(RAWGL_JXL_INCLUDE_DIR)
+    target_compile_definitions(rawgl_io PRIVATE RAWGL_HAS_JPEGXL_HEADERS=1)
+    target_include_directories(rawgl_io PRIVATE "${RAWGL_JXL_INCLUDE_DIR}")
+endif()
 
 target_compile_definitions(rawgl_batch PRIVATE
     _CRT_SECURE_NO_WARNINGS
@@ -211,6 +225,12 @@ if(TARGET TIFF::TIFF)
 endif()
 if(TARGET OpenEXR::OpenEXR)
     target_link_libraries(rawgl_io PUBLIC OpenEXR::OpenEXR)
+endif()
+if(TARGET openjp2)
+    target_link_libraries(rawgl_io PUBLIC openjp2)
+endif()
+if(TARGET openjph)
+    target_link_libraries(rawgl_io PUBLIC openjph)
 endif()
 
 if(RAWGL_HAS_OPENMETA)

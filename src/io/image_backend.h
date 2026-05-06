@@ -23,6 +23,8 @@ enum class ImageCodecFamily : uint8_t {
     Hdr,
     Tiff,
     Jpeg2000,
+    JpegXl,
+    CameraRaw,
     Webp,
 };
 
