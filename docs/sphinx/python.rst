@@ -250,6 +250,7 @@ Rule:
 
 - batch helpers require **explicit output names**
 - unnamed single-output inference is not supported on batch preparation paths
+- per-run file outputs require a runner created with ``io_runtime=``
 
 That means this is preferred:
 
@@ -269,6 +270,29 @@ That means this is preferred:
 
 and not an unnamed output shorthand that requires shader inspection during
 batch preparation.
+
+For sequence or batch output naming, capture the workflow output and pass a
+file output target per submitted job:
+
+.. code-block:: python
+
+   io_runtime = rawgl.io.Runtime()
+   runner = session.batch(io_runtime=io_runtime)
+   prepared = rawgl.prepare_batch_workflow(runner, workflow)
+
+   handle = prepared.submit(
+       inputs={(0, "u_src0"): source_array},
+       outputs={
+           (1, "FrameOut"): {
+               "path": "frames/frame_000.png",
+               "format": "rgba32f",
+               "channels": 4,
+               "alpha_channel": 3,
+               "bits": 16,
+           }
+       },
+       system_uniforms={"frame": 0, "time": 0.0},
+   )
 
 Advanced multi-pass workflows
 -----------------------------

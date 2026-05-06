@@ -603,8 +603,12 @@ struct RunSettingsMaterializationResult {
 
 /// One IO-backed per-run request.
 struct RunRequest {
+    /// In-memory per-run settings and overrides.
     RunSettings settings;
+    /// File-backed per-run input overrides that are materialized before execution.
     std::vector<FileInputOverride> fileInputs;
+    /// File-backed per-run output targets saved from captured workflow outputs.
+    std::vector<FileOutputBinding> fileOutputs;
 };
 
 /// Result of saving one or more captured workflow outputs to files.
@@ -798,7 +802,18 @@ public:
             return result;
         }
 
-        const SaveOutputsResult saveResult = m_ioRuntime.saveCapturedOutputs(m_outputSaves, result);
+        const std::vector<OutputSaveBinding>* outputSaves = &m_outputSaves;
+        std::vector<OutputSaveBinding> combinedOutputSaves;
+        if (!request.fileOutputs.empty()) {
+            combinedOutputSaves = m_outputSaves;
+            combinedOutputSaves.reserve(combinedOutputSaves.size() + request.fileOutputs.size());
+            for (const FileOutputBinding& fileOutput : request.fileOutputs) {
+                combinedOutputSaves.push_back(OutputSaveBinding { fileOutput });
+            }
+            outputSaves = &combinedOutputSaves;
+        }
+
+        const SaveOutputsResult saveResult = m_ioRuntime.saveCapturedOutputs(*outputSaves, result);
         if (!saveResult.success) {
             result.success      = false;
             result.errorMessage = saveResult.errorMessage.empty() ? "captured output save failed"

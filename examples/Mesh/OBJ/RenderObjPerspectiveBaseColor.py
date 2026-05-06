@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
+import os
 
 import numpy as np
 import rawgl
@@ -10,8 +11,14 @@ asset_dir = Path(__file__).resolve().parent
 obj_path = asset_dir / "sketchfab_2021_08_02_12_42_08.obj"
 bunny_base_color_path = asset_dir / "skate_bunny_basecolor.jpg"
 skateboard_base_color_path = asset_dir / "skateboard_basecolor.jpg"
-output_path = asset_dir / "RenderObjPerspectiveBaseColor_python.jpg"
 image_size = 640
+
+
+def output_path() -> Path:
+    override = os.environ.get("RAWGL_OBJ_PERSPECTIVE_OUTPUT_PATH")
+    path = Path(override) if override else asset_dir / "RenderObjPerspectiveBaseColor_python.jpg"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def normalize_vector(value: np.ndarray) -> np.ndarray:
@@ -180,7 +187,7 @@ preview = np.ascontiguousarray(np.flipud(preview))
 
 rawgl.io.save_image(
     preview,
-    output_path,
+    output_path(),
     bits=8,
     alpha_channel=3,
     attributes={
@@ -190,4 +197,4 @@ rawgl.io.save_image(
 
 print(f"OBJ bounds min={min_corner.tolist()} max={max_corner.tolist()}")
 print(f"OBJ material IDs: Bunny={bunny_material_id} Skateboard={skateboard_material_id}")
-print(f"Rendered preview: {output_path.resolve()}")
+print(f"Rendered preview: {output_path().resolve()}")

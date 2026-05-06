@@ -40,6 +40,11 @@ static const ParsedOptionSpec RAWGL_OPTION_SPECS[] = {
     { "cull", '\0', ParsedOptionMode::multi },
     { "pass_mesh", 'M', ParsedOptionMode::multi },
     { "in", 'i', ParsedOptionMode::multi },
+    { "in_backend", '\0', ParsedOptionMode::single },
+    { "in_jpeg_color_transform", '\0', ParsedOptionMode::single },
+    { "in_png_expand_transparency", '\0', ParsedOptionMode::single },
+    { "in_tiff_directory_index", '\0', ParsedOptionMode::single },
+    { "in_exr_channels", '\0', ParsedOptionMode::single },
     { "atomic", 'B', ParsedOptionMode::multi },
     { "in_attr", 't', ParsedOptionMode::multi },
     { "out", 'o', ParsedOptionMode::multi },
@@ -48,6 +53,31 @@ static const ParsedOptionSpec RAWGL_OPTION_SPECS[] = {
     { "out_channels", 'n', ParsedOptionMode::single },
     { "out_alpha_channel", 'a', ParsedOptionMode::single },
     { "out_bits", 'b', ParsedOptionMode::single },
+    { "out_jpeg_quality", '\0', ParsedOptionMode::single },
+    { "out_jpeg_progressive", '\0', ParsedOptionMode::single },
+    { "out_jpeg_optimize", '\0', ParsedOptionMode::single },
+    { "out_jpeg_subsampling", '\0', ParsedOptionMode::single },
+    { "out_png_compression", '\0', ParsedOptionMode::single },
+    { "out_png_interlace", '\0', ParsedOptionMode::single },
+    { "out_tiff_compression", '\0', ParsedOptionMode::single },
+    { "out_tiff_predictor", '\0', ParsedOptionMode::single },
+    { "out_tiff_layout", '\0', ParsedOptionMode::single },
+    { "out_tiff_tile_size", '\0', ParsedOptionMode::multi },
+    { "out_tiff_rows_per_strip", '\0', ParsedOptionMode::single },
+    { "out_tiff_big_tiff", '\0', ParsedOptionMode::single },
+    { "out_tiff_unassociated_alpha", '\0', ParsedOptionMode::single },
+    { "out_tiff_jpeg_quality", '\0', ParsedOptionMode::single },
+    { "out_tiff_deflate_level", '\0', ParsedOptionMode::single },
+    { "out_tiff_zstd_level", '\0', ParsedOptionMode::single },
+    { "out_tiff_lzma_preset", '\0', ParsedOptionMode::single },
+    { "out_tiff_webp_level", '\0', ParsedOptionMode::single },
+    { "out_tiff_webp_lossless", '\0', ParsedOptionMode::single },
+    { "out_tiff_webp_lossless_exact", '\0', ParsedOptionMode::single },
+    { "out_exr_compression", '\0', ParsedOptionMode::single },
+    { "out_exr_layout", '\0', ParsedOptionMode::single },
+    { "out_exr_tile_size", '\0', ParsedOptionMode::multi },
+    { "out_exr_line_order", '\0', ParsedOptionMode::single },
+    { "out_exr_dwa_level", '\0', ParsedOptionMode::single },
 };
 
 static const ParsedOptionSpec*
@@ -108,6 +138,11 @@ build_help_text()
            << "  --cull <name value>...\n"
            << "  --pass_mesh, -M <quad|mesh> ...\n"
            << "  --in, -i <uniform> <value...>\n"
+           << "  --in_backend <auto|native|native_only|openimageio|openimageio_only>\n"
+           << "  --in_jpeg_color_transform <auto|rgb|grayscale>\n"
+           << "  --in_png_expand_transparency <true|false>\n"
+           << "  --in_tiff_directory_index <index>\n"
+           << "  --in_exr_channels <auto|luminance|rgb|rgba|all>\n"
            << "  --atomic, -B <mode> <args...>\n"
            << "  --in_attr, -t <name> <value>\n"
            << "  --out, -o <name> <path>\n"
@@ -115,7 +150,32 @@ build_help_text()
            << "  --out_attr, -r <name> <value>\n"
            << "  --out_channels, -n <count>\n"
            << "  --out_alpha_channel, -a <index>\n"
-           << "  --out_bits, -b <bits>\n\n"
+           << "  --out_bits, -b <bits>\n"
+           << "  --out_jpeg_quality <1-100>\n"
+           << "  --out_jpeg_progressive <true|false>\n"
+           << "  --out_jpeg_optimize <true|false>\n"
+           << "  --out_jpeg_subsampling <default|444|422|420|440|411>\n"
+           << "  --out_png_compression <0-9>\n"
+           << "  --out_png_interlace <true|false>\n"
+           << "  --out_tiff_compression <none|lzw|packbits|deflate|jpeg|zstd|...>\n"
+           << "  --out_tiff_predictor <none|horizontal|float>\n"
+           << "  --out_tiff_layout <strips|tiled>\n"
+           << "  --out_tiff_tile_size <width> [height]\n"
+           << "  --out_tiff_rows_per_strip <rows>\n"
+           << "  --out_tiff_big_tiff <true|false>\n"
+           << "  --out_tiff_unassociated_alpha <true|false>\n"
+           << "  --out_tiff_jpeg_quality <1-100>\n"
+           << "  --out_tiff_deflate_level <1-9>\n"
+           << "  --out_tiff_zstd_level <1-22>\n"
+           << "  --out_tiff_lzma_preset <0-9>\n"
+           << "  --out_tiff_webp_level <0-100>\n"
+           << "  --out_tiff_webp_lossless <true|false>\n"
+           << "  --out_tiff_webp_lossless_exact <true|false>\n"
+           << "  --out_exr_compression <none|rle|zips|zip|piz|dwaa|dwab|...>\n"
+           << "  --out_exr_layout <scanlines|tiled>\n"
+           << "  --out_exr_tile_size <width> [height]\n"
+           << "  --out_exr_line_order <increasing_y|decreasing_y|random_y>\n"
+           << "  --out_exr_dwa_level <float>\n\n"
            << "Supported texture attributes:\n"
            << GetTextureAttributeHelpText() << '\n'
            << "Supported mesh attributes:\n"

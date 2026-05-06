@@ -139,10 +139,12 @@ verify_io_batch_path()
     fragmentModule.glslText = R"(#version 450 core
 layout(location = 0) in vec2 UV;
 layout(location = 0) out vec4 out_color;
+layout(location = 1) out vec4 out_tint;
 uniform sampler2D u_src0;
 void main()
 {
     out_color = texture(u_src0, UV);
+    out_tint = vec4(1.0, 0.5, 0.25, 1.0);
 }
 )";
     fragmentModule.debugLabel = "rawgl_batch_smoke_fragment";
@@ -188,6 +190,115 @@ void main()
     if (progress.submittedJobs != 1u || progress.completedJobs != 1u || progress.failedJobs != 0u
         || progress.cancelledJobs != 0u || progress.inFlightJobs != 0u) {
         std::cerr << "Unexpected batch IO progress snapshot." << std::endl;
+        return false;
+    }
+
+    const std::filesystem::path dynamicOutputPathA =
+        std::filesystem::absolute("tests/outputs/rawgl_batch_dynamic_a.png");
+    const std::filesystem::path dynamicOutputPathB =
+        std::filesystem::absolute("tests/outputs/rawgl_batch_dynamic_b.png");
+    std::filesystem::remove(dynamicOutputPathA, removeError);
+    std::filesystem::remove(dynamicOutputPathB, removeError);
+
+    rawgl::Workflow dynamicWorkflow = workflow;
+    dynamicWorkflow.passes[0].outputs.push_back(rawgl::CapturedOutput("out_color", "rgba32f", 4, 3, 16));
+
+    rawgl::batch::BatchPrepareResult dynamicPrepare = runner.prepare(dynamicWorkflow);
+    if (!dynamicPrepare.success || !dynamicPrepare.workflow) {
+        std::cerr << "Dynamic batch IO prepare failed: " << dynamicPrepare.errorMessage << std::endl;
+        return false;
+    }
+
+    rawgl::batch::BatchSubmitRequest firstDynamicRequest;
+    firstDynamicRequest.fileOutputs.push_back(
+        rawgl::io::FileOutput(0, "out_color", dynamicOutputPathA.string(), "rgba32f", 4, 3, 16));
+
+    rawgl::batch::BatchSubmitRequest secondDynamicRequest;
+    secondDynamicRequest.fileOutputs.push_back(
+        rawgl::io::FileOutput(0, "out_color", dynamicOutputPathB.string(), "rgba32f", 4, 3, 16));
+
+    rawgl::batch::BatchJobHandle firstDynamicHandle =
+        runner.submit(*dynamicPrepare.workflow, firstDynamicRequest);
+    rawgl::batch::BatchJobHandle secondDynamicHandle =
+        runner.submit(*dynamicPrepare.workflow, secondDynamicRequest);
+
+    rawgl::batch::BatchResult firstDynamicResult = firstDynamicHandle.wait();
+    rawgl::batch::BatchResult secondDynamicResult = secondDynamicHandle.wait();
+    if (!firstDynamicResult.runResult.success || !secondDynamicResult.runResult.success) {
+        std::cerr << "Dynamic batch IO outputs failed: " << firstDynamicResult.runResult.errorMessage << " / "
+                  << secondDynamicResult.runResult.errorMessage << std::endl;
+        return false;
+    }
+    if (!std::filesystem::exists(dynamicOutputPathA) || !std::filesystem::exists(dynamicOutputPathB)) {
+        std::cerr << "Dynamic batch IO run did not write per-run output images." << std::endl;
+        return false;
+    }
+
+    const std::filesystem::path multiOutputPathA =
+        std::filesystem::absolute("tests/outputs/rawgl_batch_multi_a.png");
+    const std::filesystem::path multiOutputPathB =
+        std::filesystem::absolute("tests/outputs/rawgl_batch_multi_b.png");
+    std::filesystem::remove(multiOutputPathA, removeError);
+    std::filesystem::remove(multiOutputPathB, removeError);
+
+    rawgl::Workflow multiOutputWorkflow = workflow;
+    multiOutputWorkflow.passes[0].outputs.push_back(rawgl::CapturedOutput("out_color", "rgba32f", 4, 3, 16));
+    multiOutputWorkflow.passes[0].outputs.push_back(rawgl::CapturedOutput("out_tint", "rgba32f", 4, 3, 16));
+
+    rawgl::batch::BatchPrepareResult multiOutputPrepare = runner.prepare(multiOutputWorkflow);
+    if (!multiOutputPrepare.success || !multiOutputPrepare.workflow) {
+        std::cerr << "Multi-output batch IO prepare failed: " << multiOutputPrepare.errorMessage << std::endl;
+        return false;
+    }
+
+    rawgl::batch::BatchSubmitRequest multiOutputRequest;
+    multiOutputRequest.fileOutputs.push_back(
+        rawgl::io::FileOutput(0, "out_color", multiOutputPathA.string(), "rgba32f", 4, 3, 16));
+    multiOutputRequest.fileOutputs.push_back(
+        rawgl::io::FileOutput(0, "out_tint", multiOutputPathB.string(), "rgba32f", 4, 3, 16));
+
+    rawgl::batch::BatchResult multiOutputResult =
+        runner.submit(*multiOutputPrepare.workflow, multiOutputRequest).wait();
+    if (!multiOutputResult.runResult.success) {
+        std::cerr << "Multi-output batch IO run failed: " << multiOutputResult.runResult.errorMessage << std::endl;
+        return false;
+    }
+    if (!std::filesystem::exists(multiOutputPathA) || !std::filesystem::exists(multiOutputPathB)) {
+        std::cerr << "Multi-output batch IO run did not write both per-run output images." << std::endl;
+        return false;
+    }
+
+    const std::filesystem::path missingCapturePath =
+        std::filesystem::absolute("tests/outputs/rawgl_batch_missing_capture.png");
+    std::filesystem::remove(missingCapturePath, removeError);
+
+    rawgl::batch::BatchSubmitRequest missingCaptureRequest;
+    missingCaptureRequest.fileOutputs.push_back(
+        rawgl::io::FileOutput(0, "missing_output", missingCapturePath.string(), "rgba32f", 4, 3, 16));
+
+    rawgl::batch::BatchResult missingCaptureResult =
+        runner.submit(*multiOutputPrepare.workflow, missingCaptureRequest).wait();
+    if (missingCaptureResult.runResult.success
+        || missingCaptureResult.runResult.errorMessage.find("captured output not found") == std::string::npos) {
+        std::cerr << "Missing batch output capture did not fail as expected: "
+                  << missingCaptureResult.runResult.errorMessage << std::endl;
+        return false;
+    }
+
+    rawgl::Session coreOnlySession;
+    rawgl::batch::BatchRunner coreOnlyRunner(coreOnlySession);
+    rawgl::batch::BatchPrepareResult coreOnlyPrepare = coreOnlyRunner.prepare(multiOutputWorkflow);
+    if (!coreOnlyPrepare.success || !coreOnlyPrepare.workflow) {
+        std::cerr << "Core-only batch prepare failed: " << coreOnlyPrepare.errorMessage << std::endl;
+        return false;
+    }
+
+    rawgl::batch::BatchResult coreOnlyOutputResult =
+        coreOnlyRunner.submit(*coreOnlyPrepare.workflow, multiOutputRequest).wait();
+    if (coreOnlyOutputResult.runResult.success
+        || coreOnlyOutputResult.runResult.errorMessage.find("require an IO runtime") == std::string::npos) {
+        std::cerr << "Core-only batch per-run output did not fail as expected: "
+                  << coreOnlyOutputResult.runResult.errorMessage << std::endl;
         return false;
     }
 

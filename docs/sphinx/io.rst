@@ -17,6 +17,7 @@ What it owns
 - materializing file-backed workflow inputs into host-memory payloads
 - materializing file-backed run-time overrides into host-memory overrides
 - saving captured outputs after execution
+- saving per-run output targets from prepared IO workflows
 
 Current split:
 
@@ -78,8 +79,9 @@ Native codec options
 --------------------
 
 Use typed options for direct C++ and Python loads/saves. String attributes
-remain supported for CLI options, legacy scripts, and backend-specific escape
-hatches. If typed options and string attributes set the same native option, the
+remain supported for legacy scripts and backend-specific escape hatches. The
+CLI exposes named options for the same native controls where RawGL has a typed
+field. If typed options and string attributes set the same native option, the
 typed option wins.
 
 Typed load example:
@@ -237,18 +239,21 @@ OpenEXR writes half and 32-bit float output. Tile dimensions are valid only for
 tiled output. DWA compression level is valid only with DWAA or DWAB
 compression.
 
-Example output attributes:
+Example CLI output options:
 
 .. code-block:: bat
 
    RawGL.exe ^
      --out OutColor output.tif ^
      --out_bits 16 ^
-     --out_attr tiff:compression zip ^
-     --out_attr tiff:zip_level 6 ^
-     --out_attr tiff:layout tiled ^
-     --out_attr tiff:tile_width 256 ^
-     --out_attr tiff:tile_height 256
+     --out_tiff_compression deflate ^
+     --out_tiff_deflate_level 6 ^
+     --out_tiff_layout tiled ^
+     --out_tiff_tile_size 256 256
+
+Named CLI options are available for native JPEG, PNG, TIFF, and OpenEXR read
+and write controls. Use ``--in_attr`` and ``--out_attr`` only when the setting
+does not have a named CLI option yet.
 
 .. code-block:: python
 
@@ -290,7 +295,17 @@ Typical file-backed C++ path
        // prepared.errorMessage
    }
 
-   rawgl::RunResult result = prepared.workflow->run(rawgl::io::RunRequest{});
+   rawgl::io::RunRequest request;
+   request.fileOutputs.push_back(
+       rawgl::io::FileOutput(0, "out_color", "frame_000.png"));
+
+   rawgl::RunResult result = prepared.workflow->run(request);
+
+Per-run file outputs are useful when one prepared workflow writes many frames
+or batch entries. The named output must be captured by the prepared workflow.
+This happens automatically for outputs passed through ``file_outputs`` at
+prepare time. If you provide only per-run outputs, add a matching captured
+``OutputBinding`` to the workflow itself.
 
 Direct file helpers
 -------------------

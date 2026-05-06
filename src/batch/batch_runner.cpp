@@ -132,6 +132,18 @@ clone_batch_submit_request(const BatchSubmitRequest& request)
     return result;
 }
 
+static std::vector<io::OutputSaveBinding>
+make_batch_output_saves(const std::vector<io::OutputSaveBinding>& preparedOutputSaves,
+                        const std::vector<io::FileOutputBinding>& requestFileOutputs)
+{
+    std::vector<io::OutputSaveBinding> result = preparedOutputSaves;
+    result.reserve(result.size() + requestFileOutputs.size());
+    for (const io::FileOutputBinding& fileOutput : requestFileOutputs) {
+        result.push_back(io::OutputSaveBinding { fileOutput });
+    }
+    return result;
+}
+
 }  // namespace
 
 struct BatchPreparedWorkflow::State {
@@ -466,8 +478,30 @@ struct BatchRunner::State {
             result.submitIndex = executeTask.submitIndex;
             result.runResult = executeTask.workflow->workflow->run(effectiveSettings);
 
-            if (!result.runResult.success || !executeTask.workflow->ioRuntime
-                || executeTask.workflow->outputSaves.empty()) {
+            if (!result.runResult.success) {
+                finish_result(executeTask.handle, std::move(result));
+                task = GpuTask {};
+                continue;
+            }
+
+            if (!executeTask.workflow->ioRuntime) {
+                if (!executeTask.request.fileOutputs.empty()) {
+                    result.runResult.success = false;
+                    result.runResult.errorMessage = "batch per-run file outputs require an IO runtime";
+                }
+                finish_result(executeTask.handle, std::move(result));
+                task = GpuTask {};
+                continue;
+            }
+
+            std::vector<io::OutputSaveBinding> combinedOutputSaves;
+            const std::vector<io::OutputSaveBinding>* outputSaves = &executeTask.workflow->outputSaves;
+            if (!executeTask.request.fileOutputs.empty()) {
+                combinedOutputSaves =
+                    make_batch_output_saves(executeTask.workflow->outputSaves, executeTask.request.fileOutputs);
+                outputSaves = &combinedOutputSaves;
+            }
+            if (outputSaves->empty()) {
                 finish_result(executeTask.handle, std::move(result));
                 task = GpuTask {};
                 continue;
@@ -475,8 +509,7 @@ struct BatchRunner::State {
 
             if (saveWorkers.empty()) {
                 const io::SaveOutputsResult saveResult =
-                    executeTask.workflow->ioRuntime->saveCapturedOutputs(executeTask.workflow->outputSaves,
-                                                                        result.runResult);
+                    executeTask.workflow->ioRuntime->saveCapturedOutputs(*outputSaves, result.runResult);
                 if (!saveResult.success) {
                     result.runResult.success = false;
                     result.runResult.errorMessage = saveResult.errorMessage.empty()
@@ -491,7 +524,11 @@ struct BatchRunner::State {
             SaveTask saveTask;
             saveTask.submitIndex = executeTask.submitIndex;
             saveTask.runResult = std::move(result.runResult);
-            saveTask.outputSaves = executeTask.workflow->outputSaves;
+            if (!executeTask.request.fileOutputs.empty()) {
+                saveTask.outputSaves = std::move(combinedOutputSaves);
+            } else {
+                saveTask.outputSaves = executeTask.workflow->outputSaves;
+            }
             saveTask.ioRuntime = executeTask.workflow->ioRuntime;
             saveTask.handle = executeTask.handle;
             saveTask.cancellation = executeTask.cancellation;

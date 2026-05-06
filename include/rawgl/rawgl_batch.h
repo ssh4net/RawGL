@@ -41,8 +41,12 @@ struct BatchProgress {
 
 /// Per-submit run payload for a prepared batch workflow.
 struct BatchSubmitRequest {
+    /// In-memory per-run settings and overrides.
     RunSettings settings;
+    /// File-backed per-run input overrides. Requires a batch runner constructed with `IoRuntime`.
     std::vector<io::FileInputOverride> fileInputs;
+    /// File-backed per-run output targets. The referenced workflow outputs must be captured.
+    std::vector<io::FileOutputBinding> fileOutputs;
 };
 
 /// Result of one submitted batch job.

@@ -438,7 +438,8 @@ NB_MODULE(_rawgl, module)
     nb::class_<rawgl::io::RunRequest>(module, "IoRunRequest")
         .def(nb::init<>())
         .def_rw("settings", &rawgl::io::RunRequest::settings)
-        .def_rw("file_inputs", &rawgl::io::RunRequest::fileInputs);
+        .def_rw("file_inputs", &rawgl::io::RunRequest::fileInputs)
+        .def_rw("file_outputs", &rawgl::io::RunRequest::fileOutputs);
 
     nb::class_<rawgl::PreparedWorkflow>(module, "PreparedWorkflow")
         .def("run", &rawgl::PreparedWorkflow::run, nb::arg("settings") = rawgl::RunSettings {});
@@ -988,7 +989,8 @@ NB_MODULE(_rawgl, module)
     nb::class_<rawgl::batch::BatchSubmitRequest>(module, "BatchSubmitRequest")
         .def(nb::init<>())
         .def_rw("settings", &rawgl::batch::BatchSubmitRequest::settings)
-        .def_rw("file_inputs", &rawgl::batch::BatchSubmitRequest::fileInputs);
+        .def_rw("file_inputs", &rawgl::batch::BatchSubmitRequest::fileInputs)
+        .def_rw("file_outputs", &rawgl::batch::BatchSubmitRequest::fileOutputs);
 
     nb::class_<rawgl::batch::BatchResult>(module, "BatchResult")
         .def(nb::init<>())

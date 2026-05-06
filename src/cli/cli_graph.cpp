@@ -9,6 +9,7 @@
 #include "sequence.h"
 #include "path_utils.h"
 
+#include <cctype>
 #include <stdexcept>
 
 namespace rawgl {
@@ -134,6 +135,283 @@ parse_positive_int(const std::string& text, const char* context)
         throw std::runtime_error(std::string(context) + ": value must be > 0");
     }
     return value;
+}
+
+static uint32_t
+parse_non_negative_u32(const std::string& text, const char* context)
+{
+    const int32_t value = parse_numeric_value<int32_t>(text, context);
+    if (value < 0) {
+        throw std::runtime_error(std::string(context) + ": value must be a non-negative integer");
+    }
+    return static_cast<uint32_t>(value);
+}
+
+static uint32_t
+parse_positive_u32(const std::string& text, const char* context)
+{
+    const uint32_t value = parse_non_negative_u32(text, context);
+    if (value == 0u) {
+        throw std::runtime_error(std::string(context) + ": value must be > 0");
+    }
+    return value;
+}
+
+static int
+parse_bounded_int(const std::string& text, const char* context, const int minValue, const int maxValue)
+{
+    const int value = parse_numeric_value<int32_t>(text, context);
+    if (value < minValue || value > maxValue) {
+        throw std::runtime_error(std::string(context) + ": value is outside the supported range");
+    }
+    return value;
+}
+
+static std::string
+normalize_option_value(const std::string& text)
+{
+    std::string result;
+    result.reserve(text.size());
+    for (const char ch : text) {
+        result.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+    return result;
+}
+
+static bool
+parse_bool_value(const std::string& text, const char* context)
+{
+    const std::string value = normalize_option_value(text);
+    if (value == "true" || value == "1" || value == "yes" || value == "on") {
+        return true;
+    }
+    if (value == "false" || value == "0" || value == "no" || value == "off") {
+        return false;
+    }
+    throw std::runtime_error(std::string(context) + ": expected true or false");
+}
+
+static io::ImageLoadBackendPolicy
+parse_image_load_backend_policy(const std::string& text, const char* context)
+{
+    const std::string value = normalize_option_value(text);
+    if (value == "auto") {
+        return io::ImageLoadBackendPolicy::Auto;
+    }
+    if (value == "native" || value == "native_only") {
+        return io::ImageLoadBackendPolicy::NativeOnly;
+    }
+    if (value == "openimageio" || value == "openimageio_only" || value == "oiio" || value == "oiio_only") {
+        return io::ImageLoadBackendPolicy::OpenImageIoOnly;
+    }
+    throw std::runtime_error(std::string(context) + ": unsupported load backend: " + text);
+}
+
+static io::JpegLoadColorTransform
+parse_jpeg_load_color_transform(const std::string& text, const char* context)
+{
+    const std::string value = normalize_option_value(text);
+    if (value == "auto") {
+        return io::JpegLoadColorTransform::Auto;
+    }
+    if (value == "rgb") {
+        return io::JpegLoadColorTransform::Rgb;
+    }
+    if (value == "grayscale" || value == "gray") {
+        return io::JpegLoadColorTransform::Grayscale;
+    }
+    throw std::runtime_error(std::string(context) + ": unsupported JPEG color transform: " + text);
+}
+
+static io::OpenExrChannelSelection
+parse_openexr_channel_selection(const std::string& text, const char* context)
+{
+    const std::string value = normalize_option_value(text);
+    if (value == "auto") {
+        return io::OpenExrChannelSelection::Auto;
+    }
+    if (value == "luminance" || value == "luma") {
+        return io::OpenExrChannelSelection::Luminance;
+    }
+    if (value == "rgb") {
+        return io::OpenExrChannelSelection::Rgb;
+    }
+    if (value == "rgba") {
+        return io::OpenExrChannelSelection::Rgba;
+    }
+    if (value == "all") {
+        return io::OpenExrChannelSelection::All;
+    }
+    throw std::runtime_error(std::string(context) + ": unsupported OpenEXR channel selection: " + text);
+}
+
+static io::JpegChromaSubsampling
+parse_jpeg_chroma_subsampling(const std::string& text, const char* context)
+{
+    const std::string value = normalize_option_value(text);
+    if (value == "default") {
+        return io::JpegChromaSubsampling::Default;
+    }
+    if (value == "444" || value == "4:4:4") {
+        return io::JpegChromaSubsampling::S444;
+    }
+    if (value == "422" || value == "4:2:2") {
+        return io::JpegChromaSubsampling::S422;
+    }
+    if (value == "420" || value == "4:2:0") {
+        return io::JpegChromaSubsampling::S420;
+    }
+    if (value == "440" || value == "4:4:0") {
+        return io::JpegChromaSubsampling::S440;
+    }
+    if (value == "411" || value == "4:1:1") {
+        return io::JpegChromaSubsampling::S411;
+    }
+    throw std::runtime_error(std::string(context) + ": unsupported JPEG subsampling: " + text);
+}
+
+static io::TiffCompressionMode
+parse_tiff_compression_mode(const std::string& text, const char* context)
+{
+    const std::string value = normalize_option_value(text);
+    if (value == "none") {
+        return io::TiffCompressionMode::None;
+    }
+    if (value == "lzw") {
+        return io::TiffCompressionMode::Lzw;
+    }
+    if (value == "packbits") {
+        return io::TiffCompressionMode::PackBits;
+    }
+    if (value == "zip" || value == "deflate") {
+        return io::TiffCompressionMode::Deflate;
+    }
+    if (value == "adobe_deflate") {
+        return io::TiffCompressionMode::AdobeDeflate;
+    }
+    if (value == "jpeg" || value == "jpg") {
+        return io::TiffCompressionMode::Jpeg;
+    }
+    if (value == "lzma") {
+        return io::TiffCompressionMode::Lzma;
+    }
+    if (value == "zstd") {
+        return io::TiffCompressionMode::Zstd;
+    }
+    if (value == "webp") {
+        return io::TiffCompressionMode::Webp;
+    }
+    if (value == "jxl") {
+        return io::TiffCompressionMode::Jxl;
+    }
+    if (value == "jxl_dng") {
+        return io::TiffCompressionMode::JxlDng;
+    }
+    if (value == "lerc") {
+        return io::TiffCompressionMode::Lerc;
+    }
+    throw std::runtime_error(std::string(context) + ": unsupported TIFF compression: " + text);
+}
+
+static io::TiffPredictorMode
+parse_tiff_predictor_mode(const std::string& text, const char* context)
+{
+    const std::string value = normalize_option_value(text);
+    if (value == "none" || value == "1") {
+        return io::TiffPredictorMode::None;
+    }
+    if (value == "horizontal" || value == "2") {
+        return io::TiffPredictorMode::Horizontal;
+    }
+    if (value == "float" || value == "3") {
+        return io::TiffPredictorMode::Float;
+    }
+    throw std::runtime_error(std::string(context) + ": unsupported TIFF predictor: " + text);
+}
+
+static io::TiffStorageLayout
+parse_tiff_storage_layout(const std::string& text, const char* context)
+{
+    const std::string value = normalize_option_value(text);
+    if (value == "strips" || value == "strip") {
+        return io::TiffStorageLayout::Strips;
+    }
+    if (value == "tiled" || value == "tile") {
+        return io::TiffStorageLayout::Tiled;
+    }
+    throw std::runtime_error(std::string(context) + ": unsupported TIFF layout: " + text);
+}
+
+static io::OpenExrCompressionMode
+parse_openexr_compression_mode(const std::string& text, const char* context)
+{
+    const std::string value = normalize_option_value(text);
+    if (value == "none") {
+        return io::OpenExrCompressionMode::None;
+    }
+    if (value == "rle") {
+        return io::OpenExrCompressionMode::Rle;
+    }
+    if (value == "zips") {
+        return io::OpenExrCompressionMode::Zips;
+    }
+    if (value == "zip") {
+        return io::OpenExrCompressionMode::Zip;
+    }
+    if (value == "piz") {
+        return io::OpenExrCompressionMode::Piz;
+    }
+    if (value == "pxr24") {
+        return io::OpenExrCompressionMode::Pxr24;
+    }
+    if (value == "b44") {
+        return io::OpenExrCompressionMode::B44;
+    }
+    if (value == "b44a") {
+        return io::OpenExrCompressionMode::B44A;
+    }
+    if (value == "dwaa") {
+        return io::OpenExrCompressionMode::Dwaa;
+    }
+    if (value == "dwab") {
+        return io::OpenExrCompressionMode::Dwab;
+    }
+    if (value == "htj2k256") {
+        return io::OpenExrCompressionMode::Htj2k256;
+    }
+    if (value == "htj2k32") {
+        return io::OpenExrCompressionMode::Htj2k32;
+    }
+    throw std::runtime_error(std::string(context) + ": unsupported OpenEXR compression: " + text);
+}
+
+static io::OpenExrStorageLayout
+parse_openexr_storage_layout(const std::string& text, const char* context)
+{
+    const std::string value = normalize_option_value(text);
+    if (value == "scanlines" || value == "scanline") {
+        return io::OpenExrStorageLayout::Scanlines;
+    }
+    if (value == "tiled" || value == "tile") {
+        return io::OpenExrStorageLayout::Tiled;
+    }
+    throw std::runtime_error(std::string(context) + ": unsupported OpenEXR layout: " + text);
+}
+
+static io::OpenExrLineOrder
+parse_openexr_line_order(const std::string& text, const char* context)
+{
+    const std::string value = normalize_option_value(text);
+    if (value == "increasing_y" || value == "increasing") {
+        return io::OpenExrLineOrder::IncreasingY;
+    }
+    if (value == "decreasing_y" || value == "decreasing") {
+        return io::OpenExrLineOrder::DecreasingY;
+    }
+    if (value == "random_y" || value == "random") {
+        return io::OpenExrLineOrder::RandomY;
+    }
+    throw std::runtime_error(std::string(context) + ": unsupported OpenEXR line order: " + text);
 }
 
 static const ShaderResourceInfo*
@@ -434,6 +712,301 @@ translate_input_attribute_option(const CommandLineParsedOption& option, GraphTra
     state.currentInput->attributes.push_back(Attribute { option.value[0], option.value[1] });
 }
 
+static bool
+is_input_codec_option(const std::string& optionName)
+{
+    return optionName == "in_backend" || optionName == "in_jpeg_color_transform"
+        || optionName == "in_png_expand_transparency" || optionName == "in_tiff_directory_index"
+        || optionName == "in_exr_channels";
+}
+
+static bool
+is_output_codec_option(const std::string& optionName)
+{
+    return optionName == "out_jpeg_quality" || optionName == "out_jpeg_progressive"
+        || optionName == "out_jpeg_optimize" || optionName == "out_jpeg_subsampling"
+        || optionName == "out_png_compression" || optionName == "out_png_interlace"
+        || optionName == "out_tiff_compression" || optionName == "out_tiff_predictor"
+        || optionName == "out_tiff_layout" || optionName == "out_tiff_tile_size"
+        || optionName == "out_tiff_rows_per_strip" || optionName == "out_tiff_big_tiff"
+        || optionName == "out_tiff_unassociated_alpha" || optionName == "out_tiff_jpeg_quality"
+        || optionName == "out_tiff_deflate_level" || optionName == "out_tiff_zstd_level"
+        || optionName == "out_tiff_lzma_preset" || optionName == "out_tiff_webp_level"
+        || optionName == "out_tiff_webp_lossless" || optionName == "out_tiff_webp_lossless_exact"
+        || optionName == "out_exr_compression" || optionName == "out_exr_layout"
+        || optionName == "out_exr_tile_size" || optionName == "out_exr_line_order"
+        || optionName == "out_exr_dwa_level";
+}
+
+static void
+translate_input_codec_option(const CommandLineParsedOption& option, GraphTranslationState& state)
+{
+    if (!state.currentFileInput) {
+        throw std::runtime_error(option.string_key + ": no preceding file input declaration.");
+    }
+    if (option.value.empty()) {
+        throw std::runtime_error(option.string_key + ": missing value.");
+    }
+
+    io::ImageCodecLoadOptions& codecOptions = state.currentFileInput->codecOptions;
+    if (option.string_key == "in_backend") {
+        codecOptions.hasBackendPolicy = true;
+        codecOptions.backendPolicy = parse_image_load_backend_policy(option.value[0], "in_backend");
+        return;
+    }
+
+    if (option.string_key == "in_jpeg_color_transform") {
+        codecOptions.hasJpeg = true;
+        codecOptions.jpeg.hasColorTransform = true;
+        codecOptions.jpeg.colorTransform =
+            parse_jpeg_load_color_transform(option.value[0], "in_jpeg_color_transform");
+        return;
+    }
+
+    if (option.string_key == "in_png_expand_transparency") {
+        codecOptions.hasPng = true;
+        codecOptions.png.hasExpandTransparency = true;
+        codecOptions.png.expandTransparency = parse_bool_value(option.value[0], "in_png_expand_transparency");
+        return;
+    }
+
+    if (option.string_key == "in_tiff_directory_index") {
+        codecOptions.hasTiff = true;
+        codecOptions.tiff.hasDirectoryIndex = true;
+        codecOptions.tiff.directoryIndex = parse_non_negative_u32(option.value[0], "in_tiff_directory_index");
+        return;
+    }
+
+    if (option.string_key == "in_exr_channels") {
+        codecOptions.hasOpenExr = true;
+        codecOptions.openExr.hasChannelSelection = true;
+        codecOptions.openExr.channelSelection =
+            parse_openexr_channel_selection(option.value[0], "in_exr_channels");
+        return;
+    }
+}
+
+static void
+apply_tiff_tile_size_option(const CommandLineParsedOption& option, io::TiffSaveOptions& options)
+{
+    if (option.value.empty() || option.value.size() > 2u) {
+        throw std::runtime_error("out_tiff_tile_size: must have 1 or 2 parameters.");
+    }
+
+    options.hasTileWidth = true;
+    options.tileWidth = parse_positive_u32(option.value[0], "out_tiff_tile_size");
+    options.hasTileHeight = true;
+    options.tileHeight = (option.value.size() == 2u)
+        ? parse_positive_u32(option.value[1], "out_tiff_tile_size")
+        : options.tileWidth;
+}
+
+static void
+apply_openexr_tile_size_option(const CommandLineParsedOption& option, io::OpenExrSaveOptions& options)
+{
+    if (option.value.empty() || option.value.size() > 2u) {
+        throw std::runtime_error("out_exr_tile_size: must have 1 or 2 parameters.");
+    }
+
+    options.hasTileWidth = true;
+    options.tileWidth = parse_positive_u32(option.value[0], "out_exr_tile_size");
+    options.hasTileHeight = true;
+    options.tileHeight = (option.value.size() == 2u)
+        ? parse_positive_u32(option.value[1], "out_exr_tile_size")
+        : options.tileWidth;
+}
+
+static void
+translate_output_codec_option(const CommandLineParsedOption& option, GraphTranslationState& state)
+{
+    if (!state.currentOutput) {
+        throw std::runtime_error(option.string_key + ": no preceding output declaration.");
+    }
+    if (option.value.empty()) {
+        throw std::runtime_error(option.string_key + ": missing value.");
+    }
+
+    io::ImageCodecSaveOptions& codecOptions = state.currentOutput->codecOptions;
+    if (option.string_key == "out_jpeg_quality") {
+        codecOptions.hasJpeg = true;
+        codecOptions.jpeg.hasQuality = true;
+        codecOptions.jpeg.quality = parse_bounded_int(option.value[0], "out_jpeg_quality", 1, 100);
+        return;
+    }
+
+    if (option.string_key == "out_jpeg_progressive") {
+        codecOptions.hasJpeg = true;
+        codecOptions.jpeg.hasProgressive = true;
+        codecOptions.jpeg.progressive = parse_bool_value(option.value[0], "out_jpeg_progressive");
+        return;
+    }
+
+    if (option.string_key == "out_jpeg_optimize") {
+        codecOptions.hasJpeg = true;
+        codecOptions.jpeg.hasOptimize = true;
+        codecOptions.jpeg.optimize = parse_bool_value(option.value[0], "out_jpeg_optimize");
+        return;
+    }
+
+    if (option.string_key == "out_jpeg_subsampling") {
+        codecOptions.hasJpeg = true;
+        codecOptions.jpeg.hasSubsampling = true;
+        codecOptions.jpeg.subsampling = parse_jpeg_chroma_subsampling(option.value[0], "out_jpeg_subsampling");
+        return;
+    }
+
+    if (option.string_key == "out_png_compression") {
+        codecOptions.hasPng = true;
+        codecOptions.png.hasCompressionLevel = true;
+        codecOptions.png.compressionLevel = parse_bounded_int(option.value[0], "out_png_compression", 0, 9);
+        return;
+    }
+
+    if (option.string_key == "out_png_interlace") {
+        codecOptions.hasPng = true;
+        codecOptions.png.hasInterlaced = true;
+        codecOptions.png.interlaced = parse_bool_value(option.value[0], "out_png_interlace");
+        return;
+    }
+
+    if (option.string_key == "out_tiff_compression") {
+        codecOptions.hasTiff = true;
+        codecOptions.tiff.hasCompression = true;
+        codecOptions.tiff.compression = parse_tiff_compression_mode(option.value[0], "out_tiff_compression");
+        return;
+    }
+
+    if (option.string_key == "out_tiff_predictor") {
+        codecOptions.hasTiff = true;
+        codecOptions.tiff.hasPredictor = true;
+        codecOptions.tiff.predictor = parse_tiff_predictor_mode(option.value[0], "out_tiff_predictor");
+        return;
+    }
+
+    if (option.string_key == "out_tiff_layout") {
+        codecOptions.hasTiff = true;
+        codecOptions.tiff.hasLayout = true;
+        codecOptions.tiff.layout = parse_tiff_storage_layout(option.value[0], "out_tiff_layout");
+        return;
+    }
+
+    if (option.string_key == "out_tiff_tile_size") {
+        codecOptions.hasTiff = true;
+        apply_tiff_tile_size_option(option, codecOptions.tiff);
+        return;
+    }
+
+    if (option.string_key == "out_tiff_rows_per_strip") {
+        codecOptions.hasTiff = true;
+        codecOptions.tiff.hasRowsPerStrip = true;
+        codecOptions.tiff.rowsPerStrip = parse_positive_u32(option.value[0], "out_tiff_rows_per_strip");
+        return;
+    }
+
+    if (option.string_key == "out_tiff_big_tiff") {
+        codecOptions.hasTiff = true;
+        codecOptions.tiff.hasForceBigTiff = true;
+        codecOptions.tiff.forceBigTiff = parse_bool_value(option.value[0], "out_tiff_big_tiff");
+        return;
+    }
+
+    if (option.string_key == "out_tiff_unassociated_alpha") {
+        codecOptions.hasTiff = true;
+        codecOptions.tiff.hasUnassociatedAlpha = true;
+        codecOptions.tiff.unassociatedAlpha = parse_bool_value(option.value[0], "out_tiff_unassociated_alpha");
+        return;
+    }
+
+    if (option.string_key == "out_tiff_jpeg_quality") {
+        codecOptions.hasTiff = true;
+        codecOptions.tiff.hasJpegQuality = true;
+        codecOptions.tiff.jpegQuality =
+            static_cast<uint32_t>(parse_bounded_int(option.value[0], "out_tiff_jpeg_quality", 1, 100));
+        return;
+    }
+
+    if (option.string_key == "out_tiff_deflate_level") {
+        codecOptions.hasTiff = true;
+        codecOptions.tiff.hasDeflateLevel = true;
+        codecOptions.tiff.deflateLevel =
+            static_cast<uint32_t>(parse_bounded_int(option.value[0], "out_tiff_deflate_level", 1, 9));
+        return;
+    }
+
+    if (option.string_key == "out_tiff_zstd_level") {
+        codecOptions.hasTiff = true;
+        codecOptions.tiff.hasZstdLevel = true;
+        codecOptions.tiff.zstdLevel =
+            static_cast<uint32_t>(parse_bounded_int(option.value[0], "out_tiff_zstd_level", 1, 22));
+        return;
+    }
+
+    if (option.string_key == "out_tiff_lzma_preset") {
+        codecOptions.hasTiff = true;
+        codecOptions.tiff.hasLzmaPreset = true;
+        codecOptions.tiff.lzmaPreset =
+            static_cast<uint32_t>(parse_bounded_int(option.value[0], "out_tiff_lzma_preset", 0, 9));
+        return;
+    }
+
+    if (option.string_key == "out_tiff_webp_level") {
+        codecOptions.hasTiff = true;
+        codecOptions.tiff.hasWebpLevel = true;
+        codecOptions.tiff.webpLevel =
+            static_cast<uint32_t>(parse_bounded_int(option.value[0], "out_tiff_webp_level", 0, 100));
+        return;
+    }
+
+    if (option.string_key == "out_tiff_webp_lossless") {
+        codecOptions.hasTiff = true;
+        codecOptions.tiff.hasWebpLossless = true;
+        codecOptions.tiff.webpLossless = parse_bool_value(option.value[0], "out_tiff_webp_lossless");
+        return;
+    }
+
+    if (option.string_key == "out_tiff_webp_lossless_exact") {
+        codecOptions.hasTiff = true;
+        codecOptions.tiff.hasWebpLosslessExact = true;
+        codecOptions.tiff.webpLosslessExact = parse_bool_value(option.value[0], "out_tiff_webp_lossless_exact");
+        return;
+    }
+
+    if (option.string_key == "out_exr_compression") {
+        codecOptions.hasOpenExr = true;
+        codecOptions.openExr.hasCompression = true;
+        codecOptions.openExr.compression = parse_openexr_compression_mode(option.value[0], "out_exr_compression");
+        return;
+    }
+
+    if (option.string_key == "out_exr_layout") {
+        codecOptions.hasOpenExr = true;
+        codecOptions.openExr.hasLayout = true;
+        codecOptions.openExr.layout = parse_openexr_storage_layout(option.value[0], "out_exr_layout");
+        return;
+    }
+
+    if (option.string_key == "out_exr_tile_size") {
+        codecOptions.hasOpenExr = true;
+        apply_openexr_tile_size_option(option, codecOptions.openExr);
+        return;
+    }
+
+    if (option.string_key == "out_exr_line_order") {
+        codecOptions.hasOpenExr = true;
+        codecOptions.openExr.hasLineOrder = true;
+        codecOptions.openExr.lineOrder = parse_openexr_line_order(option.value[0], "out_exr_line_order");
+        return;
+    }
+
+    if (option.string_key == "out_exr_dwa_level") {
+        codecOptions.hasOpenExr = true;
+        codecOptions.openExr.hasDwaCompressionLevel = true;
+        codecOptions.openExr.dwaCompressionLevel =
+            parse_numeric_value<float_t>(option.value[0], "out_exr_dwa_level");
+        return;
+    }
+}
+
 static void
 translate_output_option(const CommandLineParsedOption& option, GraphTranslationState& state)
 {
@@ -524,6 +1097,11 @@ BuildCliWorkflowFromCommandLine(const CommandLineRequest& request, const ShaderI
             continue;
         }
 
+        if (is_input_codec_option(option.string_key)) {
+            translate_input_codec_option(option, state);
+            continue;
+        }
+
         if (option.string_key == "atomic") {
             translate_atomic_option(option, state);
             continue;
@@ -531,6 +1109,11 @@ BuildCliWorkflowFromCommandLine(const CommandLineRequest& request, const ShaderI
 
         if (option.string_key == "in_attr") {
             translate_input_attribute_option(option, state);
+            continue;
+        }
+
+        if (is_output_codec_option(option.string_key)) {
+            translate_output_codec_option(option, state);
             continue;
         }
 

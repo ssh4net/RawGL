@@ -44,6 +44,9 @@ if(BUILD_TESTING)
     rawgl_add_cpp_smoke_test(rawgl_core_inspect_smoke tests/rawgl_core_inspect_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_core_mesh_inspect_smoke tests/rawgl_core_mesh_inspect_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_core_graph_smoke tests/rawgl_core_graph_smoke.cpp)
+    rawgl_add_cpp_smoke_test(rawgl_cli_codec_options_smoke tests/rawgl_cli_codec_options_smoke.cpp)
+    target_include_directories(rawgl_cli_codec_options_smoke PRIVATE
+        "${CMAKE_SOURCE_DIR}/src/cli")
     rawgl_add_cpp_smoke_test(rawgl_core_default_vertex_smoke tests/rawgl_core_default_vertex_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_core_system_uniform_reject_smoke tests/rawgl_core_system_uniform_reject_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_core_shared_context_smoke tests/rawgl_core_shared_context_smoke.cpp)
@@ -66,6 +69,9 @@ if(BUILD_TESTING)
         rawgl_add_cpp_io_smoke_test(rawgl_io_native_codecs_smoke tests/rawgl_io_native_codecs_smoke.cpp)
         target_include_directories(rawgl_io_native_codecs_smoke PRIVATE
             "${CMAKE_SOURCE_DIR}/src/io")
+    endif()
+    if(TARGET JPEG::JPEG AND TARGET PNG::PNG AND TARGET TIFF::TIFF AND TARGET OpenEXR::OpenEXR)
+        rawgl_add_cpp_io_smoke_test(rawgl_io_typed_options_matrix_smoke tests/rawgl_io_typed_options_matrix_smoke.cpp)
     endif()
     if(TARGET TIFF::TIFF)
         rawgl_add_cpp_io_smoke_test(rawgl_io_tiff_native_smoke tests/rawgl_io_tiff_native_smoke.cpp)
@@ -90,6 +96,11 @@ if(BUILD_TESTING)
     add_test(NAME rawgl_core_graph_smoke
         COMMAND rawgl_core_graph_smoke)
     set_tests_properties(rawgl_core_graph_smoke PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+    add_test(NAME rawgl_cli_codec_options_smoke
+        COMMAND rawgl_cli_codec_options_smoke)
+    set_tests_properties(rawgl_cli_codec_options_smoke PROPERTIES
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
     add_test(NAME rawgl_core_default_vertex_smoke
@@ -163,6 +174,13 @@ if(BUILD_TESTING)
         add_test(NAME rawgl_io_native_codecs_smoke
             COMMAND rawgl_io_native_codecs_smoke)
         set_tests_properties(rawgl_io_native_codecs_smoke PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    endif()
+
+    if(TARGET JPEG::JPEG AND TARGET PNG::PNG AND TARGET TIFF::TIFF AND TARGET OpenEXR::OpenEXR)
+        add_test(NAME rawgl_io_typed_options_matrix_smoke
+            COMMAND rawgl_io_typed_options_matrix_smoke)
+        set_tests_properties(rawgl_io_typed_options_matrix_smoke PROPERTIES
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     endif()
 
@@ -265,6 +283,36 @@ if(BUILD_TESTING)
                 "${RAWGL_PYTHON_EXECUTABLE_EFFECTIVE}" "${CMAKE_SOURCE_DIR}/tests/python/rawgl_python_workflow_smoke.py")
         set_tests_properties(rawgl_python_workflow_smoke PROPERTIES
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+        if(TARGET JPEG::JPEG AND TARGET PNG::PNG AND TARGET TIFF::TIFF AND TARGET OpenEXR::OpenEXR)
+            add_test(NAME rawgl_python_numpy_typed_io_example
+                COMMAND ${CMAKE_COMMAND} -E env
+                    "PYTHONPATH=${CMAKE_BINARY_DIR}/python"
+                    "RAWGL_NUMPY_TYPED_IO_OUTPUT_DIR=${CMAKE_SOURCE_DIR}/tests/outputs"
+                    "${RAWGL_PYTHON_EXECUTABLE_EFFECTIVE}" "${CMAKE_SOURCE_DIR}/examples/NumPy/NumpyTypedIoPipeline.py")
+            set_tests_properties(rawgl_python_numpy_typed_io_example PROPERTIES
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+        endif()
+
+        if(TARGET PNG::PNG)
+            add_test(NAME rawgl_python_numpy_batch_multipass_example
+                COMMAND ${CMAKE_COMMAND} -E env
+                    "PYTHONPATH=${CMAKE_BINARY_DIR}/python"
+                    "RAWGL_NUMPY_BATCH_OUTPUT_DIR=${CMAKE_SOURCE_DIR}/tests/outputs"
+                    "${RAWGL_PYTHON_EXECUTABLE_EFFECTIVE}" "${CMAKE_SOURCE_DIR}/examples/NumPy/NumpyBatchMultipass.py")
+            set_tests_properties(rawgl_python_numpy_batch_multipass_example PROPERTIES
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+        endif()
+
+        if(TARGET JPEG::JPEG)
+            add_test(NAME rawgl_python_obj_perspective_example
+                COMMAND ${CMAKE_COMMAND} -E env
+                    "PYTHONPATH=${CMAKE_BINARY_DIR}/python"
+                    "RAWGL_OBJ_PERSPECTIVE_OUTPUT_PATH=${CMAKE_SOURCE_DIR}/tests/outputs/RenderObjPerspectiveBaseColor_python.jpg"
+                    "${RAWGL_PYTHON_EXECUTABLE_EFFECTIVE}" "${CMAKE_SOURCE_DIR}/examples/Mesh/OBJ/RenderObjPerspectiveBaseColor.py")
+            set_tests_properties(rawgl_python_obj_perspective_example PROPERTIES
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+        endif()
 
         if(RAWGL_HAS_OPENMETA)
             add_test(NAME rawgl_python_metadata_smoke

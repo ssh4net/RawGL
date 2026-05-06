@@ -907,6 +907,29 @@ def _split_input_overrides(inputs, *, default_pass_index=0):
     return core_overrides, file_overrides
 
 
+def _coerce_file_output_overrides(outputs, *, default_pass_index=0):
+    if outputs is None:
+        return []
+    if isinstance(outputs, FileOutputBinding):
+        return [outputs]
+    if isinstance(outputs, (str, Path)):
+        raise TypeError("per-run output overrides require explicit output names")
+    if not isinstance(outputs, Mapping):
+        raise TypeError("per-run output overrides must be a mapping of output names to file specs")
+    if outputs and set(outputs.keys()).issubset(_OUTPUT_SPEC_KEYS):
+        raise TypeError("per-run output overrides require explicit output names")
+
+    file_outputs = []
+    for key, spec in outputs.items():
+        pass_index, name, array_element = _resolve_input_override_key(key, default_pass_index)
+        binding = _coerce_file_output_binding(pass_index, name, spec)
+        if array_element is not None:
+            binding.uses_array_element = True
+            binding.array_element = int(array_element)
+        file_outputs.append(binding)
+    return file_outputs
+
+
 def _coerce_counter_binding(name, spec):
     if isinstance(spec, CounterBinding):
         return spec
@@ -1106,7 +1129,7 @@ class PreparedJob:
         self._io_runtime = io_runtime
         self._default_pass_index = None if default_pass_index is None else int(default_pass_index)
 
-    def run(self, *, inputs=None, settings=None, system_uniforms=None):
+    def run(self, *, inputs=None, outputs=None, settings=None, system_uniforms=None):
         run_settings = _merge_run_settings(settings=settings, system_uniforms=system_uniforms)
         overrides = list(run_settings.overrides)
         file_overrides = []
@@ -1114,13 +1137,17 @@ class PreparedJob:
             core_overrides, file_overrides = _split_input_overrides(inputs, default_pass_index=self._default_pass_index)
             overrides.extend(core_overrides)
         run_settings.overrides = overrides
+        file_outputs = _coerce_file_output_overrides(outputs, default_pass_index=self._default_pass_index)
         if self._io_runtime is not None:
             request = IoRunRequest()
             request.settings = run_settings
             request.file_inputs = file_overrides
+            request.file_outputs = file_outputs
             return _wrap_run_result(self._prepared_workflow.run(request))
         if file_overrides:
             raise TypeError("core prepared workflows do not accept file-backed input overrides; use rawgl.io helpers")
+        if file_outputs:
+            raise TypeError("core prepared workflows do not accept file-backed output overrides; use rawgl.io helpers")
         return _wrap_run_result(self._prepared_workflow.run(run_settings))
 
     @property
@@ -1797,19 +1824,21 @@ class BatchPreparedJob:
     def batch_runner(self):
         return self._batch_runner
 
-    def submit(self, *, inputs=None, settings=None, system_uniforms=None, cancellation=None):
+    def submit(self, *, inputs=None, outputs=None, settings=None, system_uniforms=None, cancellation=None):
         request = BatchSubmitRequest()
         request.settings = _merge_run_settings(settings=settings, system_uniforms=system_uniforms)
         core_overrides, file_overrides = _split_input_overrides(inputs, default_pass_index=self._default_pass_index)
         request.settings.overrides = list(request.settings.overrides) + core_overrides
         request.file_inputs = file_overrides
+        request.file_outputs = _coerce_file_output_overrides(outputs, default_pass_index=self._default_pass_index)
         return BatchJobHandleView(
             self._batch_runner.submit(self._prepared_workflow, request, cancellation)
         )
 
-    def run(self, *, inputs=None, settings=None, system_uniforms=None, cancellation=None):
+    def run(self, *, inputs=None, outputs=None, settings=None, system_uniforms=None, cancellation=None):
         return self.submit(
             inputs=inputs,
+            outputs=outputs,
             settings=settings,
             system_uniforms=system_uniforms,
             cancellation=cancellation,
@@ -2215,6 +2244,7 @@ class _IoNamespace:
         settings=None,
         system_uniforms=None,
         inputs=None,
+        outputs=None,
         file_inputs=None,
         file_outputs=None,
     ):
@@ -2230,6 +2260,10 @@ class _IoNamespace:
         request.settings = _merge_run_settings(settings=settings, system_uniforms=system_uniforms)
         request.settings.overrides = list(request.settings.overrides) + core_overrides
         request.file_inputs = file_overrides
+        request.file_outputs = _coerce_file_output_overrides(
+            outputs,
+            default_pass_index=0 if len(workflow_definition.passes) == 1 else None,
+        )
         return _wrap_run_result(
             resolved_runtime.run(
                 session,

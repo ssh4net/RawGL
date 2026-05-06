@@ -38,8 +38,8 @@ This is the same style used in the repository smoke tests:
      --out_format rgb32f ^
      --out_channels 3 ^
      --out_bits 32 ^
-     --out_attr oiio:ColorSpace linear ^
-     --out_attr oiio:RawColor 1
+     --out_tiff_compression deflate ^
+     --out_tiff_predictor float
 
 This is the normal pattern:
 
@@ -67,6 +67,45 @@ Pass outputs can be referenced by later passes:
 
 Pass-to-pass references are one of the main strengths of the CLI path when you
 still want file-oriented scripting but need multi-stage processing on the GPU.
+
+Native IO controls
+------------------
+
+Use named codec options for common native formats. These options map to the
+same typed C++ and Python codec controls used by ``rawgl_io``.
+
+.. code-block:: bat
+
+   RawGL.exe ^
+     --pass_vertfrag shaders\empty.vert shaders\pass1.frag ^
+     --pass_size 1024 ^
+     --in InSample inputs\sky.jpg ^
+     --in_backend native_only ^
+     --in_jpeg_color_transform rgb ^
+     --out OutSample outputs\pass1.tif ^
+     --out_format rgba32f ^
+     --out_channels 4 ^
+     --out_alpha_channel 3 ^
+     --out_bits 16 ^
+     --out_tiff_layout tiled ^
+     --out_tiff_tile_size 256 256 ^
+     --out_tiff_compression deflate ^
+     --out_tiff_predictor horizontal
+
+The current named option groups are:
+
+- input backend, JPEG color transform, PNG transparency expansion, TIFF
+  directory index, and OpenEXR channel selection
+- JPEG quality, progressive mode, Huffman optimization, and chroma subsampling
+- PNG compression level and interlace mode
+- TIFF compression, predictor, strips/tiled layout, tile size, rows per strip,
+  BigTIFF, alpha association, and codec-specific quality/level switches
+- OpenEXR compression, scanline/tiled layout, tile size, line order, and DWA
+  level
+
+``--in_attr`` and ``--out_attr`` remain available for compatibility and
+backend-specific escape hatches. Prefer named options when RawGL exposes the
+setting directly.
 
 Compute example
 ---------------
