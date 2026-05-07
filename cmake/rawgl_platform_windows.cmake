@@ -424,7 +424,7 @@ elseif(TARGET libglew_static)
 else()
     message(FATAL_ERROR
         "GLEW target was not found. Install a GLEW CMake package in CMAKE_PREFIX_PATH "
-        "or set RAWGL_WINDOWS_DEPS_ROOT for the legacy static fallback layout.")
+        "or add the legacy static dependency root to CMAKE_PREFIX_PATH.")
 endif()
 
 if(TARGET glfw)
@@ -440,7 +440,7 @@ elseif(TARGET glfw3::glfw3)
 else()
     message(FATAL_ERROR
         "GLFW target was not found. Install a GLFW CMake package in CMAKE_PREFIX_PATH "
-        "or set RAWGL_WINDOWS_DEPS_ROOT for the legacy static fallback layout.")
+        "or add the legacy static dependency root to CMAKE_PREFIX_PATH.")
 endif()
 
 set(RAWGL_OIIO_TARGETS OpenImageIO::OpenImageIO OpenImageIO::OpenImageIO_Util)

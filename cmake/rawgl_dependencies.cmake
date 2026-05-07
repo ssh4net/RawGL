@@ -5,6 +5,13 @@ set(RAWGL_EXTRA_WINDOWS_LIBS)
 set(rawgl_dependency_prefix_hints)
 set(rawgl_dependency_include_hints)
 set(rawgl_dependency_library_hints)
+foreach(rawgl_dependency_prefix IN LISTS CMAKE_PREFIX_PATH)
+    if(rawgl_dependency_prefix)
+        list(APPEND rawgl_dependency_prefix_hints "${rawgl_dependency_prefix}")
+        list(APPEND rawgl_dependency_include_hints "${rawgl_dependency_prefix}/include")
+        list(APPEND rawgl_dependency_library_hints "${rawgl_dependency_prefix}/lib")
+    endif()
+endforeach()
 if(RAWGL_LINUX_PREFIX)
     list(APPEND rawgl_dependency_prefix_hints "${RAWGL_LINUX_PREFIX}")
     list(APPEND rawgl_dependency_include_hints "${RAWGL_LINUX_PREFIX}/include")
@@ -15,6 +22,9 @@ if(RAWGL_WINDOWS_DEPS_ROOT)
     list(APPEND rawgl_dependency_include_hints "${RAWGL_WINDOWS_DEPS_ROOT}/include")
     list(APPEND rawgl_dependency_library_hints "${RAWGL_WINDOWS_DEPS_ROOT}/lib")
 endif()
+list(REMOVE_DUPLICATES rawgl_dependency_prefix_hints)
+list(REMOVE_DUPLICATES rawgl_dependency_include_hints)
+list(REMOVE_DUPLICATES rawgl_dependency_library_hints)
 
 if(WIN32)
     include("${CMAKE_CURRENT_LIST_DIR}/rawgl_platform_windows.cmake")
@@ -63,7 +73,7 @@ find_path(RAWGL_SPDLOG_INCLUDE_DIR
     NO_CACHE)
 
 if(NOT RAWGL_SPDLOG_INCLUDE_DIR)
-    message(FATAL_ERROR "spdlog headers were not found. Set CMAKE_PREFIX_PATH or RAWGL_WINDOWS_DEPS_ROOT so spdlog/spdlog.h is available.")
+    message(FATAL_ERROR "spdlog headers were not found. Add a dependency prefix containing spdlog/spdlog.h to CMAKE_PREFIX_PATH.")
 endif()
 
 if(RAWGL_USE_PACKAGED_MINIPLY AND TARGET miniply::miniply)
@@ -83,7 +93,7 @@ find_path(RAWGL_LIBRAW_INCLUDE_DIR
     NO_CACHE)
 
 if(NOT RAWGL_LIBRAW_INCLUDE_DIR)
-    message(FATAL_ERROR "libraw headers were not found. Set CMAKE_PREFIX_PATH or RAWGL_WINDOWS_DEPS_ROOT so libraw/libraw.h is available.")
+    message(FATAL_ERROR "libraw headers were not found. Add a dependency prefix containing libraw/libraw.h to CMAKE_PREFIX_PATH.")
 endif()
 
 find_path(RAWGL_JXL_INCLUDE_DIR

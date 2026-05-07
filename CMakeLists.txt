@@ -92,18 +92,12 @@ if(RAWGL_BUILD_WHEEL)
         "-C" "cmake.define.RAWGL_BUILD_PYTHON=${RAWGL_BUILD_PYTHON}"
         "-C" "cmake.define.RAWGL_PYTHON_BIND_CORE=${RAWGL_PYTHON_BIND_CORE}"
         "-C" "cmake.define.RAWGL_INSTALL_DEV_ARTIFACTS=OFF")
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND RAWGL_LINUX_PREFIX)
-        list(APPEND _rawgl_wheel_config_settings
-            "-C" "cmake.define.RAWGL_LINUX_PREFIX=${RAWGL_LINUX_PREFIX}")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         list(APPEND _rawgl_wheel_config_settings
             "-C" "cmake.define.RAWGL_LINUX_USE_LIBCXX=${RAWGL_LINUX_USE_LIBCXX}"
             "-C" "cmake.define.RAWGL_USE_PACKAGED_MINIPLY=${RAWGL_USE_PACKAGED_MINIPLY}")
     endif()
     if(WIN32)
-        if(RAWGL_WINDOWS_DEPS_ROOT)
-            list(APPEND _rawgl_wheel_config_settings
-                "-C" "cmake.define.RAWGL_WINDOWS_DEPS_ROOT=${RAWGL_WINDOWS_DEPS_ROOT}")
-        endif()
         if(dng_sdk_ROOT)
             list(APPEND _rawgl_wheel_config_settings
                 "-C" "cmake.define.dng_sdk_ROOT=${dng_sdk_ROOT}")
