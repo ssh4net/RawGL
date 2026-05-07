@@ -42,7 +42,17 @@ function(rawgl_python_override_imported_target target_name)
 endfunction()
 
 rawgl_configure_python_from_prefix_path()
-find_package(Python REQUIRED COMPONENTS Interpreter Development.Module OPTIONAL_COMPONENTS Development.SABIModule)
+find_package(Python QUIET COMPONENTS Interpreter Development.Module OPTIONAL_COMPONENTS Development.SABIModule)
+if(NOT Python_EXECUTABLE OR NOT TARGET Python::Module)
+    rawgl_configure_python_from_prefix_path()
+    rawgl_configure_manual_python_targets()
+endif()
+if(NOT Python_EXECUTABLE OR NOT TARGET Python::Interpreter OR NOT TARGET Python::Module)
+    message(FATAL_ERROR
+        "Could not find Python interpreter and development files. Add a CPython prefix "
+        "to CMAKE_PREFIX_PATH, or set standard CMake variables Python_EXECUTABLE, "
+        "Python_INCLUDE_DIR, and Python_LIBRARY_RELEASE/Python_LIBRARY_DEBUG.")
+endif()
 set(RAWGL_PYTHON_VERSION "${Python_VERSION}" PARENT_SCOPE)
 set(RAWGL_PYTHON_EXECUTABLE_EFFECTIVE "${Python_EXECUTABLE}" PARENT_SCOPE)
 
