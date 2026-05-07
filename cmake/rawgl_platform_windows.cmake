@@ -161,7 +161,21 @@ find_package(pugixml CONFIG QUIET)
 find_package(yaml-cpp CONFIG QUIET)
 find_package(minizip-ng CONFIG QUIET)
 find_package(expat CONFIG QUIET)
-find_package(glew CONFIG REQUIRED)
+find_package(glew CONFIG QUIET)
+if(NOT TARGET GLEW::GLEW
+   AND NOT TARGET GLEW::glew_s
+   AND NOT TARGET GLEW::glew
+   AND NOT TARGET glew::glew
+   AND NOT TARGET libglew_static)
+    find_package(GLEW CONFIG QUIET)
+endif()
+if(NOT TARGET GLEW::GLEW
+   AND NOT TARGET GLEW::glew_s
+   AND NOT TARGET GLEW::glew
+   AND NOT TARGET glew::glew
+   AND NOT TARGET libglew_static)
+    find_package(GLEW REQUIRED)
+endif()
 find_package(glfw3 CONFIG REQUIRED)
 find_package(OpenEXR CONFIG QUIET)
 find_package(OpenImageIO CONFIG REQUIRED)
@@ -239,20 +253,32 @@ if(TARGET GLEW::GLEW)
     set(RAWGL_OPENGL_LOADER_TARGET GLEW::GLEW)
 elseif(TARGET GLEW::glew_s)
     set(RAWGL_OPENGL_LOADER_TARGET GLEW::glew_s)
+elseif(TARGET GLEW::glew)
+    set(RAWGL_OPENGL_LOADER_TARGET GLEW::glew)
+elseif(TARGET glew::glew)
+    set(RAWGL_OPENGL_LOADER_TARGET glew::glew)
+elseif(TARGET libglew_static)
+    set(RAWGL_OPENGL_LOADER_TARGET libglew_static)
 else()
-    message(FATAL_ERROR "GLEW static target was not found in ${RAWGL_WINDOWS_DEPS_ROOT}.")
+    message(FATAL_ERROR
+        "GLEW target was not found. Install a GLEW CMake package in CMAKE_PREFIX_PATH "
+        "or set RAWGL_WINDOWS_DEPS_ROOT for the legacy static fallback layout.")
 endif()
 
 if(TARGET glfw)
     set(RAWGL_GLFW_TARGET glfw)
 elseif(TARGET glfw3)
     set(RAWGL_GLFW_TARGET glfw3)
+elseif(TARGET glfw::glfw)
+    set(RAWGL_GLFW_TARGET glfw::glfw)
 elseif(TARGET glfw3::glfw)
     set(RAWGL_GLFW_TARGET glfw3::glfw)
 elseif(TARGET glfw3::glfw3)
     set(RAWGL_GLFW_TARGET glfw3::glfw3)
 else()
-    message(FATAL_ERROR "GLFW target was not found in ${RAWGL_WINDOWS_DEPS_ROOT}.")
+    message(FATAL_ERROR
+        "GLFW target was not found. Install a GLFW CMake package in CMAKE_PREFIX_PATH "
+        "or set RAWGL_WINDOWS_DEPS_ROOT for the legacy static fallback layout.")
 endif()
 
 set(RAWGL_OIIO_TARGETS OpenImageIO::OpenImageIO OpenImageIO::OpenImageIO_Util)
