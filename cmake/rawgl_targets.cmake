@@ -113,8 +113,8 @@ target_include_directories(rawgl_batch
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 if(NOT TARGET miniply::miniply)
-    target_include_directories(rawgl_core PRIVATE
-        "${RAWGL_MINIPLY_INCLUDE_DIR}")
+target_include_directories(rawgl_core PRIVATE
+    "${miniply_INCLUDE_DIR}")
 endif()
 if(TARGET rapidobj::rapidobj)
     target_compile_definitions(rawgl_core PRIVATE RAWGL_HAS_RAPIDOBJ=1)

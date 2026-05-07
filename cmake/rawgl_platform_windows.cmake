@@ -7,11 +7,14 @@ if(RAWGL_WINDOWS_PREFIX_ONLY_FIND)
     set(CMAKE_FIND_USE_CMAKE_SYSTEM_PATH OFF CACHE BOOL "Do not use CMake system prefixes for RawGL Windows dependency discovery." FORCE)
 endif()
 find_path(RAWGL_ZLIB_INCLUDE_DIR
-    NAMES zlib.h)
+    NAMES zlib.h
+    NO_CACHE)
 find_library(RAWGL_ZLIB_LIBRARY_RELEASE
-    NAMES zlibstatic zlib z)
+    NAMES zlibstatic zlib z
+    NO_CACHE)
 find_library(RAWGL_ZLIB_LIBRARY_DEBUG
-    NAMES zlibstaticd zlibd zd z_d)
+    NAMES zlibstaticd zlibd zd z_d
+    NO_CACHE)
 rawgl_add_windows_imported_library(ZLIB::ZLIBSTATIC
     INCLUDE_DIR "${RAWGL_ZLIB_INCLUDE_DIR}"
     RELEASE "${RAWGL_ZLIB_LIBRARY_RELEASE}"
@@ -180,29 +183,39 @@ find_package(AOM CONFIG QUIET)
 find_package(Brotli CONFIG QUIET)
 find_package(brotli CONFIG QUIET)
 find_path(RAWGL_BZIP2_INCLUDE_DIR
-    NAMES bzlib.h)
+    NAMES bzlib.h
+    NO_CACHE)
 find_library(RAWGL_BZIP2_LIBRARY_RELEASE
-    NAMES bz2_static bz2 bzip2 libbz2)
+    NAMES bz2_static bz2 bzip2 libbz2
+    NO_CACHE)
 find_library(RAWGL_BZIP2_LIBRARY_DEBUG
-    NAMES bz2_staticd bz2d bzip2d libbz2d bz2_d)
+    NAMES bz2_staticd bz2d bzip2d libbz2d bz2_d
+    NO_CACHE)
 rawgl_add_windows_imported_library(BZip2::BZip2
     INCLUDE_DIR "${RAWGL_BZIP2_INCLUDE_DIR}"
     RELEASE "${RAWGL_BZIP2_LIBRARY_RELEASE}"
     DEBUG "${RAWGL_BZIP2_LIBRARY_DEBUG}")
 find_path(RAWGL_ICU_INCLUDE_DIR
-    NAMES unicode/utypes.h)
+    NAMES unicode/utypes.h
+    NO_CACHE)
 find_library(RAWGL_ICU_UC_LIBRARY_RELEASE
-    NAMES icuuc)
+    NAMES icuuc
+    NO_CACHE)
 find_library(RAWGL_ICU_UC_LIBRARY_DEBUG
-    NAMES icuucd icuuc_d)
+    NAMES icuucd icuuc_d
+    NO_CACHE)
 find_library(RAWGL_ICU_I18N_LIBRARY_RELEASE
-    NAMES icuin icui18n)
+    NAMES icuin icui18n
+    NO_CACHE)
 find_library(RAWGL_ICU_I18N_LIBRARY_DEBUG
-    NAMES icuind icui18nd icuin_d icui18n_d)
+    NAMES icuind icui18nd icuin_d icui18n_d
+    NO_CACHE)
 find_library(RAWGL_ICU_DATA_LIBRARY_RELEASE
-    NAMES icudt icudata)
+    NAMES icudt icudata
+    NO_CACHE)
 find_library(RAWGL_ICU_DATA_LIBRARY_DEBUG
-    NAMES icudtd icudatad icudt_d icudata_d)
+    NAMES icudtd icudatad icudt_d icudata_d
+    NO_CACHE)
 rawgl_add_windows_imported_library(ICU::uc
     INCLUDE_DIR "${RAWGL_ICU_INCLUDE_DIR}"
     RELEASE "${RAWGL_ICU_UC_LIBRARY_RELEASE}"
@@ -328,11 +341,14 @@ if(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET WebP::libwebpmux)
 endif()
 if(NOT TARGET libuhdr::libuhdr)
     find_path(RAWGL_LIBUHDR_INCLUDE_DIR
-        NAMES ultrahdr_api.h)
+        NAMES ultrahdr_api.h
+        NO_CACHE)
     find_library(RAWGL_LIBUHDR_LIBRARY_RELEASE
-        NAMES uhdr-static uhdr libuhdr)
+        NAMES uhdr-static uhdr libuhdr
+        NO_CACHE)
     find_library(RAWGL_LIBUHDR_LIBRARY_DEBUG
-        NAMES uhdr-staticd uhdrd libuhdrd uhdr_d)
+        NAMES uhdr-staticd uhdrd libuhdrd uhdr_d
+        NO_CACHE)
     rawgl_add_windows_imported_library(libuhdr::libuhdr
         INCLUDE_DIR "${RAWGL_LIBUHDR_INCLUDE_DIR}"
         RELEASE "${RAWGL_LIBUHDR_LIBRARY_RELEASE}"
@@ -341,11 +357,14 @@ endif()
 
 if(NOT TARGET WebP::webp)
     find_path(RAWGL_WEBP_INCLUDE_DIR
-        NAMES webp/decode.h)
+        NAMES webp/decode.h
+        NO_CACHE)
     find_library(RAWGL_WEBP_LIBRARY_RELEASE
-        NAMES webp libwebp)
+        NAMES webp libwebp
+        NO_CACHE)
     find_library(RAWGL_WEBP_LIBRARY_DEBUG
-        NAMES webpd libwebpd webp_d)
+        NAMES webpd libwebpd webp_d
+        NO_CACHE)
     rawgl_add_windows_imported_library(WebP::webp
         INCLUDE_DIR "${RAWGL_WEBP_INCLUDE_DIR}"
         RELEASE "${RAWGL_WEBP_LIBRARY_RELEASE}"
@@ -353,9 +372,11 @@ if(NOT TARGET WebP::webp)
 endif()
 if(NOT TARGET WebP::webpdemux)
     find_library(RAWGL_WEBPDEMUX_LIBRARY_RELEASE
-        NAMES webpdemux libwebpdemux)
+        NAMES webpdemux libwebpdemux
+        NO_CACHE)
     find_library(RAWGL_WEBPDEMUX_LIBRARY_DEBUG
-        NAMES webpdemuxd libwebpdemuxd webpdemux_d)
+        NAMES webpdemuxd libwebpdemuxd webpdemux_d
+        NO_CACHE)
     rawgl_add_windows_imported_library(WebP::webpdemux
         INCLUDE_DIR "${RAWGL_WEBP_INCLUDE_DIR}"
         RELEASE "${RAWGL_WEBPDEMUX_LIBRARY_RELEASE}"
@@ -363,9 +384,11 @@ if(NOT TARGET WebP::webpdemux)
 endif()
 if(NOT TARGET WebP::libwebpmux)
     find_library(RAWGL_WEBPMUX_LIBRARY_RELEASE
-        NAMES webpmux libwebpmux)
+        NAMES webpmux libwebpmux
+        NO_CACHE)
     find_library(RAWGL_WEBPMUX_LIBRARY_DEBUG
-        NAMES webpmuxd libwebpmuxd webpmux_d)
+        NAMES webpmuxd libwebpmuxd webpmux_d
+        NO_CACHE)
     rawgl_add_windows_imported_library(WebP::libwebpmux
         INCLUDE_DIR "${RAWGL_WEBP_INCLUDE_DIR}"
         RELEASE "${RAWGL_WEBPMUX_LIBRARY_RELEASE}"

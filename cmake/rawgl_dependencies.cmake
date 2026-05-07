@@ -59,7 +59,8 @@ endforeach()
 
 find_path(RAWGL_SPDLOG_INCLUDE_DIR
     NAMES spdlog/spdlog.h
-    HINTS ${rawgl_dependency_include_hints})
+    HINTS ${rawgl_dependency_include_hints}
+    NO_CACHE)
 
 if(NOT RAWGL_SPDLOG_INCLUDE_DIR)
     message(FATAL_ERROR "spdlog headers were not found. Set CMAKE_PREFIX_PATH or RAWGL_WINDOWS_DEPS_ROOT so spdlog/spdlog.h is available.")
@@ -68,17 +69,18 @@ endif()
 if(RAWGL_USE_PACKAGED_MINIPLY AND TARGET miniply::miniply)
     set(RAWGL_MINIPLY_TARGET miniply::miniply)
     message(STATUS "RawGL miniply provider: package target miniply::miniply")
-elseif(EXISTS "${RAWGL_MINIPLY_INCLUDE_DIR}/miniply.h")
+elseif(EXISTS "${miniply_INCLUDE_DIR}/miniply.h")
     set(RAWGL_MINIPLY_SOURCES
         src/third_party/miniply/miniply.cpp)
-    message(STATUS "RawGL miniply provider: vendored fallback from ${RAWGL_MINIPLY_INCLUDE_DIR}")
+    message(STATUS "RawGL miniply provider: vendored fallback from ${miniply_INCLUDE_DIR}")
 else()
-    message(FATAL_ERROR "miniply was not found. Install a miniply package in CMAKE_PREFIX_PATH or set RAWGL_MINIPLY_INCLUDE_DIR to the directory that contains miniply.h.")
+    message(FATAL_ERROR "miniply was not found. Install a miniply package in CMAKE_PREFIX_PATH or set miniply_INCLUDE_DIR to the directory that contains miniply.h.")
 endif()
 
 find_path(RAWGL_LIBRAW_INCLUDE_DIR
     NAMES libraw/libraw.h
-    HINTS ${rawgl_dependency_include_hints})
+    HINTS ${rawgl_dependency_include_hints}
+    NO_CACHE)
 
 if(NOT RAWGL_LIBRAW_INCLUDE_DIR)
     message(FATAL_ERROR "libraw headers were not found. Set CMAKE_PREFIX_PATH or RAWGL_WINDOWS_DEPS_ROOT so libraw/libraw.h is available.")
@@ -86,7 +88,8 @@ endif()
 
 find_path(RAWGL_JXL_INCLUDE_DIR
     NAMES jxl/decode.h
-    HINTS ${rawgl_dependency_include_hints})
+    HINTS ${rawgl_dependency_include_hints}
+    NO_CACHE)
 
 find_package(OpenMeta CONFIG QUIET)
 if(WIN32)
@@ -121,7 +124,8 @@ find_path(RAWGL_OPENMETA_INCLUDE_DIR
     HINTS ${rawgl_dependency_prefix_hints}
     PATH_SUFFIXES
         include
-        src/include)
+        src/include
+    NO_CACHE)
 find_library(RAWGL_OPENMETA_LIBRARY
     NAMES openmeta openmetad libopenmeta
     HINTS ${rawgl_dependency_prefix_hints}
@@ -131,7 +135,8 @@ find_library(RAWGL_OPENMETA_LIBRARY
         Release
         Debug
         bld/Release
-        bld/Debug)
+        bld/Debug
+    NO_CACHE)
 set(RAWGL_HAS_OPENMETA OFF)
 if(NOT TARGET OpenMeta::openmeta AND RAWGL_OPENMETA_INCLUDE_DIR AND RAWGL_OPENMETA_LIBRARY)
     add_library(OpenMeta::openmeta UNKNOWN IMPORTED)
@@ -146,5 +151,6 @@ endif()
 if(NOT WIN32)
     find_library(RAWGL_HARFBUZZ_LIBRARY
         NAMES harfbuzz libharfbuzz
-        HINTS ${rawgl_dependency_library_hints})
+        HINTS ${rawgl_dependency_library_hints}
+        NO_CACHE)
 endif()

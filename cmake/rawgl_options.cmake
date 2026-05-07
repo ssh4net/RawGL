@@ -1,17 +1,14 @@
 include(GNUInstallDirs)
 
-set(RAWGL_LINUX_PREFIX "" CACHE PATH "Optional Linux dependency prefix prepended to CMAKE_PREFIX_PATH.")
-set(RAWGL_WINDOWS_DEPS_ROOT "" CACHE PATH "Optional Windows dependency root for legacy static-library fallback discovery.")
+set(_rawgl_legacy_linux_prefix "${RAWGL_LINUX_PREFIX}")
+set(_rawgl_legacy_windows_deps_root "${RAWGL_WINDOWS_DEPS_ROOT}")
+unset(RAWGL_LINUX_PREFIX CACHE)
+unset(RAWGL_WINDOWS_DEPS_ROOT CACHE)
+set(RAWGL_LINUX_PREFIX "${_rawgl_legacy_linux_prefix}")
+set(RAWGL_WINDOWS_DEPS_ROOT "${_rawgl_legacy_windows_deps_root}")
 set(RAWGL_WINDOWS_IMPORTED_CONFIG_REWRITE_ROOTS "" CACHE STRING "Optional semicolon-separated stale roots to rewrite in imported Windows package configs.")
-set(RAWGL_WINDOWS_DNG_SDK_ROOT "" CACHE PATH "Optional Windows DNG SDK root used to resolve dng_sdk.lib for static builds.")
-set(RAWGL_WINDOWS_DNG_LIBRARY_RELEASE "" CACHE FILEPATH "Windows release DNG SDK library")
-set(RAWGL_WINDOWS_DNG_LIBRARY_DEBUG "" CACHE FILEPATH "Windows debug DNG SDK library")
-set(RAWGL_WINDOWS_XMP_CORE_LIBRARY_RELEASE "" CACHE FILEPATH "Windows release XMP core library")
-set(RAWGL_WINDOWS_XMP_CORE_LIBRARY_DEBUG "" CACHE FILEPATH "Windows debug XMP core library")
-set(RAWGL_WINDOWS_XMP_FILES_LIBRARY_RELEASE "" CACHE FILEPATH "Windows release XMP files library")
-set(RAWGL_WINDOWS_XMP_FILES_LIBRARY_DEBUG "" CACHE FILEPATH "Windows debug XMP files library")
 set(RAWGL_WINDOWS_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Windows multi-config generator configurations. Leave empty to keep the generator default.")
-set(RAWGL_MINIPLY_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/miniply" CACHE PATH "Directory containing miniply.h")
+set(miniply_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/miniply" CACHE PATH "Directory containing miniply.h")
 option(RAWGL_WINDOWS_UTF8 "Compile all Windows/MSVC targets with /utf-8." ON)
 option(RAWGL_WINDOWS_PREFIX_ONLY_FIND "Restrict Windows third-party dependency discovery to CMake/package prefix paths and explicit hints." ON)
 set(RAWGL_WINDOWS_DEBUG_SUFFIX "d" CACHE STRING "Suffix applied to Windows Debug target output names.")
@@ -36,35 +33,137 @@ else()
     set(_rawgl_python_bind_core_default OFF)
 endif()
 option(RAWGL_PYTHON_BIND_CORE "Link the Python module against the real RawGL workflow facade instead of scaffold-only mode." ${_rawgl_python_bind_core_default})
-set(RAWGL_PYTHON_EXECUTABLE "" CACHE FILEPATH "Override Python interpreter used for RawGL bindings.")
-set(RAWGL_PYTHON_INCLUDE_DIR "" CACHE PATH "Override Python include directory used for RawGL bindings.")
-set(RAWGL_PYTHON_LIBRARY_RELEASE "" CACHE FILEPATH "Override release Python import library used for RawGL bindings on Windows multiconfig builds.")
-set(RAWGL_PYTHON_LIBRARY_DEBUG "" CACHE FILEPATH "Override debug Python import library used for RawGL bindings on Windows multiconfig builds.")
 
-if(RAWGL_PYTHON_EXECUTABLE)
-    if(NOT EXISTS "${RAWGL_PYTHON_EXECUTABLE}")
-        message(FATAL_ERROR "RAWGL_PYTHON_EXECUTABLE does not exist: ${RAWGL_PYTHON_EXECUTABLE}")
+if(DEFINED RAWGL_MINIPLY_INCLUDE_DIR AND RAWGL_MINIPLY_INCLUDE_DIR AND NOT miniply_INCLUDE_DIR)
+    set(miniply_INCLUDE_DIR "${RAWGL_MINIPLY_INCLUDE_DIR}" CACHE PATH "Directory containing miniply.h" FORCE)
+endif()
+unset(RAWGL_MINIPLY_INCLUDE_DIR CACHE)
+
+foreach(_rawgl_internal_dependency_cache_var IN ITEMS
+        RAWGL_ZLIB_INCLUDE_DIR
+        RAWGL_ZLIB_LIBRARY_RELEASE
+        RAWGL_ZLIB_LIBRARY_DEBUG
+        RAWGL_BZIP2_INCLUDE_DIR
+        RAWGL_BZIP2_LIBRARY_RELEASE
+        RAWGL_BZIP2_LIBRARY_DEBUG
+        RAWGL_ICU_INCLUDE_DIR
+        RAWGL_ICU_UC_LIBRARY_RELEASE
+        RAWGL_ICU_UC_LIBRARY_DEBUG
+        RAWGL_ICU_I18N_LIBRARY_RELEASE
+        RAWGL_ICU_I18N_LIBRARY_DEBUG
+        RAWGL_ICU_DATA_LIBRARY_RELEASE
+        RAWGL_ICU_DATA_LIBRARY_DEBUG
+        RAWGL_LIBUHDR_INCLUDE_DIR
+        RAWGL_LIBUHDR_LIBRARY_RELEASE
+        RAWGL_LIBUHDR_LIBRARY_DEBUG
+        RAWGL_WEBP_INCLUDE_DIR
+        RAWGL_WEBP_LIBRARY_RELEASE
+        RAWGL_WEBP_LIBRARY_DEBUG
+        RAWGL_WEBPDEMUX_LIBRARY_RELEASE
+        RAWGL_WEBPDEMUX_LIBRARY_DEBUG
+        RAWGL_WEBPMUX_LIBRARY_RELEASE
+        RAWGL_WEBPMUX_LIBRARY_DEBUG
+        RAWGL_SHARPYUV_LIBRARY_RELEASE
+        RAWGL_SHARPYUV_LIBRARY_DEBUG
+        RAWGL_FMT_LIBRARY_RELEASE
+        RAWGL_FMT_LIBRARY_DEBUG
+        RAWGL_SPDLOG_INCLUDE_DIR
+        RAWGL_LIBRAW_INCLUDE_DIR
+        RAWGL_JXL_INCLUDE_DIR
+        RAWGL_OPENMETA_INCLUDE_DIR
+        RAWGL_OPENMETA_LIBRARY
+        RAWGL_HARFBUZZ_LIBRARY
+        RAWGL_GIF_LIBRARY
+        RAWGL_PTEX_LIBRARY
+        RAWGL_PTEX_INCLUDE_DIR)
+    unset(${_rawgl_internal_dependency_cache_var} CACHE)
+endforeach()
+
+foreach(_rawgl_legacy_python_pair IN ITEMS
+        "RAWGL_PYTHON_EXECUTABLE;Python_EXECUTABLE;FILEPATH;Python interpreter"
+        "RAWGL_PYTHON_INCLUDE_DIR;Python_INCLUDE_DIR;PATH;Python include directory"
+        "RAWGL_PYTHON_LIBRARY_RELEASE;Python_LIBRARY_RELEASE;FILEPATH;Python release library"
+        "RAWGL_PYTHON_LIBRARY_DEBUG;Python_LIBRARY_DEBUG;FILEPATH;Python debug library")
+    list(GET _rawgl_legacy_python_pair 0 _rawgl_legacy_python_var)
+    list(GET _rawgl_legacy_python_pair 1 _rawgl_python_var)
+    list(GET _rawgl_legacy_python_pair 2 _rawgl_python_cache_type)
+    list(GET _rawgl_legacy_python_pair 3 _rawgl_python_cache_doc)
+    if(DEFINED ${_rawgl_legacy_python_var} AND ${_rawgl_legacy_python_var} AND NOT ${_rawgl_python_var})
+        set(${_rawgl_python_var} "${${_rawgl_legacy_python_var}}" CACHE ${_rawgl_python_cache_type} "${_rawgl_python_cache_doc}" FORCE)
     endif()
-    set(Python_EXECUTABLE "${RAWGL_PYTHON_EXECUTABLE}" CACHE FILEPATH "Python interpreter" FORCE)
+    unset(${_rawgl_legacy_python_var} CACHE)
+endforeach()
+
+if(WIN32)
+    foreach(_rawgl_legacy_sdk_pair IN ITEMS
+            "RAWGL_WINDOWS_DNG_SDK_ROOT;dng_sdk_ROOT;PATH;DNG SDK root"
+            "RAWGL_WINDOWS_DNG_LIBRARY_RELEASE;DNG_SDK_LIBRARY_RELEASE;FILEPATH;DNG SDK release library"
+            "RAWGL_WINDOWS_DNG_LIBRARY_DEBUG;DNG_SDK_LIBRARY_DEBUG;FILEPATH;DNG SDK debug library"
+            "RAWGL_WINDOWS_XMP_CORE_LIBRARY_RELEASE;XMP_CORE_LIBRARY_RELEASE;FILEPATH;XMP Core release library"
+            "RAWGL_WINDOWS_XMP_CORE_LIBRARY_DEBUG;XMP_CORE_LIBRARY_DEBUG;FILEPATH;XMP Core debug library"
+            "RAWGL_WINDOWS_XMP_FILES_LIBRARY_RELEASE;XMP_FILES_LIBRARY_RELEASE;FILEPATH;XMP Files release library"
+            "RAWGL_WINDOWS_XMP_FILES_LIBRARY_DEBUG;XMP_FILES_LIBRARY_DEBUG;FILEPATH;XMP Files debug library")
+        list(GET _rawgl_legacy_sdk_pair 0 _rawgl_legacy_sdk_var)
+        list(GET _rawgl_legacy_sdk_pair 1 _rawgl_sdk_var)
+        list(GET _rawgl_legacy_sdk_pair 2 _rawgl_sdk_cache_type)
+        list(GET _rawgl_legacy_sdk_pair 3 _rawgl_sdk_cache_doc)
+        if(DEFINED ${_rawgl_legacy_sdk_var} AND ${_rawgl_legacy_sdk_var} AND NOT ${_rawgl_sdk_var})
+            set(${_rawgl_sdk_var} "${${_rawgl_legacy_sdk_var}}" CACHE ${_rawgl_sdk_cache_type} "${_rawgl_sdk_cache_doc}" FORCE)
+        endif()
+        unset(${_rawgl_legacy_sdk_var} CACHE)
+    endforeach()
+else()
+    foreach(_rawgl_windows_path_cache_var IN ITEMS
+            dng_sdk_ROOT
+            DNG_SDK_LIBRARY_RELEASE
+            DNG_SDK_LIBRARY_DEBUG
+            XMP_CORE_LIBRARY_RELEASE
+            XMP_CORE_LIBRARY_DEBUG
+            XMP_FILES_LIBRARY_RELEASE
+            XMP_FILES_LIBRARY_DEBUG)
+        if(DEFINED ${_rawgl_windows_path_cache_var} AND ${_rawgl_windows_path_cache_var} MATCHES "^[A-Za-z]:[/\\\\]")
+            unset(${_rawgl_windows_path_cache_var} CACHE)
+        endif()
+    endforeach()
 endif()
 
-if(RAWGL_PYTHON_INCLUDE_DIR)
-    if(NOT IS_ABSOLUTE "${RAWGL_PYTHON_INCLUDE_DIR}")
-        message(FATAL_ERROR "RAWGL_PYTHON_INCLUDE_DIR must be an absolute path: ${RAWGL_PYTHON_INCLUDE_DIR}")
-    endif()
-    if(NOT EXISTS "${RAWGL_PYTHON_INCLUDE_DIR}")
-        message(FATAL_ERROR "RAWGL_PYTHON_INCLUDE_DIR does not exist: ${RAWGL_PYTHON_INCLUDE_DIR}")
-    endif()
-    set(Python_INCLUDE_DIR "${RAWGL_PYTHON_INCLUDE_DIR}" CACHE PATH "Python include directory" FORCE)
+if(Python_EXECUTABLE AND NOT EXISTS "${Python_EXECUTABLE}")
+    message(FATAL_ERROR "Python_EXECUTABLE does not exist: ${Python_EXECUTABLE}")
 endif()
 
-foreach(_rawgl_python_lib_var IN ITEMS RAWGL_PYTHON_LIBRARY_RELEASE RAWGL_PYTHON_LIBRARY_DEBUG)
+if(Python_INCLUDE_DIR)
+    if(NOT IS_ABSOLUTE "${Python_INCLUDE_DIR}")
+        message(FATAL_ERROR "Python_INCLUDE_DIR must be an absolute path: ${Python_INCLUDE_DIR}")
+    endif()
+    if(NOT EXISTS "${Python_INCLUDE_DIR}")
+        message(FATAL_ERROR "Python_INCLUDE_DIR does not exist: ${Python_INCLUDE_DIR}")
+    endif()
+endif()
+
+foreach(_rawgl_python_lib_var IN ITEMS Python_LIBRARY_RELEASE Python_LIBRARY_DEBUG)
     if(${_rawgl_python_lib_var})
         if(NOT IS_ABSOLUTE "${${_rawgl_python_lib_var}}")
             message(FATAL_ERROR "${_rawgl_python_lib_var} must be an absolute path: ${${_rawgl_python_lib_var}}")
         endif()
         if(NOT EXISTS "${${_rawgl_python_lib_var}}")
             message(FATAL_ERROR "${_rawgl_python_lib_var} does not exist: ${${_rawgl_python_lib_var}}")
+        endif()
+    endif()
+endforeach()
+
+foreach(_rawgl_sdk_path_var IN ITEMS
+        DNG_SDK_LIBRARY_RELEASE
+        DNG_SDK_LIBRARY_DEBUG
+        XMP_CORE_LIBRARY_RELEASE
+        XMP_CORE_LIBRARY_DEBUG
+        XMP_FILES_LIBRARY_RELEASE
+        XMP_FILES_LIBRARY_DEBUG)
+    if(${_rawgl_sdk_path_var})
+        if(NOT IS_ABSOLUTE "${${_rawgl_sdk_path_var}}")
+            message(FATAL_ERROR "${_rawgl_sdk_path_var} must be an absolute path: ${${_rawgl_sdk_path_var}}")
+        endif()
+        if(NOT EXISTS "${${_rawgl_sdk_path_var}}")
+            message(FATAL_ERROR "${_rawgl_sdk_path_var} does not exist: ${${_rawgl_sdk_path_var}}")
         endif()
     endif()
 endforeach()

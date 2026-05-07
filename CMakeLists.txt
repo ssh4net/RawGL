@@ -43,6 +43,7 @@ if(RAWGL_BUILD_WHEEL)
         message(FATAL_ERROR "RAWGL_BUILD_WHEEL requires RAWGL_BUILD_PYTHON=ON.")
     endif()
 
+    rawgl_configure_python_from_prefix_path()
     find_package(Python REQUIRED COMPONENTS Interpreter)
     find_program(RAWGL_UV_EXECUTABLE NAMES uv)
     execute_process(
@@ -103,9 +104,9 @@ if(RAWGL_BUILD_WHEEL)
             list(APPEND _rawgl_wheel_config_settings
                 "-C" "cmake.define.RAWGL_WINDOWS_DEPS_ROOT=${RAWGL_WINDOWS_DEPS_ROOT}")
         endif()
-        if(RAWGL_WINDOWS_DNG_SDK_ROOT)
+        if(dng_sdk_ROOT)
             list(APPEND _rawgl_wheel_config_settings
-                "-C" "cmake.define.RAWGL_WINDOWS_DNG_SDK_ROOT=${RAWGL_WINDOWS_DNG_SDK_ROOT}")
+                "-C" "cmake.define.dng_sdk_ROOT=${dng_sdk_ROOT}")
         endif()
     endif()
     foreach(_rawgl_link_flag_var IN ITEMS

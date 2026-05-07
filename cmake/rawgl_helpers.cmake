@@ -102,6 +102,130 @@ function(rawgl_add_imported_interface_alias alias_target target_name)
         INTERFACE_LINK_LIBRARIES "${target_name}")
 endfunction()
 
+function(rawgl_configure_python_from_prefix_path)
+    if(Python_EXECUTABLE)
+        return()
+    endif()
+
+    if(WIN32)
+        set(_rawgl_python_names python.exe python3.exe python3 python)
+        set(_rawgl_python_library_suffixes libs lib)
+    else()
+        set(_rawgl_python_names python3 python)
+        set(_rawgl_python_library_suffixes lib lib64)
+    endif()
+
+    foreach(_rawgl_prefix IN LISTS CMAKE_PREFIX_PATH)
+        if(NOT _rawgl_prefix)
+            continue()
+        endif()
+
+        find_program(_rawgl_python_executable
+            NAMES ${_rawgl_python_names}
+            PATHS "${_rawgl_prefix}"
+            PATH_SUFFIXES "" bin Scripts
+            NO_DEFAULT_PATH
+            NO_CACHE)
+
+        if(_rawgl_python_executable)
+            file(TO_CMAKE_PATH "${_rawgl_prefix}" _rawgl_python_root)
+            break()
+        endif()
+    endforeach()
+
+    if(NOT _rawgl_python_executable)
+        return()
+    endif()
+
+    set(Python_EXECUTABLE "${_rawgl_python_executable}" CACHE FILEPATH "Python interpreter" FORCE)
+    set(Python_ROOT_DIR "${_rawgl_python_root}" CACHE PATH "Python root directory" FORCE)
+    set(Python_FIND_STRATEGY LOCATION CACHE STRING "Python lookup strategy" FORCE)
+
+    execute_process(
+        COMMAND "${_rawgl_python_executable}" -c
+                "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}'); print(f'{sys.version_info[0]}{sys.version_info[1]}')"
+        RESULT_VARIABLE _rawgl_python_version_res
+        OUTPUT_VARIABLE _rawgl_python_version_out
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+
+    set(_rawgl_python_include_suffixes include)
+    set(_rawgl_python_release_names python3 python)
+    set(_rawgl_python_debug_names)
+    set(_rawgl_python_sabi_names python3)
+    if(_rawgl_python_version_res EQUAL 0 AND _rawgl_python_version_out)
+        string(REPLACE "\n" ";" _rawgl_python_version_parts "${_rawgl_python_version_out}")
+        list(LENGTH _rawgl_python_version_parts _rawgl_python_version_part_count)
+        if(_rawgl_python_version_part_count GREATER_EQUAL 2)
+            list(GET _rawgl_python_version_parts 0 _rawgl_python_version_dot)
+            list(GET _rawgl_python_version_parts 1 _rawgl_python_version_nodot)
+            list(APPEND _rawgl_python_include_suffixes
+                "include/python${_rawgl_python_version_dot}"
+                "include/python${_rawgl_python_version_dot}m"
+                "include/python${_rawgl_python_version_nodot}")
+            set(_rawgl_python_release_names
+                "python${_rawgl_python_version_nodot}"
+                "python${_rawgl_python_version_dot}"
+                python3
+                python)
+            set(_rawgl_python_debug_names
+                "python${_rawgl_python_version_nodot}_d"
+                "python${_rawgl_python_version_nodot}d"
+                "python${_rawgl_python_version_dot}_d"
+                "python${_rawgl_python_version_dot}d")
+        endif()
+    endif()
+
+    if(NOT Python_INCLUDE_DIR)
+        find_path(_rawgl_python_include_dir
+            NAMES Python.h
+            PATHS "${_rawgl_python_root}"
+            PATH_SUFFIXES ${_rawgl_python_include_suffixes}
+            NO_DEFAULT_PATH
+            NO_CACHE)
+        if(_rawgl_python_include_dir)
+            set(Python_INCLUDE_DIR "${_rawgl_python_include_dir}" CACHE PATH "Python include directory" FORCE)
+        endif()
+    endif()
+
+    if(NOT Python_LIBRARY AND NOT Python_LIBRARY_RELEASE)
+        find_library(_rawgl_python_library_release
+            NAMES ${_rawgl_python_release_names}
+            PATHS "${_rawgl_python_root}"
+            PATH_SUFFIXES ${_rawgl_python_library_suffixes}
+            NO_DEFAULT_PATH
+            NO_CACHE)
+        if(_rawgl_python_library_release)
+            set(Python_LIBRARY "${_rawgl_python_library_release}" CACHE FILEPATH "Python library" FORCE)
+            set(Python_LIBRARY_RELEASE "${_rawgl_python_library_release}" CACHE FILEPATH "Python release library" FORCE)
+        endif()
+    endif()
+
+    if(NOT Python_LIBRARY_DEBUG AND _rawgl_python_debug_names)
+        find_library(_rawgl_python_library_debug
+            NAMES ${_rawgl_python_debug_names}
+            PATHS "${_rawgl_python_root}"
+            PATH_SUFFIXES ${_rawgl_python_library_suffixes}
+            NO_DEFAULT_PATH
+            NO_CACHE)
+        if(_rawgl_python_library_debug)
+            set(Python_LIBRARY_DEBUG "${_rawgl_python_library_debug}" CACHE FILEPATH "Python debug library" FORCE)
+        endif()
+    endif()
+
+    if(NOT Python_SABI_LIBRARY)
+        find_library(_rawgl_python_sabi_library
+            NAMES ${_rawgl_python_sabi_names}
+            PATHS "${_rawgl_python_root}"
+            PATH_SUFFIXES ${_rawgl_python_library_suffixes}
+            NO_DEFAULT_PATH
+            NO_CACHE)
+        if(_rawgl_python_sabi_library)
+            set(Python_SABI_LIBRARY "${_rawgl_python_sabi_library}" CACHE FILEPATH "Python stable ABI library" FORCE)
+        endif()
+    endif()
+endfunction()
+
 function(rawgl_map_imported_config_targets)
     foreach(rawgl_target_name ${ARGN})
         if(TARGET ${rawgl_target_name})

@@ -368,19 +368,19 @@ rawgl_windows_append_vendor_library(rawgl_windows_vendor_libs brotlidec brotlide
 rawgl_windows_append_vendor_library(rawgl_windows_vendor_libs brotlienc brotliencd)
 rawgl_windows_append_vendor_library(rawgl_windows_vendor_libs brotlicommon brotlicommond)
 
-if(NOT RAWGL_WINDOWS_DNG_LIBRARY_RELEASE)
-    rawgl_windows_find_prefixed_library_any(RAWGL_WINDOWS_DNG_LIBRARY_RELEASE
+if(NOT DNG_SDK_LIBRARY_RELEASE)
+    rawgl_windows_find_prefixed_library_any(DNG_SDK_LIBRARY_RELEASE
         dng_sdk
         dngsdk
         dng
         dng_sdk_static
         dngsdk_static)
-    if(RAWGL_WINDOWS_DNG_LIBRARY_RELEASE)
-        set(RAWGL_WINDOWS_DNG_LIBRARY_RELEASE "${RAWGL_WINDOWS_DNG_LIBRARY_RELEASE}" CACHE FILEPATH "Windows release DNG SDK library" FORCE)
+    if(DNG_SDK_LIBRARY_RELEASE)
+        set(DNG_SDK_LIBRARY_RELEASE "${DNG_SDK_LIBRARY_RELEASE}" CACHE FILEPATH "DNG SDK release library" FORCE)
     endif()
 endif()
-if(NOT RAWGL_WINDOWS_DNG_LIBRARY_DEBUG)
-    rawgl_windows_find_prefixed_library_any(RAWGL_WINDOWS_DNG_LIBRARY_DEBUG
+if(NOT DNG_SDK_LIBRARY_DEBUG)
+    rawgl_windows_find_prefixed_library_any(DNG_SDK_LIBRARY_DEBUG
         dng_sdkd
         dngsdkd
         dngd
@@ -388,60 +388,60 @@ if(NOT RAWGL_WINDOWS_DNG_LIBRARY_DEBUG)
         dngsdk_debug
         dng_sdk_staticd
         dngsdk_staticd)
-    if(RAWGL_WINDOWS_DNG_LIBRARY_DEBUG)
-        set(RAWGL_WINDOWS_DNG_LIBRARY_DEBUG "${RAWGL_WINDOWS_DNG_LIBRARY_DEBUG}" CACHE FILEPATH "Windows debug DNG SDK library" FORCE)
+    if(DNG_SDK_LIBRARY_DEBUG)
+        set(DNG_SDK_LIBRARY_DEBUG "${DNG_SDK_LIBRARY_DEBUG}" CACHE FILEPATH "DNG SDK debug library" FORCE)
     endif()
 endif()
-if(NOT RAWGL_WINDOWS_XMP_CORE_LIBRARY_RELEASE)
-    rawgl_windows_find_prefixed_library_any(RAWGL_WINDOWS_XMP_CORE_LIBRARY_RELEASE
+if(NOT XMP_CORE_LIBRARY_RELEASE)
+    rawgl_windows_find_prefixed_library_any(XMP_CORE_LIBRARY_RELEASE
         XMPCoreStaticRelease
         XMPCoreStatic
         XMPCore
         xmp_core)
-    if(RAWGL_WINDOWS_XMP_CORE_LIBRARY_RELEASE)
-        set(RAWGL_WINDOWS_XMP_CORE_LIBRARY_RELEASE "${RAWGL_WINDOWS_XMP_CORE_LIBRARY_RELEASE}" CACHE FILEPATH "Windows release XMP core library" FORCE)
+    if(XMP_CORE_LIBRARY_RELEASE)
+        set(XMP_CORE_LIBRARY_RELEASE "${XMP_CORE_LIBRARY_RELEASE}" CACHE FILEPATH "XMP Core release library" FORCE)
     endif()
 endif()
-if(NOT RAWGL_WINDOWS_XMP_CORE_LIBRARY_DEBUG)
-    rawgl_windows_find_prefixed_library_any(RAWGL_WINDOWS_XMP_CORE_LIBRARY_DEBUG
+if(NOT XMP_CORE_LIBRARY_DEBUG)
+    rawgl_windows_find_prefixed_library_any(XMP_CORE_LIBRARY_DEBUG
         XMPCoreStaticDebug
         XMPCoreStaticd
         XMPCored
         xmp_cored)
-    if(RAWGL_WINDOWS_XMP_CORE_LIBRARY_DEBUG)
-        set(RAWGL_WINDOWS_XMP_CORE_LIBRARY_DEBUG "${RAWGL_WINDOWS_XMP_CORE_LIBRARY_DEBUG}" CACHE FILEPATH "Windows debug XMP core library" FORCE)
+    if(XMP_CORE_LIBRARY_DEBUG)
+        set(XMP_CORE_LIBRARY_DEBUG "${XMP_CORE_LIBRARY_DEBUG}" CACHE FILEPATH "XMP Core debug library" FORCE)
     endif()
 endif()
-if(NOT RAWGL_WINDOWS_XMP_FILES_LIBRARY_RELEASE)
-    rawgl_windows_find_prefixed_library_any(RAWGL_WINDOWS_XMP_FILES_LIBRARY_RELEASE
+if(NOT XMP_FILES_LIBRARY_RELEASE)
+    rawgl_windows_find_prefixed_library_any(XMP_FILES_LIBRARY_RELEASE
         XMPFilesStaticRelease
         XMPFilesStatic
         XMPFiles
         xmp_files)
-    if(RAWGL_WINDOWS_XMP_FILES_LIBRARY_RELEASE)
-        set(RAWGL_WINDOWS_XMP_FILES_LIBRARY_RELEASE "${RAWGL_WINDOWS_XMP_FILES_LIBRARY_RELEASE}" CACHE FILEPATH "Windows release XMP files library" FORCE)
+    if(XMP_FILES_LIBRARY_RELEASE)
+        set(XMP_FILES_LIBRARY_RELEASE "${XMP_FILES_LIBRARY_RELEASE}" CACHE FILEPATH "XMP Files release library" FORCE)
     endif()
 endif()
-if(NOT RAWGL_WINDOWS_XMP_FILES_LIBRARY_DEBUG)
-    rawgl_windows_find_prefixed_library_any(RAWGL_WINDOWS_XMP_FILES_LIBRARY_DEBUG
+if(NOT XMP_FILES_LIBRARY_DEBUG)
+    rawgl_windows_find_prefixed_library_any(XMP_FILES_LIBRARY_DEBUG
         XMPFilesStaticDebug
         XMPFilesStaticd
         XMPFilesd
         xmp_filesd)
-    if(RAWGL_WINDOWS_XMP_FILES_LIBRARY_DEBUG)
-        set(RAWGL_WINDOWS_XMP_FILES_LIBRARY_DEBUG "${RAWGL_WINDOWS_XMP_FILES_LIBRARY_DEBUG}" CACHE FILEPATH "Windows debug XMP files library" FORCE)
+    if(XMP_FILES_LIBRARY_DEBUG)
+        set(XMP_FILES_LIBRARY_DEBUG "${XMP_FILES_LIBRARY_DEBUG}" CACHE FILEPATH "XMP Files debug library" FORCE)
     endif()
 endif()
 
 rawgl_windows_append_file_library(rawgl_windows_vendor_libs
-    "${RAWGL_WINDOWS_DNG_LIBRARY_RELEASE}"
-    "${RAWGL_WINDOWS_DNG_LIBRARY_DEBUG}")
+    "${DNG_SDK_LIBRARY_RELEASE}"
+    "${DNG_SDK_LIBRARY_DEBUG}")
 rawgl_windows_append_file_library(rawgl_windows_vendor_libs
-    "${RAWGL_WINDOWS_XMP_CORE_LIBRARY_RELEASE}"
-    "${RAWGL_WINDOWS_XMP_CORE_LIBRARY_DEBUG}")
+    "${XMP_CORE_LIBRARY_RELEASE}"
+    "${XMP_CORE_LIBRARY_DEBUG}")
 rawgl_windows_append_file_library(rawgl_windows_vendor_libs
-    "${RAWGL_WINDOWS_XMP_FILES_LIBRARY_RELEASE}"
-    "${RAWGL_WINDOWS_XMP_FILES_LIBRARY_DEBUG}")
+    "${XMP_FILES_LIBRARY_RELEASE}"
+    "${XMP_FILES_LIBRARY_DEBUG}")
 
 set(rawgl_windows_system_libs
     advapi32
