@@ -93,6 +93,28 @@ find_path(RAWGL_JXL_INCLUDE_DIR
     HINTS ${rawgl_dependency_include_hints})
 
 find_package(OpenMeta CONFIG QUIET)
+if(WIN32)
+    if(NOT TARGET EXPAT::EXPAT)
+        find_package(EXPAT QUIET)
+    endif()
+    if(NOT TARGET expat::expat)
+        find_package(expat CONFIG QUIET)
+    endif()
+    if(TARGET expat::expat AND NOT TARGET EXPAT::EXPAT)
+        rawgl_add_imported_interface_alias(EXPAT::EXPAT expat::expat)
+    endif()
+    rawgl_map_imported_config_targets(
+        Brotli::common
+        Brotli::decoder
+        Brotli::encoder
+        Brotli::brotlicommon
+        Brotli::brotlidec
+        Brotli::brotlienc
+        EXPAT::EXPAT
+        expat::expat
+        OpenMeta::openmeta_static
+        OpenMeta::openmeta_shared)
+endif()
 find_path(RAWGL_OPENMETA_INCLUDE_DIR
     NAMES openmeta/simple_meta.h
     HINTS ${rawgl_dependency_prefix_hints}

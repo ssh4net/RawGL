@@ -212,7 +212,8 @@ endif()
 target_link_libraries(rawgl_io PUBLIC
     rawgl_support
     ${RAWGL_OPENGL_LOADER_TARGET}
-    ${RAWGL_OIIO_TARGETS})
+    ${RAWGL_OIIO_TARGETS}
+    ${RAWGL_EXTRA_WINDOWS_LIBS})
 
 if(TARGET PNG::PNG)
     target_link_libraries(rawgl_io PUBLIC PNG::PNG)

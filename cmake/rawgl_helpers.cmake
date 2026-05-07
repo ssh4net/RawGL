@@ -89,6 +89,62 @@ function(rawgl_windows_config_library_expr out_var release_path debug_path)
     set(${out_var} "${rawgl_expr}" PARENT_SCOPE)
 endfunction()
 
+function(rawgl_add_imported_interface_alias alias_target target_name)
+    if(TARGET ${alias_target} OR NOT TARGET ${target_name})
+        return()
+    endif()
+
+    add_library(${alias_target} INTERFACE IMPORTED)
+    set_target_properties(${alias_target} PROPERTIES
+        INTERFACE_LINK_LIBRARIES "${target_name}")
+endfunction()
+
+function(rawgl_map_imported_config_targets)
+    foreach(rawgl_target_name ${ARGN})
+        if(TARGET ${rawgl_target_name})
+            set(rawgl_fallback_location)
+            set(rawgl_fallback_implib)
+            foreach(rawgl_config_name IN ITEMS RELEASE RELWITHDEBINFO MINSIZEREL NOCONFIG DEBUG)
+                if(NOT rawgl_fallback_location)
+                    get_target_property(rawgl_config_location ${rawgl_target_name} IMPORTED_LOCATION_${rawgl_config_name})
+                    if(rawgl_config_location)
+                        set(rawgl_fallback_location "${rawgl_config_location}")
+                    endif()
+                endif()
+                if(NOT rawgl_fallback_implib)
+                    get_target_property(rawgl_config_implib ${rawgl_target_name} IMPORTED_IMPLIB_${rawgl_config_name})
+                    if(rawgl_config_implib)
+                        set(rawgl_fallback_implib "${rawgl_config_implib}")
+                    endif()
+                endif()
+            endforeach()
+            if(NOT rawgl_fallback_location)
+                get_target_property(rawgl_fallback_location ${rawgl_target_name} IMPORTED_LOCATION)
+            endif()
+            if(NOT rawgl_fallback_implib)
+                get_target_property(rawgl_fallback_implib ${rawgl_target_name} IMPORTED_IMPLIB)
+            endif()
+
+            set_target_properties(${rawgl_target_name} PROPERTIES
+                MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
+                MAP_IMPORTED_CONFIG_MINSIZEREL Release)
+
+            if(rawgl_fallback_location)
+                set_target_properties(${rawgl_target_name} PROPERTIES
+                    IMPORTED_LOCATION_RELEASE "${rawgl_fallback_location}"
+                    IMPORTED_LOCATION_RELWITHDEBINFO "${rawgl_fallback_location}"
+                    IMPORTED_LOCATION_MINSIZEREL "${rawgl_fallback_location}")
+            endif()
+            if(rawgl_fallback_implib)
+                set_target_properties(${rawgl_target_name} PROPERTIES
+                    IMPORTED_IMPLIB_RELEASE "${rawgl_fallback_implib}"
+                    IMPORTED_IMPLIB_RELWITHDEBINFO "${rawgl_fallback_implib}"
+                    IMPORTED_IMPLIB_MINSIZEREL "${rawgl_fallback_implib}")
+            endif()
+        endif()
+    endforeach()
+endfunction()
+
 function(rawgl_apply_windows_debug_suffix target_name)
     if(NOT WIN32)
         return()

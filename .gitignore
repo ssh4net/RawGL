@@ -45,4 +45,4 @@ logs
 *.vcxproj.user
 __pycache__
 /examples/Sequence/BitshiftSequence_frames
-*.png
+/bld_*
