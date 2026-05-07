@@ -76,6 +76,9 @@ function(rawgl_windows_config_library_expr out_var release_path debug_path)
     if(debug_path)
         list(APPEND rawgl_expr
             "$<$<CONFIG:Debug>:${debug_path}>")
+    elseif(release_path)
+        list(APPEND rawgl_expr
+            "$<$<CONFIG:Debug>:${release_path}>")
     endif()
 
     if(release_path)

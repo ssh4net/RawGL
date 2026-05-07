@@ -57,10 +57,6 @@ foreach(rawgl_oiio_target OpenImageIO::OpenImageIO OpenImageIO::OpenImageIO_Util
     endif()
 endforeach()
 
-if(WIN32)
-    include("${CMAKE_CURRENT_LIST_DIR}/rawgl_windows_static_link.cmake")
-endif()
-
 find_path(RAWGL_SPDLOG_INCLUDE_DIR
     NAMES spdlog/spdlog.h
     HINTS ${rawgl_dependency_include_hints})
@@ -115,6 +111,11 @@ if(WIN32)
         OpenMeta::openmeta_static
         OpenMeta::openmeta_shared)
 endif()
+
+if(WIN32)
+    include("${CMAKE_CURRENT_LIST_DIR}/rawgl_windows_static_link.cmake")
+endif()
+
 find_path(RAWGL_OPENMETA_INCLUDE_DIR
     NAMES openmeta/simple_meta.h
     HINTS ${rawgl_dependency_prefix_hints}

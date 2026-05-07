@@ -252,6 +252,7 @@ if(NOT TARGET GLEW::GLEW
 endif()
 find_package(glfw3 CONFIG REQUIRED)
 find_package(OpenEXR CONFIG QUIET)
+find_package(dng_sdk CONFIG QUIET)
 find_package(OpenImageIO CONFIG REQUIRED)
 find_package(miniply CONFIG QUIET)
 find_package(RapidObj CONFIG REQUIRED)
@@ -325,13 +326,17 @@ if(RAWGL_WINDOWS_DEPS_ROOT AND NOT TARGET WebP::libwebpmux)
         RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/libwebpmux.lib"
         DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/libwebpmuxd.lib")
 endif()
-if(NOT TARGET libuhdr::libuhdr
-   AND RAWGL_WINDOWS_DEPS_ROOT
-   AND EXISTS "${RAWGL_WINDOWS_DEPS_ROOT}/lib/uhdr.lib")
+if(NOT TARGET libuhdr::libuhdr)
+    find_path(RAWGL_LIBUHDR_INCLUDE_DIR
+        NAMES ultrahdr_api.h)
+    find_library(RAWGL_LIBUHDR_LIBRARY_RELEASE
+        NAMES uhdr-static uhdr libuhdr)
+    find_library(RAWGL_LIBUHDR_LIBRARY_DEBUG
+        NAMES uhdr-staticd uhdrd libuhdrd uhdr_d)
     rawgl_add_windows_imported_library(libuhdr::libuhdr
-        INCLUDE_DIR "${RAWGL_WINDOWS_DEPS_ROOT}/include"
-        RELEASE "${RAWGL_WINDOWS_DEPS_ROOT}/lib/uhdr.lib"
-        DEBUG "${RAWGL_WINDOWS_DEPS_ROOT}/lib/uhdrd.lib")
+        INCLUDE_DIR "${RAWGL_LIBUHDR_INCLUDE_DIR}"
+        RELEASE "${RAWGL_LIBUHDR_LIBRARY_RELEASE}"
+        DEBUG "${RAWGL_LIBUHDR_LIBRARY_DEBUG}")
 endif()
 
 if(NOT TARGET WebP::webp)
