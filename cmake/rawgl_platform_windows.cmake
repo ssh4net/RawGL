@@ -443,5 +443,5 @@ else()
         "or add the legacy static dependency root to CMAKE_PREFIX_PATH.")
 endif()
 
-set(RAWGL_OIIO_TARGETS OpenImageIO::OpenImageIO OpenImageIO::OpenImageIO_Util)
+set(RAWGL_OIIO_TARGETS OpenImageIO::OpenImageIO)
 set(RAWGL_EXTRA_WINDOWS_LIBS opengl32)

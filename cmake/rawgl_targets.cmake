@@ -203,8 +203,7 @@ target_link_libraries(rawgl_core PUBLIC
     rawgl_support
     rawgl_io
     ${RAWGL_MINIPLY_TARGET}
-    Threads::Threads
-    ${RAWGL_EXTRA_WINDOWS_LIBS})
+    Threads::Threads)
 if(TARGET rapidobj::rapidobj)
     target_link_libraries(rawgl_core PRIVATE rapidobj::rapidobj)
 endif()

@@ -224,6 +224,13 @@ if(BUILD_TESTING)
     set_tests_properties(rawgl_batch_smoke PROPERTIES
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+    if(NOT WIN32)
+        find_program(OIIOTOOL_EXECUTABLE
+            NAMES oiiotool
+            HINTS ${CMAKE_PREFIX_PATH}
+            PATH_SUFFIXES bin)
+    endif()
+
     function(rawgl_add_script_test test_name base_name)
         if(WIN32)
             add_test(NAME ${test_name}
@@ -233,9 +240,9 @@ if(BUILD_TESTING)
         else()
             set(rawgl_test_env
                 "RAWGL_BIN=$<TARGET_FILE:rawgl>")
-            if(RAWGL_LINUX_PREFIX)
+            if(OIIOTOOL_EXECUTABLE)
                 list(APPEND rawgl_test_env
-                    "RAWGL_OIIOTOOL=${RAWGL_LINUX_PREFIX}/bin/oiiotool")
+                    "RAWGL_OIIOTOOL=${OIIOTOOL_EXECUTABLE}")
             endif()
 
             add_test(NAME ${test_name}

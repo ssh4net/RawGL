@@ -261,4 +261,4 @@ endif()
 
 set(RAWGL_OPENGL_LOADER_TARGET libglew_static)
 set(RAWGL_GLFW_TARGET glfw)
-set(RAWGL_OIIO_TARGETS OpenImageIO::OpenImageIO OpenImageIO::OpenImageIO_Util)
+set(RAWGL_OIIO_TARGETS OpenImageIO::OpenImageIO)

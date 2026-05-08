@@ -67,7 +67,7 @@
         "RAWGL_BUILD_PYTHON": "ON",
         "RAWGL_PYTHON_BIND_CORE": "ON",
         "RAWGL_USE_PACKAGED_MINIPLY": "OFF",
-        "RAWGL_LINUX_PREFIX": "$penv{RAWGL_LINUX_PREFIX}"
+        "CMAKE_PREFIX_PATH": "$penv{CMAKE_PREFIX_PATH}"
       },
       "condition": {
         "type": "equals",
@@ -108,7 +108,7 @@
         "RAWGL_INSTALL_DEV_ARTIFACTS": "OFF",
         "RAWGL_PYTHON_BIND_CORE": "ON",
         "RAWGL_USE_PACKAGED_MINIPLY": "OFF",
-        "RAWGL_LINUX_PREFIX": "$penv{RAWGL_LINUX_PREFIX}"
+        "CMAKE_PREFIX_PATH": "$penv{CMAKE_PREFIX_PATH}"
       },
       "condition": {
         "type": "equals",

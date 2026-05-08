@@ -4,7 +4,11 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 rawgl_bin="${RAWGL_BIN:-$repo_root/build_linux_release/RawGL}"
-oiiotool_bin="${RAWGL_OIIOTOOL:-/mnt/e/UBc/Release/bin/oiiotool}"
+oiiotool_bin="${RAWGL_OIIOTOOL:-$(command -v oiiotool || true)}"
+if [[ -z "$oiiotool_bin" ]]; then
+  echo "oiiotool not found; set RAWGL_OIIOTOOL or add oiiotool to PATH." >&2
+  exit 1
+fi
 
 out_default="$script_dir/outputs/cull_default.exr"
 out_front="$script_dir/outputs/cull_front.exr"

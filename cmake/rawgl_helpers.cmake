@@ -73,6 +73,11 @@ endfunction()
 function(rawgl_windows_config_library_expr out_var release_path debug_path)
     set(rawgl_expr)
 
+    if(release_path AND debug_path AND release_path STREQUAL debug_path)
+        set(${out_var} "${release_path}" PARENT_SCOPE)
+        return()
+    endif()
+
     if(debug_path)
         list(APPEND rawgl_expr
             "$<$<CONFIG:Debug>:${debug_path}>")
@@ -100,6 +105,113 @@ function(rawgl_add_imported_interface_alias alias_target target_name)
     add_library(${alias_target} INTERFACE IMPORTED)
     set_target_properties(${alias_target} PROPERTIES
         INTERFACE_LINK_LIBRARIES "${target_name}")
+endfunction()
+
+function(rawgl_append_unique_interface_link_libraries target_name)
+    if(NOT TARGET ${target_name})
+        return()
+    endif()
+
+    get_target_property(_rawgl_iface_links ${target_name} INTERFACE_LINK_LIBRARIES)
+    if(NOT _rawgl_iface_links)
+        set(_rawgl_iface_links)
+    endif()
+
+    foreach(_rawgl_link_item IN LISTS ARGN)
+        if(NOT _rawgl_link_item)
+            continue()
+        endif()
+        list(FIND _rawgl_iface_links "${_rawgl_link_item}" _rawgl_link_index)
+        if(_rawgl_link_index EQUAL -1)
+            list(APPEND _rawgl_iface_links "${_rawgl_link_item}")
+        endif()
+    endforeach()
+
+    if(_rawgl_iface_links)
+        list(REMOVE_DUPLICATES _rawgl_iface_links)
+        set_target_properties(${target_name} PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${_rawgl_iface_links}")
+    endif()
+endfunction()
+
+function(rawgl_remove_interface_link_libraries target_name)
+    if(NOT TARGET ${target_name})
+        return()
+    endif()
+
+    get_target_property(_rawgl_iface_links ${target_name} INTERFACE_LINK_LIBRARIES)
+    if(NOT _rawgl_iface_links)
+        return()
+    endif()
+
+    foreach(_rawgl_link_item IN LISTS ARGN)
+        if(_rawgl_link_item)
+            list(REMOVE_ITEM _rawgl_iface_links "${_rawgl_link_item}")
+        endif()
+    endforeach()
+
+    if(_rawgl_iface_links)
+        list(REMOVE_DUPLICATES _rawgl_iface_links)
+        set_target_properties(${target_name} PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${_rawgl_iface_links}")
+    endif()
+endfunction()
+
+function(rawgl_windows_remove_interface_library target_name release_name debug_name)
+    if(NOT TARGET ${target_name})
+        return()
+    endif()
+
+    rawgl_windows_find_dual_config_library(_rawgl_release_path Release "${release_name}" "${debug_name}")
+    rawgl_windows_find_dual_config_library(_rawgl_debug_path Debug "${release_name}" "${debug_name}")
+
+    set(_rawgl_items)
+    if(_rawgl_release_path OR _rawgl_debug_path)
+        rawgl_windows_config_library_expr(_rawgl_expr "${_rawgl_release_path}" "${_rawgl_debug_path}")
+        list(APPEND _rawgl_items ${_rawgl_expr})
+    endif()
+
+    if(_rawgl_release_path)
+        rawgl_windows_append_path_variants(_rawgl_items "${_rawgl_release_path}")
+    endif()
+    if(_rawgl_debug_path)
+        rawgl_windows_append_path_variants(_rawgl_items "${_rawgl_debug_path}")
+    endif()
+
+    foreach(_rawgl_prefix IN LISTS rawgl_windows_library_prefixes)
+        rawgl_windows_append_path_variants(_rawgl_items
+            "${_rawgl_prefix}/lib/${release_name}.lib")
+        rawgl_windows_append_path_variants(_rawgl_items
+            "${_rawgl_prefix}/lib/${debug_name}.lib")
+    endforeach()
+
+    if(_rawgl_items)
+        list(REMOVE_DUPLICATES _rawgl_items)
+        rawgl_remove_interface_link_libraries(${target_name} ${_rawgl_items})
+    endif()
+
+    get_target_property(_rawgl_iface_links ${target_name} INTERFACE_LINK_LIBRARIES)
+    if(NOT _rawgl_iface_links)
+        return()
+    endif()
+
+    string(TOLOWER "${release_name}.lib" _rawgl_release_file_name)
+    string(TOLOWER "${debug_name}.lib" _rawgl_debug_file_name)
+    set(_rawgl_filtered_links)
+    foreach(_rawgl_link_item IN LISTS _rawgl_iface_links)
+        string(TOLOWER "${_rawgl_link_item}" _rawgl_link_item_lower)
+        if(_rawgl_link_item_lower MATCHES "(^|[/\\\\])${_rawgl_release_file_name}(>|$)"
+           OR _rawgl_link_item_lower MATCHES "(^|[/\\\\])${_rawgl_debug_file_name}(>|$)")
+            continue()
+        endif()
+        list(APPEND _rawgl_filtered_links "${_rawgl_link_item}")
+    endforeach()
+
+    if(_rawgl_filtered_links)
+        list(REMOVE_DUPLICATES _rawgl_filtered_links)
+        set_target_properties(${target_name} PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${_rawgl_filtered_links}")
+    endif()
 endfunction()
 
 function(rawgl_configure_python_from_prefix_path)

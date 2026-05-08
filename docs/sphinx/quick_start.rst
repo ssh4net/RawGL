@@ -8,26 +8,27 @@ This page shows the shortest usable paths for RawGL.
 
 For fuller workflow patterns, see :doc:`examples`.
 
-Linux note
-----------
+Dependency Prefixes
+-------------------
 
-Use the explicit libc++ presets when your Linux dependency prefix is built with
-libc++.
+RawGL uses standard CMake discovery. Put dependency prefixes in
+``CMAKE_PREFIX_PATH``; do not rely on machine-local paths in project files.
 
-The current validated UBc prefix on this system is:
-
-.. code-block:: text
-
-   /mnt/e/UBc/Release
-
-Use it with:
+For a libc++ dependency stack on Linux:
 
 .. code-block:: sh
 
-   export RAWGL_LINUX_PREFIX=/mnt/e/UBc/Release
+   export CMAKE_PREFIX_PATH=/path/to/dependency/prefix
    cmake --preset linux-release-python-core-libcxx
    cmake --build --preset linux-release-python-core-libcxx
    ctest --test-dir build_linux_release_python_core_libcxx --output-on-failure
+
+For Visual Studio builds on Windows:
+
+.. code-block:: bat
+
+   cmake -S . -B build_vs2022 -G "Visual Studio 17 2022" -A x64 ^
+     -DCMAKE_PREFIX_PATH=C:/path/to/dependency/prefix
 
 Python
 ------
