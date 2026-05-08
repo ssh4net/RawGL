@@ -1,29 +1,168 @@
 message(STATUS "Building RawGL Python wheel")
 
-set(_rawgl_build_args
-    --build "@CMAKE_BINARY_DIR@"
-    --target rawgl_wheel)
-if(NOT "@CMAKE_INSTALL_CONFIG_NAME@" STREQUAL "")
-    list(APPEND _rawgl_build_args --config "@CMAKE_INSTALL_CONFIG_NAME@")
+if(NOT DEFINED RAWGL_WHEEL_INSTALL)
+    set(RAWGL_WHEEL_INSTALL ON)
+endif()
+
+file(MAKE_DIRECTORY "@_rawgl_wheel_out_dir@")
+
+set(_rawgl_prefix_path "@CMAKE_PREFIX_PATH@")
+set(_rawgl_prefix_path_env "$ENV{CMAKE_PREFIX_PATH}")
+if(_rawgl_prefix_path_env AND NOT _rawgl_prefix_path_env MATCHES ";")
+    string(REPLACE ":" ";" _rawgl_prefix_path_env "${_rawgl_prefix_path_env}")
+endif()
+
+if(_rawgl_prefix_path STREQUAL "" AND NOT _rawgl_prefix_path_env STREQUAL "")
+    set(_rawgl_prefix_path "${_rawgl_prefix_path_env}")
+elseif(NOT _rawgl_prefix_path STREQUAL "" AND NOT _rawgl_prefix_path_env STREQUAL "")
+    set(_rawgl_prefix_path "${_rawgl_prefix_path};${_rawgl_prefix_path_env}")
+endif()
+
+set(_rawgl_env_vars "")
+if(NOT _rawgl_prefix_path STREQUAL "")
+    string(REPLACE ";" "\\;" _rawgl_prefix_path_escaped "${_rawgl_prefix_path}")
+    list(APPEND _rawgl_env_vars "CMAKE_PREFIX_PATH=${_rawgl_prefix_path_escaped}")
+endif()
+
+set(_rawgl_cc "@CMAKE_C_COMPILER@")
+if(NOT _rawgl_cc STREQUAL "")
+    list(APPEND _rawgl_env_vars "CC=${_rawgl_cc}")
+endif()
+set(_rawgl_cxx "@CMAKE_CXX_COMPILER@")
+if(NOT _rawgl_cxx STREQUAL "")
+    list(APPEND _rawgl_env_vars "CXX=${_rawgl_cxx}")
+endif()
+
+set(_rawgl_generator "@CMAKE_GENERATOR@")
+if(NOT _rawgl_generator STREQUAL "")
+    list(APPEND _rawgl_env_vars "CMAKE_GENERATOR=${_rawgl_generator}")
+endif()
+set(_rawgl_generator_platform "@CMAKE_GENERATOR_PLATFORM@")
+if(NOT _rawgl_generator_platform STREQUAL "")
+    list(APPEND _rawgl_env_vars "CMAKE_GENERATOR_PLATFORM=${_rawgl_generator_platform}")
+endif()
+set(_rawgl_generator_toolset "@CMAKE_GENERATOR_TOOLSET@")
+if(NOT _rawgl_generator_toolset STREQUAL "")
+    list(APPEND _rawgl_env_vars "CMAKE_GENERATOR_TOOLSET=${_rawgl_generator_toolset}")
+endif()
+set(_rawgl_generator_instance "@CMAKE_GENERATOR_INSTANCE@")
+if(NOT _rawgl_generator_instance STREQUAL "")
+    list(APPEND _rawgl_env_vars "CMAKE_GENERATOR_INSTANCE=${_rawgl_generator_instance}")
+endif()
+
+set(_rawgl_skbuild_build_type "@CMAKE_BUILD_TYPE@")
+if(DEFINED RAWGL_WHEEL_CONFIG AND NOT RAWGL_WHEEL_CONFIG STREQUAL "")
+    set(_rawgl_skbuild_build_type "${RAWGL_WHEEL_CONFIG}")
+elseif(DEFINED CMAKE_INSTALL_CONFIG_NAME AND NOT CMAKE_INSTALL_CONFIG_NAME STREQUAL "")
+    set(_rawgl_skbuild_build_type "${CMAKE_INSTALL_CONFIG_NAME}")
+endif()
+if(NOT _rawgl_skbuild_build_type STREQUAL "")
+    list(APPEND _rawgl_env_vars "SKBUILD_CMAKE_BUILD_TYPE=${_rawgl_skbuild_build_type}")
+endif()
+
+set(_rawgl_config_settings "@_rawgl_wheel_config_settings@")
+
+message(STATUS "Wheel env:")
+message(STATUS "  Python: @Python_EXECUTABLE@")
+if(NOT _rawgl_prefix_path STREQUAL "")
+    message(STATUS "  CMAKE_PREFIX_PATH: ${_rawgl_prefix_path}")
+else()
+    message(STATUS "  CMAKE_PREFIX_PATH: <empty>")
+endif()
+if(NOT _rawgl_cxx STREQUAL "")
+    message(STATUS "  CXX: ${_rawgl_cxx}")
+endif()
+if(NOT _rawgl_generator STREQUAL "")
+    message(STATUS "  CMAKE_GENERATOR: ${_rawgl_generator}")
+endif()
+if(NOT _rawgl_generator_platform STREQUAL "")
+    message(STATUS "  CMAKE_GENERATOR_PLATFORM: ${_rawgl_generator_platform}")
+endif()
+if(NOT _rawgl_generator_toolset STREQUAL "")
+    message(STATUS "  CMAKE_GENERATOR_TOOLSET: ${_rawgl_generator_toolset}")
+endif()
+if(NOT _rawgl_generator_instance STREQUAL "")
+    message(STATUS "  CMAKE_GENERATOR_INSTANCE: ${_rawgl_generator_instance}")
+endif()
+if(NOT _rawgl_skbuild_build_type STREQUAL "")
+    message(STATUS "  SKBUILD_CMAKE_BUILD_TYPE: ${_rawgl_skbuild_build_type}")
 endif()
 
 execute_process(
-    COMMAND "@CMAKE_COMMAND@" ${_rawgl_build_args}
-    RESULT_VARIABLE _rawgl_wheel_res
-)
+    COMMAND "@Python_EXECUTABLE@" -c "import pip"
+    RESULT_VARIABLE _rawgl_python_has_pip
+    OUTPUT_QUIET
+    ERROR_QUIET)
+
+set(_rawgl_pip_args "--no-deps")
+if("@RAWGL_WHEEL_NO_BUILD_ISOLATION@" STREQUAL "ON")
+    execute_process(
+        COMMAND "@Python_EXECUTABLE@" -c "import scikit_build_core"
+        RESULT_VARIABLE _rawgl_python_has_scikit_build_core
+        OUTPUT_QUIET
+        ERROR_QUIET)
+    if(NOT _rawgl_python_has_scikit_build_core EQUAL 0)
+        message(FATAL_ERROR
+            "RAWGL_WHEEL_NO_BUILD_ISOLATION requires Python package 'scikit-build-core' "
+            "(module 'scikit_build_core') for: @Python_EXECUTABLE@. Install it into "
+            "that interpreter, or set RAWGL_WHEEL_NO_BUILD_ISOLATION=OFF.")
+    endif()
+    list(APPEND _rawgl_pip_args "--no-build-isolation")
+    message(STATUS "Wheel build mode: no-build-isolation")
+else()
+    message(STATUS "Wheel build mode: build isolation")
+endif()
+
+set(_rawgl_wheel_res 1)
+if(_rawgl_python_has_pip EQUAL 0)
+    message(STATUS "Wheel tool: pip")
+    execute_process(
+        COMMAND "@CMAKE_COMMAND@" -E env
+                ${_rawgl_env_vars}
+                "@Python_EXECUTABLE@" -m pip wheel "@PROJECT_SOURCE_DIR@"
+                ${_rawgl_pip_args}
+                ${_rawgl_config_settings}
+                -w "@_rawgl_wheel_out_dir@"
+        WORKING_DIRECTORY "@PROJECT_SOURCE_DIR@"
+        RESULT_VARIABLE _rawgl_wheel_res)
+else()
+    if("@RAWGL_UV_EXECUTABLE@" STREQUAL "" OR "@RAWGL_UV_EXECUTABLE@" MATCHES "-NOTFOUND$")
+        message(FATAL_ERROR
+            "Python has no pip module: @Python_EXECUTABLE@; and uv was not found when configuring. "
+            "Either install pip into that Python, or install uv and reconfigure.")
+    endif()
+    message(STATUS "Wheel tool: uv")
+    set(_rawgl_uv_args "")
+    if("@RAWGL_WHEEL_NO_BUILD_ISOLATION@" STREQUAL "ON")
+        list(APPEND _rawgl_uv_args "--no-build-isolation")
+    endif()
+    execute_process(
+        COMMAND "@CMAKE_COMMAND@" -E env
+                ${_rawgl_env_vars}
+                "@RAWGL_UV_EXECUTABLE@" --no-cache build
+                --wheel
+                ${_rawgl_config_settings}
+                ${_rawgl_uv_args}
+                -p "@Python_EXECUTABLE@"
+                -o "@_rawgl_wheel_out_dir@"
+                "@PROJECT_SOURCE_DIR@"
+        WORKING_DIRECTORY "@PROJECT_SOURCE_DIR@"
+        RESULT_VARIABLE _rawgl_wheel_res)
+endif()
+
 if(NOT _rawgl_wheel_res EQUAL 0)
     message(FATAL_ERROR "Wheel build failed: exit=${_rawgl_wheel_res}")
 endif()
 
 set(_rawgl_wheel_version "@PROJECT_VERSION@")
 file(GLOB _rawgl_wheels LIST_DIRECTORIES false
-    "@CMAKE_BINARY_DIR@/dist/rawgl-${_rawgl_wheel_version}-*.whl")
+    "@_rawgl_wheel_out_dir@/rawgl-${_rawgl_wheel_version}-*.whl")
 list(LENGTH _rawgl_wheels _rawgl_wheel_count)
 if(_rawgl_wheel_count EQUAL 0)
-    file(GLOB _rawgl_all_wheels LIST_DIRECTORIES false "@CMAKE_BINARY_DIR@/dist/rawgl-*.whl")
+    file(GLOB _rawgl_all_wheels LIST_DIRECTORIES false "@_rawgl_wheel_out_dir@/rawgl-*.whl")
     message(FATAL_ERROR
         "Wheel build did not produce expected output for version ${_rawgl_wheel_version}: "
-        "@CMAKE_BINARY_DIR@/dist/rawgl-${_rawgl_wheel_version}-*.whl "
+        "@_rawgl_wheel_out_dir@/rawgl-${_rawgl_wheel_version}-*.whl "
         "(found: ${_rawgl_all_wheels})")
 endif()
 
@@ -33,10 +172,14 @@ endif()
 
 list(GET _rawgl_wheels 0 _rawgl_wheel_file)
 
-set(_rawgl_wheel_install_dir "${CMAKE_INSTALL_PREFIX}/@CMAKE_INSTALL_DATADIR@/rawgl/wheels")
-message(STATUS "Installing wheel: ${_rawgl_wheel_file}")
-message(STATUS "  -> ${_rawgl_wheel_install_dir}")
+if(RAWGL_WHEEL_INSTALL)
+    set(_rawgl_wheel_install_dir "${CMAKE_INSTALL_PREFIX}/@CMAKE_INSTALL_DATADIR@/rawgl/wheels")
+    message(STATUS "Installing wheel: ${_rawgl_wheel_file}")
+    message(STATUS "  -> ${_rawgl_wheel_install_dir}")
 
-file(INSTALL
-    FILES "${_rawgl_wheel_file}"
-    DESTINATION "${_rawgl_wheel_install_dir}")
+    file(INSTALL
+        FILES "${_rawgl_wheel_file}"
+        DESTINATION "${_rawgl_wheel_install_dir}")
+else()
+    message(STATUS "Wheel built: ${_rawgl_wheel_file}")
+endif()

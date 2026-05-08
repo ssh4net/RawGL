@@ -94,6 +94,38 @@ foreach(_rawgl_legacy_python_pair IN ITEMS
     unset(${_rawgl_legacy_python_var} CACHE)
 endforeach()
 
+foreach(_rawgl_python3_pair IN ITEMS
+        "Python3_EXECUTABLE;Python_EXECUTABLE;FILEPATH;Python interpreter"
+        "Python3_ROOT_DIR;Python_ROOT_DIR;PATH;Python root directory"
+        "Python3_INCLUDE_DIR;Python_INCLUDE_DIR;PATH;Python include directory"
+        "Python3_LIBRARY;Python_LIBRARY;FILEPATH;Python library"
+        "Python3_LIBRARY_RELEASE;Python_LIBRARY_RELEASE;FILEPATH;Python release library"
+        "Python3_LIBRARY_DEBUG;Python_LIBRARY_DEBUG;FILEPATH;Python debug library"
+        "Python3_SABI_LIBRARY;Python_SABI_LIBRARY;FILEPATH;Python stable ABI library"
+        "Python3_SABI_LIBRARY_RELEASE;Python_SABI_LIBRARY_RELEASE;FILEPATH;Python stable ABI release library"
+        "Python3_FIND_STRATEGY;Python_FIND_STRATEGY;STRING;Python lookup strategy"
+        "Python3_FIND_REGISTRY;Python_FIND_REGISTRY;STRING;Python registry lookup policy")
+    list(GET _rawgl_python3_pair 0 _rawgl_python3_var)
+    list(GET _rawgl_python3_pair 1 _rawgl_python_var)
+    list(GET _rawgl_python3_pair 2 _rawgl_python_cache_type)
+    list(GET _rawgl_python3_pair 3 _rawgl_python_cache_doc)
+    if(DEFINED ${_rawgl_python3_var} AND ${_rawgl_python3_var} AND NOT ${_rawgl_python_var})
+        set(${_rawgl_python_var} "${${_rawgl_python3_var}}" CACHE ${_rawgl_python_cache_type} "${_rawgl_python_cache_doc}" FORCE)
+    endif()
+    unset(${_rawgl_python3_var} CACHE)
+endforeach()
+foreach(_rawgl_python3_cache_var IN ITEMS
+        Python3_DIR
+        Python3_EXTENSION_SUFFIX
+        Python3_INCLUDE_DIRS
+        Python3_INTERPRETER_ID
+        Python3_LIBRARIES
+        Python3_SOABI
+        Python3_SOSABI
+        Python3_VERSION)
+    unset(${_rawgl_python3_cache_var} CACHE)
+endforeach()
+
 if(WIN32)
     foreach(_rawgl_legacy_sdk_pair IN ITEMS
             "RAWGL_WINDOWS_DNG_SDK_ROOT;dng_sdk_ROOT;PATH;DNG SDK root"

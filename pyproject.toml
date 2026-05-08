@@ -7,7 +7,7 @@ name = "rawgl"
 description = "Batch-oriented GLSL image processing workflows"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { file = "LICENSE" }
+license = { file = "LICENSE.md" }
 dynamic = ["version"]
 
 [tool.scikit-build]

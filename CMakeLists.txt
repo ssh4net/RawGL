@@ -46,120 +46,77 @@ if(RAWGL_BUILD_WHEEL)
     rawgl_configure_python_from_prefix_path()
     find_package(Python REQUIRED COMPONENTS Interpreter)
     find_program(RAWGL_UV_EXECUTABLE NAMES uv)
-    execute_process(
-        COMMAND "${Python_EXECUTABLE}" -c "import pip"
-        RESULT_VARIABLE _rawgl_python_has_pip
-        OUTPUT_QUIET
-        ERROR_QUIET
-    )
 
-    if(RAWGL_WHEEL_NO_BUILD_ISOLATION)
-        execute_process(
-            COMMAND "${Python_EXECUTABLE}" -c "import scikit_build_core"
-            RESULT_VARIABLE _rawgl_python_has_scikit_build_core
-            OUTPUT_QUIET
-            ERROR_QUIET
-        )
-        if(NOT _rawgl_python_has_scikit_build_core EQUAL 0)
-            message(FATAL_ERROR
-                "RAWGL_WHEEL_NO_BUILD_ISOLATION requires Python package 'scikit-build-core' for: "
-                "${Python_EXECUTABLE}. Install it into that interpreter, or set RAWGL_WHEEL_NO_BUILD_ISOLATION=OFF.")
-        endif()
-    endif()
-
-    set(_rawgl_wheel_env_prefix_path "${CMAKE_PREFIX_PATH}")
-    string(REPLACE ";" "\\;" _rawgl_wheel_env_prefix_path "${_rawgl_wheel_env_prefix_path}")
     set(_rawgl_wheel_out_dir "${CMAKE_BINARY_DIR}/dist")
-    set(_rawgl_wheel_env_args
-        "CMAKE_PREFIX_PATH=${_rawgl_wheel_env_prefix_path}"
-        "SKBUILD_CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
-    if(CMAKE_C_COMPILER)
-        list(APPEND _rawgl_wheel_env_args
-            "CC=${CMAKE_C_COMPILER}")
-    endif()
-    if(CMAKE_CXX_COMPILER)
-        list(APPEND _rawgl_wheel_env_args
-            "CXX=${CMAKE_CXX_COMPILER}")
-    endif()
-
-    set(_rawgl_wheel_pip_isolation_args "")
-    if(RAWGL_WHEEL_NO_BUILD_ISOLATION)
-        set(_rawgl_wheel_pip_isolation_args --no-build-isolation)
-    endif()
 
     set(_rawgl_wheel_config_settings "")
-    list(APPEND _rawgl_wheel_config_settings
-        "-C" "cmake.define.RAWGL_BUILD_PYTHON=${RAWGL_BUILD_PYTHON}"
-        "-C" "cmake.define.RAWGL_PYTHON_BIND_CORE=${RAWGL_PYTHON_BIND_CORE}"
-        "-C" "cmake.define.RAWGL_INSTALL_DEV_ARTIFACTS=OFF")
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        list(APPEND _rawgl_wheel_config_settings
-            "-C" "cmake.define.RAWGL_LINUX_USE_LIBCXX=${RAWGL_LINUX_USE_LIBCXX}"
-            "-C" "cmake.define.RAWGL_USE_PACKAGED_MINIPLY=${RAWGL_USE_PACKAGED_MINIPLY}")
-    endif()
-    if(WIN32)
-        if(dng_sdk_ROOT)
-            list(APPEND _rawgl_wheel_config_settings
-                "-C" "cmake.define.dng_sdk_ROOT=${dng_sdk_ROOT}")
+    function(rawgl_append_wheel_config_define rawgl_define_name rawgl_define_value)
+        if("${rawgl_define_value}" STREQUAL "")
+            return()
         endif()
-    endif()
-    foreach(_rawgl_link_flag_var IN ITEMS
+        set(rawgl_escaped_define_value "${rawgl_define_value}")
+        string(REPLACE ";" "\\;" rawgl_escaped_define_value "${rawgl_escaped_define_value}")
+        list(APPEND _rawgl_wheel_config_settings
+            "-C" "cmake.define.${rawgl_define_name}=${rawgl_escaped_define_value}")
+        set(_rawgl_wheel_config_settings "${_rawgl_wheel_config_settings}" PARENT_SCOPE)
+    endfunction()
+
+    rawgl_append_wheel_config_define(RAWGL_BUILD_PYTHON ON)
+    rawgl_append_wheel_config_define(RAWGL_PYTHON_BIND_CORE "${RAWGL_PYTHON_BIND_CORE}")
+    rawgl_append_wheel_config_define(RAWGL_INSTALL_DEV_ARTIFACTS OFF)
+
+    foreach(_rawgl_wheel_define_var IN ITEMS
+            BUILD_SHARED_LIBS
+            CMAKE_C_STANDARD
+            CMAKE_CXX_STANDARD
+            CMAKE_MSVC_RUNTIME_LIBRARY
+            CMAKE_POLICY_VERSION_MINIMUM
             CMAKE_EXE_LINKER_FLAGS
             CMAKE_SHARED_LINKER_FLAGS
-            CMAKE_MODULE_LINKER_FLAGS)
-        if(${_rawgl_link_flag_var})
-            list(APPEND _rawgl_wheel_config_settings
-                "-C" "cmake.define.${_rawgl_link_flag_var}=${${_rawgl_link_flag_var}}")
+            CMAKE_MODULE_LINKER_FLAGS
+            RAWGL_WINDOWS_UTF8
+            RAWGL_WINDOWS_PREFIX_ONLY_FIND
+            RAWGL_WINDOWS_CONFIGURATION_TYPES
+            RAWGL_WINDOWS_DEBUG_SUFFIX
+            RAWGL_WINDOWS_IMPORTED_CONFIG_REWRITE_ROOTS
+            RAWGL_LINUX_USE_LIBCXX
+            RAWGL_USE_PACKAGED_MINIPLY
+            miniply_INCLUDE_DIR
+            dng_sdk_ROOT
+            DNG_SDK_LIBRARY_RELEASE
+            DNG_SDK_LIBRARY_DEBUG
+            XMP_CORE_LIBRARY_RELEASE
+            XMP_CORE_LIBRARY_DEBUG
+            XMP_FILES_LIBRARY_RELEASE
+            XMP_FILES_LIBRARY_DEBUG
+            Python_EXECUTABLE
+            Python_ROOT_DIR
+            Python_INCLUDE_DIR
+            Python_LIBRARY
+            Python_LIBRARY_RELEASE
+            Python_LIBRARY_DEBUG
+            Python_SABI_LIBRARY
+            Python_SABI_LIBRARY_RELEASE)
+        if(DEFINED ${_rawgl_wheel_define_var})
+            rawgl_append_wheel_config_define("${_rawgl_wheel_define_var}" "${${_rawgl_wheel_define_var}}")
         endif()
     endforeach()
-
-    set(_rawgl_wheel_cmd "")
-    set(_rawgl_wheel_tool "pip")
-    if(_rawgl_python_has_pip EQUAL 0)
-        list(APPEND _rawgl_wheel_cmd
-            "${Python_EXECUTABLE}" -m pip wheel "${PROJECT_SOURCE_DIR}"
-            --no-deps
-            ${_rawgl_wheel_config_settings}
-            ${_rawgl_wheel_pip_isolation_args}
-            -w "${_rawgl_wheel_out_dir}"
-        )
-    else()
-        if(NOT RAWGL_UV_EXECUTABLE)
-            message(FATAL_ERROR
-                "RAWGL_BUILD_WHEEL: '${Python_EXECUTABLE}' has no pip module, and 'uv' was not found on PATH. "
-                "Either install pip into that Python, or install uv.")
-        endif()
-        set(_rawgl_wheel_tool "uv")
-        set(_rawgl_wheel_uv_args "")
-        if(RAWGL_WHEEL_NO_BUILD_ISOLATION)
-            set(_rawgl_wheel_uv_args --no-build-isolation)
-        endif()
-        list(APPEND _rawgl_wheel_cmd
-            "${RAWGL_UV_EXECUTABLE}" --no-cache build
-            --wheel
-            ${_rawgl_wheel_config_settings}
-            ${_rawgl_wheel_uv_args}
-            -p "${Python_EXECUTABLE}"
-            -o "${_rawgl_wheel_out_dir}"
-            "${PROJECT_SOURCE_DIR}"
-        )
-    endif()
-
-    add_custom_target(rawgl_wheel
-        COMMAND "${CMAKE_COMMAND}" -E make_directory "${_rawgl_wheel_out_dir}"
-        COMMAND "${CMAKE_COMMAND}" -E env
-                ${_rawgl_wheel_env_args}
-                ${_rawgl_wheel_cmd}
-        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
-        COMMENT "Building RawGL Python wheel (${_rawgl_wheel_tool})"
-        VERBATIM
-    )
 
     set(_rawgl_install_wheel_script "${CMAKE_CURRENT_BINARY_DIR}/RawGLInstallWheel.cmake")
     configure_file(
         "${PROJECT_SOURCE_DIR}/cmake/RawGLInstallWheel.cmake.in"
         "${_rawgl_install_wheel_script}"
         @ONLY
+    )
+
+    add_custom_target(rawgl_wheel
+        COMMAND "${CMAKE_COMMAND}"
+                -DRAWGL_WHEEL_INSTALL=OFF
+                "-DRAWGL_WHEEL_CONFIG=$<CONFIG>"
+                -P "${_rawgl_install_wheel_script}"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+        COMMENT "Building RawGL Python wheel"
+        VERBATIM
     )
 endif()
 if(NOT RAWGL_DOCS_ONLY)
