@@ -237,6 +237,80 @@ function(rawgl_windows_set_imported_target_library target_name release_name debu
         MAP_IMPORTED_CONFIG_MINSIZEREL Release)
 endfunction()
 
+function(rawgl_windows_imported_file_library_target out_var target_hint release_path debug_path)
+    if(release_path AND NOT EXISTS "${release_path}")
+        set(release_path "")
+    endif()
+    if(debug_path AND NOT EXISTS "${debug_path}")
+        set(debug_path "")
+    endif()
+    if(NOT release_path AND NOT debug_path)
+        set(${out_var} "" PARENT_SCOPE)
+        return()
+    endif()
+
+    set(rawgl_target_stem "${target_hint}")
+    if(NOT rawgl_target_stem AND release_path)
+        get_filename_component(rawgl_target_stem "${release_path}" NAME_WE)
+    endif()
+    if(NOT rawgl_target_stem AND debug_path)
+        get_filename_component(rawgl_target_stem "${debug_path}" NAME_WE)
+    endif()
+    if(NOT rawgl_target_stem)
+        set(${out_var} "" PARENT_SCOPE)
+        return()
+    endif()
+
+    string(REGEX REPLACE "[^A-Za-z0-9_]" "_" rawgl_target_stem "${rawgl_target_stem}")
+    set(rawgl_target "rawgl_windows_lib_${rawgl_target_stem}")
+
+    if(NOT TARGET ${rawgl_target})
+        add_library(${rawgl_target} UNKNOWN IMPORTED)
+    endif()
+
+    get_target_property(rawgl_imported_configs ${rawgl_target} IMPORTED_CONFIGURATIONS)
+    if(NOT rawgl_imported_configs)
+        set(rawgl_imported_configs)
+    endif()
+
+    if(release_path)
+        list(APPEND rawgl_imported_configs Release)
+        set_target_properties(${rawgl_target} PROPERTIES
+            IMPORTED_LOCATION_RELEASE "${release_path}"
+            IMPORTED_LOCATION "${release_path}")
+    endif()
+
+    if(debug_path)
+        list(APPEND rawgl_imported_configs Debug)
+        set_target_properties(${rawgl_target} PROPERTIES
+            IMPORTED_LOCATION_DEBUG "${debug_path}")
+        if(NOT release_path)
+            set_target_properties(${rawgl_target} PROPERTIES
+                IMPORTED_LOCATION "${debug_path}")
+        endif()
+    endif()
+
+    if(rawgl_imported_configs)
+        list(REMOVE_DUPLICATES rawgl_imported_configs)
+        set_target_properties(${rawgl_target} PROPERTIES
+            IMPORTED_CONFIGURATIONS "${rawgl_imported_configs}")
+    endif()
+
+    set_target_properties(${rawgl_target} PROPERTIES
+        MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release
+        MAP_IMPORTED_CONFIG_MINSIZEREL Release)
+    set(${out_var} "${rawgl_target}" PARENT_SCOPE)
+endfunction()
+
+function(rawgl_windows_imported_library_target out_var release_name debug_name)
+    rawgl_windows_find_dual_config_library(rawgl_release_path Release "${release_name}" "${debug_name}")
+    rawgl_windows_find_dual_config_library(rawgl_debug_path Debug "${release_name}" "${debug_name}")
+    rawgl_windows_imported_file_library_target(rawgl_target "${release_name}"
+        "${rawgl_release_path}"
+        "${rawgl_debug_path}")
+    set(${out_var} "${rawgl_target}" PARENT_SCOPE)
+endfunction()
+
 function(rawgl_windows_append_file_library out_var release_path debug_path)
     set(rawgl_items ${${out_var}})
 
@@ -257,18 +331,20 @@ function(rawgl_windows_append_file_library out_var release_path debug_path)
         return()
     endif()
 
-    rawgl_windows_config_library_expr(rawgl_expr "${release_path}" "${debug_path}")
-    list(APPEND rawgl_items ${rawgl_expr})
+    rawgl_windows_imported_file_library_target(rawgl_library_target ""
+        "${release_path}"
+        "${debug_path}")
+    if(rawgl_library_target)
+        list(APPEND rawgl_items "${rawgl_library_target}")
+    endif()
     set(${out_var} "${rawgl_items}" PARENT_SCOPE)
 endfunction()
 
 function(rawgl_windows_append_vendor_library out_var release_name debug_name)
-    rawgl_windows_find_dual_config_library(rawgl_release_path Release "${release_name}" "${debug_name}")
-    rawgl_windows_find_dual_config_library(rawgl_debug_path Debug "${release_name}" "${debug_name}")
-
-    rawgl_windows_append_file_library(${out_var}
-        "${rawgl_release_path}"
-        "${rawgl_debug_path}")
+    rawgl_windows_imported_library_target(rawgl_library_target "${release_name}" "${debug_name}")
+    if(rawgl_library_target)
+        list(APPEND ${out_var} "${rawgl_library_target}")
+    endif()
     set(${out_var} "${${out_var}}" PARENT_SCOPE)
 endfunction()
 
@@ -289,7 +365,13 @@ function(rawgl_windows_patch_imported_interface_library target_name release_name
         return()
     endif()
 
-    rawgl_windows_config_library_expr(rawgl_expr "${rawgl_release_path}" "${rawgl_debug_path}")
+    rawgl_windows_imported_file_library_target(rawgl_library_target "${release_name}"
+        "${rawgl_release_path}"
+        "${rawgl_debug_path}")
+    if(NOT rawgl_library_target)
+        return()
+    endif()
+
     set(rawgl_search_paths)
     rawgl_windows_append_path_variants(rawgl_search_paths "${rawgl_release_path}")
     rawgl_windows_append_path_variants(rawgl_search_paths "${rawgl_debug_path}")
@@ -310,7 +392,7 @@ function(rawgl_windows_patch_imported_interface_library target_name release_name
     list(REMOVE_DUPLICATES rawgl_search_paths)
 
     foreach(rawgl_search_path IN LISTS rawgl_search_paths)
-        string(REPLACE "${rawgl_search_path}" "${rawgl_expr}" rawgl_iface "${rawgl_iface}")
+        string(REPLACE "${rawgl_search_path}" "${rawgl_library_target}" rawgl_iface "${rawgl_iface}")
     endforeach()
 
     string(TOLOWER "${release_name}.lib" rawgl_release_file_name)
@@ -318,9 +400,12 @@ function(rawgl_windows_patch_imported_interface_library target_name release_name
     set(rawgl_rewritten_iface)
     foreach(rawgl_iface_item IN LISTS rawgl_iface)
         string(TOLOWER "${rawgl_iface_item}" rawgl_iface_item_lower)
-        if(rawgl_iface_item_lower MATCHES "(^|[/\\\\])${rawgl_release_file_name}(>|$)"
+        string(FIND "${rawgl_iface_item}" "${rawgl_library_target}" rawgl_target_index)
+        if(NOT rawgl_target_index EQUAL -1)
+            list(APPEND rawgl_rewritten_iface "${rawgl_library_target}")
+        elseif(rawgl_iface_item_lower MATCHES "(^|[/\\\\])${rawgl_release_file_name}(>|$)"
            OR rawgl_iface_item_lower MATCHES "(^|[/\\\\])${rawgl_debug_file_name}(>|$)")
-            list(APPEND rawgl_rewritten_iface ${rawgl_expr})
+            list(APPEND rawgl_rewritten_iface "${rawgl_library_target}")
         else()
             list(APPEND rawgl_rewritten_iface "${rawgl_iface_item}")
         endif()
