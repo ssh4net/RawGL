@@ -22,6 +22,8 @@ regex = '^\s*(?P<value>\d+\.\d+\.\d+)\s*$'
 [tool.scikit-build.cmake.define]
 RAWGL_BUILD_APP = "OFF"
 RAWGL_BUILD_PYTHON = "ON"
+# The PEP 517 wheel build is already producing a wheel; keep RawGL's
+# standalone CMake wheel target disabled here to avoid recursive wheel builds.
 RAWGL_BUILD_WHEEL = "OFF"
 RAWGL_INSTALL_DEV_ARTIFACTS = "OFF"
-BUILD_TESTING = "OFF"
+RAWGL_TESTS = "OFF"

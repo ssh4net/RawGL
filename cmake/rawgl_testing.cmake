@@ -1,6 +1,6 @@
-include(CTest)
+if(RAWGL_TESTS)
+    enable_testing()
 
-if(BUILD_TESTING)
     add_test(NAME rawgl_io_openmeta_boundary_smoke
         COMMAND ${CMAKE_COMMAND}
             -DRAWGL_SOURCE_DIR=${CMAKE_SOURCE_DIR}
