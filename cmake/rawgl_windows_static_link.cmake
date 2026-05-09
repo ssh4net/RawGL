@@ -194,6 +194,11 @@ function(rawgl_windows_set_imported_target_library target_name release_name debu
         set(target_name "${rawgl_aliased_target}")
     endif()
 
+    get_target_property(rawgl_target_type ${target_name} TYPE)
+    if(rawgl_target_type STREQUAL "INTERFACE_LIBRARY")
+        return()
+    endif()
+
     rawgl_windows_find_dual_config_library(rawgl_release_path Release "${release_name}" "${debug_name}")
     rawgl_windows_find_dual_config_library(rawgl_debug_path Debug "${release_name}" "${debug_name}")
 
@@ -458,6 +463,17 @@ foreach(rawgl_imported_target IN ITEMS
         ZSTD::ZSTD
         OpenMeta::openmeta
         OpenMeta::openmeta_static
+        dng_sdk::dng_sdk
+        dng_sdk::lcms2
+        jxl::jxl
+        jxl::jxl_threads
+        jxl::jxl_cms
+        hwy::hwy
+        hwy::hwy_contrib
+        brotli::brotlicommon
+        brotli::brotlidec
+        brotli::brotlienc
+        lcms2::lcms2
         pystring::pystring
         yaml-cpp
         yaml-cpp::yaml-cpp
@@ -465,7 +481,29 @@ foreach(rawgl_imported_target IN ITEMS
     rawgl_windows_rewrite_target_library_paths(${rawgl_imported_target})
 endforeach()
 
-foreach(rawgl_oiio_target IN LISTS RAWGL_OIIO_TARGETS)
+rawgl_windows_set_imported_target_library(OpenImageIO::OpenImageIO OpenImageIO OpenImageIOd)
+rawgl_windows_set_imported_target_library(OpenImageIO::OpenImageIO_Util OpenImageIO_Util OpenImageIO_Utild)
+rawgl_windows_set_imported_target_library(GIF::GIF gif gifd)
+rawgl_windows_set_imported_target_library(freetype freetype freetyped)
+rawgl_windows_set_imported_target_library(dng_sdk::dng_sdk dng_sdk dng_sdkd)
+rawgl_windows_set_imported_target_library(dng_sdk::lcms2 lcms2 lcms2d)
+rawgl_windows_set_imported_target_library(jxl::jxl jxl jxld)
+rawgl_windows_set_imported_target_library(jxl::jxl_threads jxl_threads jxl_threadsd)
+rawgl_windows_set_imported_target_library(jxl::jxl_cms jxl_cms jxl_cmsd)
+rawgl_windows_set_imported_target_library(hwy::hwy hwy hwyd)
+rawgl_windows_set_imported_target_library(hwy::hwy_contrib hwy_contrib hwy_contribd)
+rawgl_windows_set_imported_target_library(brotli::brotlicommon brotlicommon brotlicommond)
+rawgl_windows_set_imported_target_library(brotli::brotlidec brotlidec brotlidecd)
+rawgl_windows_set_imported_target_library(brotli::brotlienc brotlienc brotliencd)
+rawgl_windows_set_imported_target_library(lcms2::lcms2 lcms2 lcms2d)
+
+set(rawgl_windows_oiio_patch_targets ${RAWGL_OIIO_TARGETS})
+if(TARGET OpenImageIO::OpenImageIO_Util)
+    list(APPEND rawgl_windows_oiio_patch_targets OpenImageIO::OpenImageIO_Util)
+endif()
+list(REMOVE_DUPLICATES rawgl_windows_oiio_patch_targets)
+
+foreach(rawgl_oiio_target IN LISTS rawgl_windows_oiio_patch_targets)
     rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} avcodec avcodecd)
     rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} avdevice avdeviced)
     rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} avfilter avfilterd)
@@ -477,10 +515,20 @@ foreach(rawgl_oiio_target IN LISTS RAWGL_OIIO_TARGETS)
     rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} jxl_cms jxl_cmsd)
     rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} jxl_extras_codec jxl_extras_codecd)
     rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} jxl_threads jxl_threadsd)
+    rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} hwy hwyd)
+    rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} hwy_contrib hwy_contribd)
+    rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} aom aomd)
+    rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} x265-static x265-staticd)
+    rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} libde265 libde265d)
+    rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} libkvazaar libkvazaard)
+    rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} brotlidec brotlidecd)
+    rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} brotlienc brotliencd)
+    rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} brotlicommon brotlicommond)
+    rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} harfbuzz harfbuzzd)
     rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} raw rawd)
     rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} jasper jasperd)
     rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} turbojpeg-static turbojpeg-staticd)
-    rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} lcms2 lcms2_staticd)
+    rawgl_windows_patch_imported_interface_library(${rawgl_oiio_target} lcms2 lcms2d)
     rawgl_windows_remove_interface_library(${rawgl_oiio_target} libpng18_static libpng18_staticd)
     rawgl_windows_remove_interface_library(${rawgl_oiio_target} zlibstatic zlibstaticd)
     rawgl_remove_interface_link_libraries(${rawgl_oiio_target}
@@ -499,6 +547,7 @@ rawgl_windows_set_imported_target_library(Brotli::brotlidec brotlidec brotlidecd
 rawgl_windows_set_imported_target_library(Brotli::brotlienc brotlienc brotliencd)
 rawgl_windows_patch_imported_interface_library(Brotli::decoder brotlicommon brotlicommond)
 rawgl_windows_patch_imported_interface_library(Brotli::encoder brotlicommon brotlicommond)
+rawgl_windows_patch_imported_interface_library(jxl::jxl_cms lcms2 lcms2d)
 
 rawgl_windows_patch_imported_interface_library(heif x265-static x265-staticd)
 rawgl_windows_patch_imported_interface_library(heif libde265 libde265d)
