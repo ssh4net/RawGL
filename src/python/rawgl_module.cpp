@@ -14,17 +14,14 @@
 #include <string>
 #include <vector>
 
-#if RAWGL_PYTHON_BIND_CORE
-#    include <rawgl/rawgl_batch.h>
-#    include <rawgl/rawgl.h>
-#    include <rawgl/rawgl_io.h>
-#endif
+#include <rawgl/rawgl_batch.h>
+#include <rawgl/rawgl.h>
+#include <rawgl/rawgl_io.h>
 
 namespace nb = nanobind;
 
 namespace {
 
-#if RAWGL_PYTHON_BIND_CORE
 struct PythonPrepareResult {
     bool success = false;
     std::string errorMessage;
@@ -42,7 +39,6 @@ struct PythonBatchPrepareResult {
     std::string errorMessage;
     std::shared_ptr<rawgl::batch::BatchPreparedWorkflow> workflow;
 };
-#endif
 
 nb::bytes
 to_python_bytes(const std::vector<std::byte>& data)
@@ -94,7 +90,6 @@ from_python_bytes(const nb::object& value)
     throw std::runtime_error("expected a bytes-like object");
 }
 
-#if RAWGL_PYTHON_BIND_CORE
 std::shared_ptr<rawgl::HostImageData>
 make_rgba32f_host_image(const int width, const int height, const std::vector<float>& values)
 {
@@ -134,16 +129,11 @@ host_image_to_rgba32f(const rawgl::HostImageData& image)
     std::memcpy(values.data(), image.bytes.data(), image.bytes.size());
     return values;
 }
-#endif
 
 const char*
 rawgl_python_status()
 {
-#if RAWGL_PYTHON_BIND_CORE
     return "rawgl nanobind facade";
-#else
-    return "rawgl nanobind scaffold (core bindings disabled)";
-#endif
 }
 
 }  // namespace
@@ -154,7 +144,6 @@ NB_MODULE(_rawgl, module)
     module.attr("__version__") = nb::str(RAWGL_VERSION_STRING);
     module.def("status", &rawgl_python_status, "Return the current RawGL Python binding status string.");
 
-#if RAWGL_PYTHON_BIND_CORE
     module.def("make_rgba32f_host_image",
                &make_rgba32f_host_image,
                nb::arg("width"),
@@ -1063,5 +1052,4 @@ NB_MODULE(_rawgl, module)
              nb::arg("cancellation") = static_cast<const rawgl::batch::BatchCancellationToken*>(nullptr))
         .def("progress", &rawgl::batch::BatchRunner::progress)
         .def("close", &rawgl::batch::BatchRunner::close);
-#endif
 }

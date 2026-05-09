@@ -63,7 +63,6 @@ if(RAWGL_BUILD_WHEEL)
 
     rawgl_append_wheel_config_define(RAWGL_BUILD_PYTHON ON)
     rawgl_append_wheel_config_define(RAWGL_TESTS OFF)
-    rawgl_append_wheel_config_define(RAWGL_PYTHON_BIND_CORE "${RAWGL_PYTHON_BIND_CORE}")
     rawgl_append_wheel_config_define(RAWGL_INSTALL_DEV_ARTIFACTS OFF)
 
     foreach(_rawgl_wheel_define_var IN ITEMS

@@ -281,7 +281,7 @@ if(RAWGL_TESTS)
         rawgl_add_script_test(rawgl_uint_uniform test_uint_uniform)
     endif()
 
-    if(RAWGL_BUILD_PYTHON AND TARGET rawgl_python AND RAWGL_PYTHON_BIND_CORE)
+    if(RAWGL_BUILD_PYTHON AND TARGET rawgl_python)
         add_test(NAME rawgl_python_multipass_batch_smoke
             COMMAND ${CMAKE_COMMAND} -E env
                 "PYTHONPATH=${CMAKE_BINARY_DIR}/python"

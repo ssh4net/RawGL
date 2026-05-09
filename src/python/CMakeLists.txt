@@ -156,13 +156,7 @@ set_target_properties(rawgl_python PROPERTIES
     FOLDER "python")
 
 target_compile_definitions(rawgl_python PRIVATE RAWGL_VERSION_STRING="${PROJECT_VERSION}")
-
-if(RAWGL_PYTHON_BIND_CORE)
-    target_link_libraries(rawgl_python PRIVATE rawgl_batch)
-    target_compile_definitions(rawgl_python PRIVATE RAWGL_PYTHON_BIND_CORE=1)
-else()
-    target_compile_definitions(rawgl_python PRIVATE RAWGL_PYTHON_BIND_CORE=0)
-endif()
+target_link_libraries(rawgl_python PRIVATE rawgl_batch)
 
 if(MSVC)
     target_compile_definitions(rawgl_python PRIVATE Py_NO_LINK_LIB)
