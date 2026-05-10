@@ -405,6 +405,32 @@ struct GraphExecutionResult {
     std::map<std::string, std::vector<uint32_t>> capturedAtomicCounters;
 };
 
+/// Snapshot of the active OpenGL runtime selected by RawGL.
+struct RuntimeInfo {
+    /// True when RawGL created an OpenGL context and queried the runtime.
+    bool success = false;
+    /// Failure details when \ref success is false.
+    std::string errorMessage;
+    /// Requested platform from `--gl_platform` or `RAWGL_GL_PLATFORM`.
+    std::string requestedPlatform;
+    /// Platform RawGL selected for GLFW, such as `x11` or `wayland`.
+    std::string selectedPlatform;
+    /// Current `DISPLAY` value.
+    std::string display;
+    /// Current `WAYLAND_DISPLAY` value.
+    std::string waylandDisplay;
+    /// OpenGL vendor string.
+    std::string vendor;
+    /// OpenGL renderer string.
+    std::string renderer;
+    /// OpenGL version string.
+    std::string version;
+    /// OpenGL shading language version string.
+    std::string shadingLanguageVersion;
+    /// True when the renderer looks like a software rasterizer.
+    bool softwareRenderer = false;
+};
+
 /// Snapshot of cache usage for a \ref RawGLContext instance.
 struct ContextCacheStats {
     size_t shaderInterfaces = 0;
@@ -489,5 +515,9 @@ InspectShaderInterface(const ShaderInspectionRequest& request);
 /// Inspect a mesh file without compiling or executing a workflow.
 MeshInspectionResult
 InspectMeshFile(const MeshInspectionRequest& request);
+
+/// Creates a temporary context and returns OpenGL runtime diagnostics.
+RuntimeInfo
+ProbeRuntimeInfo();
 
 }  // namespace rawgl

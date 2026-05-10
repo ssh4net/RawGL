@@ -17,6 +17,10 @@ gladLoadGLLoader(GLADloadproc)
 #include <cstdlib>
 #include <unordered_map>
 
+namespace rawgl {
+struct RuntimeInfo;
+}
+
 #ifdef APIENTRY
 #    undef APIENTRY
 #endif
@@ -73,6 +77,15 @@ glsl_type_name(GLenum type);
 
 void
 get_GPUfeatures();
+
+void
+rawgl_set_opengl_platform_override(const char* platform);
+
+void
+rawgl_fill_runtime_environment_info(rawgl::RuntimeInfo& info);
+
+void
+rawgl_fill_current_runtime_info(rawgl::RuntimeInfo& info);
 
 const char*
 rawgl_last_opengl_error_message();

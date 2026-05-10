@@ -16,6 +16,15 @@ def fail(message: str) -> int:
 def main() -> int:
     os.environ["DISPLAY"] = ":rawgl-invalid-display"
     os.environ.pop("WAYLAND_DISPLAY", None)
+    os.environ.pop("RAWGL_GL_PLATFORM", None)
+
+    info = rawgl.runtime_info()
+    if info.success:
+        return fail("runtime_info() unexpectedly succeeded with an invalid DISPLAY")
+    if "Failed to initialize GLFW" not in info.error_message:
+        return fail(f"unexpected runtime_info() error: {info.error_message}")
+    if info.selected_platform != "x11":
+        return fail(f"unexpected runtime_info() selected platform: {info.selected_platform}")
 
     try:
         rawgl.Session()

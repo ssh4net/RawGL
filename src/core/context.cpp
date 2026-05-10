@@ -408,14 +408,17 @@ Run(const CommandLineRequest& request)
     Timer timer;
     CommandLineResult result;
 
-    int immediateExitCode = 0;
-    if (HandleImmediateCommandLine(request.argc, request.argv, immediateExitCode)) {
-        result.exitCode = immediateExitCode;
-        result.immediateExit = true;
-        return result;
-    }
-
     try {
+        const CommandLineParsedArguments parsedArguments = ParseCommandLineArguments(request.argc, request.argv);
+        ApplyParsedRuntimeOptions(parsedArguments);
+
+        int immediateExitCode = 0;
+        if (HandleImmediateParsedArguments(parsedArguments, request.argc, immediateExitCode)) {
+            result.exitCode = immediateExitCode;
+            result.immediateExit = true;
+            return result;
+        }
+
         Session session;
         const CliWorkflow workflow = BuildCliWorkflowFromCommandLine(
             request,
@@ -444,6 +447,45 @@ InspectShaderInterface(const ShaderInspectionRequest& request)
 {
     RawGLContext context;
     return context.inspectShaderInterface(request);
+}
+
+RuntimeInfo
+ProbeRuntimeInfo()
+{
+    RuntimeInfo result;
+
+    const auto fill_error = [&result](const char* message) {
+        if (result.requestedPlatform.empty()) {
+            result.requestedPlatform = std::getenv("RAWGL_GL_PLATFORM") != nullptr ? std::getenv("RAWGL_GL_PLATFORM")
+                                                                                   : "auto";
+        }
+        if (result.display.empty()) {
+            result.display = std::getenv("DISPLAY") != nullptr ? std::getenv("DISPLAY") : "";
+        }
+        if (result.waylandDisplay.empty()) {
+            result.waylandDisplay = std::getenv("WAYLAND_DISPLAY") != nullptr ? std::getenv("WAYLAND_DISPLAY") : "";
+        }
+        if (message != nullptr && message[0] != '\0') {
+            result.errorMessage = message;
+        } else {
+            const char* lastOpenGLError = rawgl_last_opengl_error_message();
+            result.errorMessage =
+                lastOpenGLError != nullptr ? lastOpenGLError : "RawGL runtime probe failed with an unknown C++ exception";
+        }
+    };
+
+    try {
+        rawgl_fill_runtime_environment_info(result);
+        OpenGLHandle handle;
+        rawgl_fill_current_runtime_info(result);
+        result.success = true;
+    } catch (const std::exception& exception) {
+        fill_error(exception.what());
+    } catch (...) {
+        fill_error(nullptr);
+    }
+
+    return result;
 }
 
 }  // namespace rawgl

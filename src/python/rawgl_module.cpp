@@ -497,6 +497,24 @@ NB_MODULE(_rawgl, module)
         .def_rw("meshes_host", &rawgl::SessionStats::meshesHost)
         .def_rw("meshes_gpu", &rawgl::SessionStats::meshesGpu);
 
+    nb::class_<rawgl::RuntimeInfo>(module, "RuntimeInfo")
+        .def(nb::init<>())
+        .def_rw("success", &rawgl::RuntimeInfo::success)
+        .def_rw("error_message", &rawgl::RuntimeInfo::errorMessage)
+        .def_rw("requested_platform", &rawgl::RuntimeInfo::requestedPlatform)
+        .def_rw("selected_platform", &rawgl::RuntimeInfo::selectedPlatform)
+        .def_rw("display", &rawgl::RuntimeInfo::display)
+        .def_rw("wayland_display", &rawgl::RuntimeInfo::waylandDisplay)
+        .def_rw("vendor", &rawgl::RuntimeInfo::vendor)
+        .def_rw("renderer", &rawgl::RuntimeInfo::renderer)
+        .def_rw("version", &rawgl::RuntimeInfo::version)
+        .def_rw("shading_language_version", &rawgl::RuntimeInfo::shadingLanguageVersion)
+        .def_rw("software_renderer", &rawgl::RuntimeInfo::softwareRenderer);
+
+    module.def("runtime_info",
+               []() { return rawgl_python_call([]() { return rawgl::ProbeRuntimeInfo(); }); },
+               "Create a temporary RawGL context and return OpenGL runtime diagnostics.");
+
     nb::class_<rawgl::Session>(module, "Session")
         .def("__init__",
              [](nb::pointer_and_handle<rawgl::Session> instance) {

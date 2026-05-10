@@ -6,6 +6,7 @@
 #include "common.h"
 #include "gl_utils.h"
 #include "runtime_help_text.h"
+#include "rawgl/rawgl_core.h"
 
 #include <charconv>
 #include <iostream>
@@ -31,6 +32,8 @@ struct ParsedOptionSpec {
 static const ParsedOptionSpec RAWGL_OPTION_SPECS[] = {
     { "help", 'h', ParsedOptionMode::flag },
     { "version", 'v', ParsedOptionMode::flag },
+    { "doctor", '\0', ParsedOptionMode::flag },
+    { "gl_platform", '\0', ParsedOptionMode::single },
     { "verbosity", 'V', ParsedOptionMode::single },
     { "pass_vertfrag", 'P', ParsedOptionMode::multi },
     { "pass_comp", 'C', ParsedOptionMode::single },
@@ -134,6 +137,8 @@ build_help_text()
     stream << "Options\n"
            << "  --help, -h\n"
            << "  --version, -v\n"
+           << "  --doctor\n"
+           << "  --gl_platform <auto|x11|wayland>\n"
            << "  --verbosity, -V <0-5>\n"
            << "  --pass_vertfrag, -P <file> [file]\n"
            << "  --pass_comp, -C <file>\n"
@@ -205,6 +210,30 @@ print_version_text()
     std::cout << termcolor::reset;
 }
 
+static void
+print_runtime_info(const rawgl::RuntimeInfo& info)
+{
+    std::cout << "RawGL runtime diagnostics\n";
+    std::cout << "  Status: " << (info.success ? "ok" : "failed") << '\n';
+    if (!info.errorMessage.empty()) {
+        std::cout << "  Error: " << info.errorMessage << '\n';
+    }
+    std::cout << "  Requested platform: " << info.requestedPlatform << '\n';
+    std::cout << "  Selected platform: " << info.selectedPlatform << '\n';
+    std::cout << "  DISPLAY: " << info.display << '\n';
+    std::cout << "  WAYLAND_DISPLAY: " << info.waylandDisplay << '\n';
+    if (info.success) {
+        std::cout << "  OpenGL vendor: " << info.vendor << '\n';
+        std::cout << "  OpenGL renderer: " << info.renderer << '\n';
+        std::cout << "  OpenGL version: " << info.version << '\n';
+        std::cout << "  GLSL version: " << info.shadingLanguageVersion << '\n';
+        std::cout << "  Software renderer: " << (info.softwareRenderer ? "yes" : "no") << '\n';
+        if (info.softwareRenderer) {
+            std::cout << "  Warning: RawGL is running through a software OpenGL renderer.\n";
+        }
+    }
+}
+
 }  // namespace
 
 CommandLineParsedArguments
@@ -225,6 +254,8 @@ ParseCommandLineArguments(int argc, const char* argv[])
                 parsed.showHelp = true;
             } else if (std::string(spec->long_key) == "version") {
                 parsed.showVersion = true;
+            } else if (std::string(spec->long_key) == "doctor") {
+                parsed.showDoctor = true;
             }
             continue;
         }
@@ -259,6 +290,12 @@ ParseCommandLineArguments(int argc, const char* argv[])
             continue;
         }
 
+        if (option.string_key == "gl_platform") {
+            parsed.glPlatform    = option.value[0];
+            parsed.hasGlPlatform = true;
+            continue;
+        }
+
         parsed.options.push_back(std::move(option));
     }
 
@@ -283,12 +320,28 @@ HandleImmediateParsedArguments(const CommandLineParsedArguments& parsedArguments
         immediateExit = true;
     }
 
+    if (parsedArguments.showDoctor) {
+        const rawgl::RuntimeInfo info = rawgl::ProbeRuntimeInfo();
+        print_runtime_info(info);
+        exitCode      = info.success ? 0 : 1;
+        immediateExit = true;
+    }
+
     return immediateExit;
+}
+
+void
+ApplyParsedRuntimeOptions(const CommandLineParsedArguments& parsedArguments)
+{
+    if (parsedArguments.hasGlPlatform) {
+        rawgl_set_opengl_platform_override(parsedArguments.glPlatform.c_str());
+    }
 }
 
 bool
 HandleImmediateCommandLine(int argc, const char* argv[], int& exitCode)
 {
     const CommandLineParsedArguments parsedArguments = ParseCommandLineArguments(argc, argv);
+    ApplyParsedRuntimeOptions(parsedArguments);
     return HandleImmediateParsedArguments(parsedArguments, argc, exitCode);
 }

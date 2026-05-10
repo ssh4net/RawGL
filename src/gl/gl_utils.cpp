@@ -5,9 +5,12 @@
 #include "common.h"
 #include "gl_utils.h"
 #include "log.h"
+#include "rawgl/rawgl_core.h"
 
+#include <cctype>
 #include <cstdlib>
 #include <stdexcept>
+#include <string>
 #include <termcolor/termcolor.hpp>
 #include <utility>
 
@@ -18,6 +21,98 @@
 
 namespace {
 thread_local std::string rawgl_opengl_error_message;
+std::string rawgl_opengl_platform_override;
+
+enum class RawGLOpenGLPlatform {
+    automatic,
+    x11,
+    wayland,
+};
+
+struct RawGLResolvedOpenGLPlatform {
+    RawGLOpenGLPlatform platform = RawGLOpenGLPlatform::automatic;
+    std::string requested = "auto";
+    std::string selected;
+};
+
+[[noreturn]] void
+rawgl_throw_opengl_error(std::string message);
+
+std::string
+rawgl_getenv_text(const char* name)
+{
+    const char* value = std::getenv(name);
+    return value != nullptr ? value : "";
+}
+
+std::string
+rawgl_normalize_platform_text(const std::string& text)
+{
+    std::string normalized;
+    normalized.reserve(text.size());
+    for (const char ch : text) {
+        normalized.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+    return normalized;
+}
+
+bool
+rawgl_contains_case_insensitive(const std::string& text, const char* needle)
+{
+    std::string lowerText = rawgl_normalize_platform_text(text);
+    std::string lowerNeedle = rawgl_normalize_platform_text(needle);
+    return lowerText.find(lowerNeedle) != std::string::npos;
+}
+
+std::string
+rawgl_requested_opengl_platform_text()
+{
+    if (!rawgl_opengl_platform_override.empty()) {
+        return rawgl_opengl_platform_override;
+    }
+
+    const char* envValue = std::getenv("RAWGL_GL_PLATFORM");
+    if (envValue != nullptr && envValue[0] != '\0') {
+        return envValue;
+    }
+
+    return "auto";
+}
+
+RawGLResolvedOpenGLPlatform
+rawgl_resolve_opengl_platform()
+{
+    RawGLResolvedOpenGLPlatform result;
+    result.requested = rawgl_requested_opengl_platform_text();
+
+    const std::string normalized = rawgl_normalize_platform_text(result.requested);
+    if (normalized == "auto" || normalized == "automatic" || normalized == "default") {
+        result.platform = RawGLOpenGLPlatform::automatic;
+    } else if (normalized == "x11") {
+        result.platform = RawGLOpenGLPlatform::x11;
+    } else if (normalized == "wayland") {
+        result.platform = RawGLOpenGLPlatform::wayland;
+    } else {
+        rawgl_throw_opengl_error("Unsupported OpenGL platform '" + result.requested
+                                 + "'. Expected auto, x11, or wayland.");
+    }
+
+    const std::string display = rawgl_getenv_text("DISPLAY");
+    const std::string waylandDisplay = rawgl_getenv_text("WAYLAND_DISPLAY");
+    if (result.platform == RawGLOpenGLPlatform::x11) {
+        result.selected = "x11";
+    } else if (result.platform == RawGLOpenGLPlatform::wayland) {
+        result.selected = "wayland";
+    } else if (!display.empty()) {
+        result.selected = "x11";
+    } else if (!waylandDisplay.empty()) {
+        result.selected = "wayland";
+    } else {
+        result.selected = "auto";
+    }
+
+    return result;
+}
 
 void
 rawgl_glfw_error_callback(int error, const char* description)
@@ -67,6 +162,45 @@ rawgl_throw_opengl_error(std::string message)
 }
 }  // namespace
 
+void
+rawgl_set_opengl_platform_override(const char* platform)
+{
+    rawgl_opengl_platform_override = platform != nullptr ? platform : "";
+}
+
+void
+rawgl_fill_runtime_environment_info(rawgl::RuntimeInfo& info)
+{
+    info.requestedPlatform = rawgl_requested_opengl_platform_text();
+    info.display = rawgl_getenv_text("DISPLAY");
+    info.waylandDisplay = rawgl_getenv_text("WAYLAND_DISPLAY");
+
+    const RawGLResolvedOpenGLPlatform platform = rawgl_resolve_opengl_platform();
+    info.requestedPlatform = platform.requested;
+    info.selectedPlatform = platform.selected;
+}
+
+void
+rawgl_fill_current_runtime_info(rawgl::RuntimeInfo& info)
+{
+    rawgl_fill_runtime_environment_info(info);
+
+    const GLubyte* vendor = glGetString(GL_VENDOR);
+    const GLubyte* renderer = glGetString(GL_RENDERER);
+    const GLubyte* version = glGetString(GL_VERSION);
+    const GLubyte* shadingLanguageVersion = glGetString(GL_SHADING_LANGUAGE_VERSION);
+
+    info.vendor = vendor != nullptr ? reinterpret_cast<const char*>(vendor) : "";
+    info.renderer = renderer != nullptr ? reinterpret_cast<const char*>(renderer) : "";
+    info.version = version != nullptr ? reinterpret_cast<const char*>(version) : "";
+    info.shadingLanguageVersion =
+        shadingLanguageVersion != nullptr ? reinterpret_cast<const char*>(shadingLanguageVersion) : "";
+    info.softwareRenderer = rawgl_contains_case_insensitive(info.renderer, "llvmpipe")
+                            || rawgl_contains_case_insensitive(info.renderer, "softpipe")
+                            || rawgl_contains_case_insensitive(info.renderer, "software rasterizer")
+                            || rawgl_contains_case_insensitive(info.renderer, "swrast");
+}
+
 const char*
 rawgl_last_opengl_error_message()
 {
@@ -100,19 +234,19 @@ GL_LogCall(const char* func, const char* file, int line)
 OpenGLHandle::OpenGLHandle()
 {
     rawgl_clear_opengl_error_message();
+    rawgl::RuntimeInfo runtimeInfo;
+    rawgl_fill_runtime_environment_info(runtimeInfo);
     glfwSetErrorCallback(rawgl_glfw_error_callback);
 
 #if defined(__linux__)
-    const char* x11Display     = std::getenv("DISPLAY");
-    const char* waylandDisplay = std::getenv("WAYLAND_DISPLAY");
-    LOG(info) << "DISPLAY=" << (x11Display != nullptr ? x11Display : "")
-              << ", WAYLAND_DISPLAY=" << (waylandDisplay != nullptr ? waylandDisplay : "");
-    if (x11Display != nullptr && x11Display[0] != '\0') {
+    LOG(info) << "DISPLAY=" << runtimeInfo.display << ", WAYLAND_DISPLAY=" << runtimeInfo.waylandDisplay
+              << ", RAWGL_GL_PLATFORM=" << runtimeInfo.requestedPlatform;
+    if (runtimeInfo.selectedPlatform == "x11") {
         glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
-        LOG(info) << "Using GLFW platform X11 (" << x11Display << ")";
-    } else if (waylandDisplay != nullptr && waylandDisplay[0] != '\0') {
+        LOG(info) << "Using GLFW platform X11";
+    } else if (runtimeInfo.selectedPlatform == "wayland") {
         glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
-        LOG(info) << "Using GLFW platform Wayland (" << waylandDisplay << ")";
+        LOG(info) << "Using GLFW platform Wayland";
     }
 #endif
 
@@ -143,6 +277,11 @@ OpenGLHandle::OpenGLHandle()
     const GLubyte* glVersionText = glGetString(GL_VERSION);
     LOG(info) << "Created OpenGL context: "
               << (glVersionText != nullptr ? reinterpret_cast<const char*>(glVersionText) : "unknown");
+    rawgl_fill_current_runtime_info(runtimeInfo);
+    LOG(info) << "OpenGL renderer: " << runtimeInfo.vendor << " / " << runtimeInfo.renderer;
+    if (runtimeInfo.softwareRenderer) {
+        LOG(warning) << "OpenGL renderer appears to be software. RawGL will run, but GPU performance is not available.";
+    }
 
 #if defined(RAWGL_USE_GLEW)
     glewExperimental = GL_TRUE;
