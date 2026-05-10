@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <stdexcept>
 #include <termcolor/termcolor.hpp>
+#include <utility>
 
 #include <unordered_map>
 
@@ -16,6 +17,8 @@
 #include <GLFW/glfw3.h>
 
 namespace {
+thread_local std::string rawgl_opengl_error_message;
+
 void
 rawgl_glfw_error_callback(int error, const char* description)
 {
@@ -55,7 +58,26 @@ rawgl_set_context_hints(int major, int minor)
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 }
+
+[[noreturn]] void
+rawgl_throw_opengl_error(std::string message)
+{
+    rawgl_opengl_error_message = std::move(message);
+    throw std::runtime_error(rawgl_opengl_error_message);
+}
 }  // namespace
+
+const char*
+rawgl_last_opengl_error_message()
+{
+    return rawgl_opengl_error_message.empty() ? nullptr : rawgl_opengl_error_message.c_str();
+}
+
+void
+rawgl_clear_opengl_error_message()
+{
+    rawgl_opengl_error_message.clear();
+}
 
 void
 GL_ClearError()
@@ -77,6 +99,7 @@ GL_LogCall(const char* func, const char* file, int line)
 
 OpenGLHandle::OpenGLHandle()
 {
+    rawgl_clear_opengl_error_message();
     glfwSetErrorCallback(rawgl_glfw_error_callback);
 
 #if defined(__linux__)
@@ -94,7 +117,7 @@ OpenGLHandle::OpenGLHandle()
 #endif
 
     if (!glfwInit()) {
-        throw std::runtime_error(rawgl_glfw_error_text("Failed to initialize GLFW"));
+        rawgl_throw_opengl_error(rawgl_glfw_error_text("Failed to initialize GLFW"));
     }
 
     int contextMajor = 4;
@@ -110,8 +133,9 @@ OpenGLHandle::OpenGLHandle()
     m_window = glfwCreateWindow(512, 512, "Hidden Window", nullptr, nullptr);
 
     if (m_window == nullptr) {
+        const std::string message = rawgl_glfw_error_text("Failed to create GLFW window");
         glfwTerminate();
-        throw std::runtime_error(rawgl_glfw_error_text("Failed to create GLFW window"));
+        rawgl_throw_opengl_error(message);
     }
 
     glfwMakeContextCurrent(m_window);
@@ -133,7 +157,7 @@ OpenGLHandle::OpenGLHandle()
         glfwDestroyWindow(m_window);
         m_window = nullptr;
         glfwTerminate();
-        throw std::runtime_error(message);
+        rawgl_throw_opengl_error(message);
     }
     GL_ClearError();
 #else
@@ -141,7 +165,7 @@ OpenGLHandle::OpenGLHandle()
         glfwDestroyWindow(m_window);
         m_window = nullptr;
         glfwTerminate();
-        throw std::runtime_error("Failed to initialize GLAD");
+        rawgl_throw_opengl_error("Failed to initialize GLAD");
     }
 #endif
 }

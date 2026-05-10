@@ -10,6 +10,7 @@
 
 #include <cstring>
 #include <memory>
+#include <new>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -19,6 +20,9 @@
 #include <rawgl/rawgl_io.h>
 
 namespace nb = nanobind;
+
+extern const char*
+rawgl_last_opengl_error_message();
 
 namespace {
 
@@ -39,6 +43,29 @@ struct PythonBatchPrepareResult {
     std::string errorMessage;
     std::shared_ptr<rawgl::batch::BatchPreparedWorkflow> workflow;
 };
+
+[[noreturn]] void
+raise_rawgl_python_runtime_error(const char* message)
+{
+    if (message == nullptr || message[0] == '\0') {
+        message = rawgl_last_opengl_error_message();
+    }
+    PyErr_SetString(PyExc_RuntimeError, message != nullptr ? message : "RawGL raised an unknown C++ exception");
+    nb::raise_python_error();
+}
+
+template <typename Callback>
+auto
+rawgl_python_call(Callback&& callback)
+{
+    try {
+        return callback();
+    } catch (const std::exception& exception) {
+        raise_rawgl_python_runtime_error(exception.what());
+    } catch (...) {
+        raise_rawgl_python_runtime_error(nullptr);
+    }
+}
 
 nb::bytes
 to_python_bytes(const std::vector<std::byte>& data)
@@ -471,26 +498,39 @@ NB_MODULE(_rawgl, module)
         .def_rw("meshes_gpu", &rawgl::SessionStats::meshesGpu);
 
     nb::class_<rawgl::Session>(module, "Session")
-        .def(nb::init<>())
-        .def("inspect_shader_interface", &rawgl::Session::inspectShaderInterface, nb::arg("request"))
+        .def("__init__",
+             [](nb::pointer_and_handle<rawgl::Session> instance) {
+                 rawgl_python_call([&]() { new (instance.p) rawgl::Session(); });
+             })
+        .def("inspect_shader_interface",
+             [](const rawgl::Session& session, const rawgl::ShaderInspectionRequest& request) {
+                 return rawgl_python_call([&]() { return session.inspectShaderInterface(request); });
+             },
+             nb::arg("request"))
         .def("prepare",
              [](const rawgl::Session& session, const rawgl::Workflow& workflow) {
-                 rawgl::PrepareResult prepareResult = session.prepare(workflow);
-                 PythonPrepareResult result;
-                 result.success = prepareResult.success;
-                 result.errorMessage = std::move(prepareResult.errorMessage);
-                 if (prepareResult.workflow) {
-                     result.workflow.reset(prepareResult.workflow.release());
-                 }
-                 return result;
+                 return rawgl_python_call([&]() {
+                     rawgl::PrepareResult prepareResult = session.prepare(workflow);
+                     PythonPrepareResult result;
+                     result.success = prepareResult.success;
+                     result.errorMessage = std::move(prepareResult.errorMessage);
+                     if (prepareResult.workflow) {
+                         result.workflow.reset(prepareResult.workflow.release());
+                     }
+                     return result;
+                 });
              },
              nb::arg("workflow"))
         .def("run",
-             &rawgl::Session::run,
+             [](const rawgl::Session& session, const rawgl::Workflow& workflow, const rawgl::RunSettings& settings) {
+                 return rawgl_python_call([&]() { return session.run(workflow, settings); });
+             },
              nb::arg("workflow"),
              nb::arg("settings") = rawgl::RunSettings {},
              "Prepare and run one workflow in a single call.")
-        .def("stats", &rawgl::Session::stats);
+        .def("stats", [](const rawgl::Session& session) {
+            return rawgl_python_call([&]() { return session.stats(); });
+        });
 
     nb::enum_<rawgl::io::ImageLoadBackendPolicy>(module, "ImageLoadBackendPolicy")
         .value("auto", rawgl::io::ImageLoadBackendPolicy::Auto)

@@ -262,3 +262,51 @@ endif()
 set(RAWGL_OPENGL_LOADER_TARGET libglew_static)
 set(RAWGL_GLFW_TARGET glfw)
 set(RAWGL_OIIO_TARGETS OpenImageIO::OpenImageIO)
+
+function(rawgl_linux_append_oiio_ffmpeg_closure target_name)
+    if(NOT TARGET ${target_name})
+        return()
+    endif()
+
+    get_target_property(_rawgl_oiio_links ${target_name} INTERFACE_LINK_LIBRARIES)
+    if(NOT _rawgl_oiio_links)
+        return()
+    endif()
+
+    set(_rawgl_oiio_uses_ffmpeg OFF)
+    foreach(_rawgl_oiio_link IN LISTS _rawgl_oiio_links)
+        if(_rawgl_oiio_link MATCHES "libav(format|codec|util|swresample|swscale)")
+            set(_rawgl_oiio_uses_ffmpeg ON)
+            break()
+        endif()
+    endforeach()
+
+    if(NOT _rawgl_oiio_uses_ffmpeg)
+        return()
+    endif()
+
+    set(_rawgl_ffmpeg_closure)
+    foreach(_rawgl_ffmpeg_name IN ITEMS avformat avcodec avutil swresample swscale)
+        string(TOUPPER "${_rawgl_ffmpeg_name}" _rawgl_ffmpeg_upper)
+        set(_rawgl_ffmpeg_var "_rawgl_ffmpeg_${_rawgl_ffmpeg_upper}_library")
+        find_library(${_rawgl_ffmpeg_var}
+            NAMES "lib${_rawgl_ffmpeg_name}.a" "${_rawgl_ffmpeg_name}"
+            HINTS ${rawgl_dependency_library_hints}
+            NO_DEFAULT_PATH
+            NO_CACHE)
+        if(${_rawgl_ffmpeg_var})
+            set(_rawgl_ffmpeg_target "rawgl_ffmpeg_${_rawgl_ffmpeg_name}_rescan")
+            rawgl_add_linux_imported_library(${_rawgl_ffmpeg_target}
+                RELEASE "${${_rawgl_ffmpeg_var}}")
+            list(APPEND _rawgl_ffmpeg_closure ${_rawgl_ffmpeg_target})
+        endif()
+    endforeach()
+
+    if(_rawgl_ffmpeg_closure)
+        set_property(TARGET ${target_name} APPEND PROPERTY
+            INTERFACE_LINK_LIBRARIES "${_rawgl_ffmpeg_closure}")
+    endif()
+endfunction()
+
+rawgl_linux_append_oiio_ffmpeg_closure(OpenImageIO::OpenImageIO)
+rawgl_linux_append_oiio_ffmpeg_closure(OpenImageIO::OpenImageIO_Util)

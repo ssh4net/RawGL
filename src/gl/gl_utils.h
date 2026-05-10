@@ -73,3 +73,9 @@ glsl_type_name(GLenum type);
 
 void
 get_GPUfeatures();
+
+const char*
+rawgl_last_opengl_error_message();
+
+void
+rawgl_clear_opengl_error_message();

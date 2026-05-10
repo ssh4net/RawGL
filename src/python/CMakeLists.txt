@@ -158,6 +158,14 @@ set_target_properties(rawgl_python PROPERTIES
 target_compile_definitions(rawgl_python PRIVATE RAWGL_VERSION_STRING="${PROJECT_VERSION}")
 target_link_libraries(rawgl_python PRIVATE rawgl_batch)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND RAWGL_LINUX_USE_LIBCXX)
+    target_compile_options(rawgl_python PRIVATE -stdlib=libc++)
+    target_link_options(rawgl_python PRIVATE -stdlib=libc++)
+    if(TARGET nanobind-static)
+        target_compile_options(nanobind-static PRIVATE -stdlib=libc++)
+    endif()
+endif()
+
 if(MSVC)
     target_compile_definitions(rawgl_python PRIVATE Py_NO_LINK_LIB)
 
