@@ -22,7 +22,7 @@
 
 const char* APP_NAME    = "RawGL";
 const char* APP_AUTHOR  = "Erium Vladlen";
-const int APP_VERSION[] = { 2, 0, 0 };
+const int APP_VERSION[] = { 2, 0, 1 };
 
 namespace rawgl {
 

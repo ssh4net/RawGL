@@ -26,6 +26,52 @@ trim_glsl_array_suffix(char* name, GLsizei length)
         *split = '\0';
     }
 }
+
+GLsizei
+uniform_component_count(const GLenum type)
+{
+    switch (type) {
+    case GL_BOOL:
+    case GL_INT:
+    case GL_UNSIGNED_INT:
+    case GL_FLOAT:
+    case GL_DOUBLE: return 1;
+    case GL_BOOL_VEC2:
+    case GL_INT_VEC2:
+    case GL_UNSIGNED_INT_VEC2:
+    case GL_FLOAT_VEC2:
+    case GL_DOUBLE_VEC2: return 2;
+    case GL_BOOL_VEC3:
+    case GL_INT_VEC3:
+    case GL_UNSIGNED_INT_VEC3:
+    case GL_FLOAT_VEC3:
+    case GL_DOUBLE_VEC3: return 3;
+    case GL_BOOL_VEC4:
+    case GL_INT_VEC4:
+    case GL_UNSIGNED_INT_VEC4:
+    case GL_FLOAT_VEC4:
+    case GL_DOUBLE_VEC4:
+    case GL_FLOAT_MAT2:
+    case GL_DOUBLE_MAT2: return 4;
+    case GL_FLOAT_MAT2x3:
+    case GL_FLOAT_MAT3x2:
+    case GL_DOUBLE_MAT2x3:
+    case GL_DOUBLE_MAT3x2: return 6;
+    case GL_FLOAT_MAT2x4:
+    case GL_FLOAT_MAT4x2:
+    case GL_DOUBLE_MAT2x4:
+    case GL_DOUBLE_MAT4x2: return 8;
+    case GL_FLOAT_MAT3:
+    case GL_DOUBLE_MAT3: return 9;
+    case GL_FLOAT_MAT3x4:
+    case GL_FLOAT_MAT4x3:
+    case GL_DOUBLE_MAT3x4:
+    case GL_DOUBLE_MAT4x3: return 12;
+    case GL_FLOAT_MAT4:
+    case GL_DOUBLE_MAT4: return 16;
+    default: return 1;
+    }
+}
 }  // namespace
 
 //
@@ -60,19 +106,20 @@ void
 GLProgramUniform::set(const GLint* values)
 {
     int i;
+    const GLsizei valueCount = uniform_component_count(type);
 
     if (isSet) {
-        for (i = 0; i < size; i++) {
+        for (i = 0; i < valueCount; i++) {
             if (ints[i] != values[i])
                 break;
         }
 
-        if (i == size)
+        if (i == valueCount)
             return;
     } else
         isSet = true;
 
-    for (i = 0; i < size; i++)
+    for (i = 0; i < valueCount; i++)
         ints[i] = values[i];
 
     switch (type) {
@@ -115,19 +162,20 @@ void
 GLProgramUniform::set(const GLuint* values)
 {
     int i;
+    const GLsizei valueCount = uniform_component_count(type);
 
     if (isSet) {
-        for (i = 0; i < size; i++) {
+        for (i = 0; i < valueCount; i++) {
             if (uints[i] != values[i])
                 break;
         }
 
-        if (i == size)
+        if (i == valueCount)
             return;
     } else
         isSet = true;
 
-    for (i = 0; i < size; i++)
+    for (i = 0; i < valueCount; i++)
         uints[i] = values[i];
 
     switch (type) {
@@ -157,19 +205,20 @@ void
 GLProgramUniform::set(const GLfloat* values)
 {
     int i;
+    const GLsizei valueCount = uniform_component_count(type);
 
     if (isSet) {
-        for (i = 0; i < size; i++) {
+        for (i = 0; i < valueCount; i++) {
             if (floats[i] != values[i])
                 break;
         }
 
-        if (i == size)
+        if (i == valueCount)
             return;
     } else
         isSet = true;
 
-    for (i = 0; i < size; i++)
+    for (i = 0; i < valueCount; i++)
         floats[i] = values[i];
 
     // setting uniform variables in current program
@@ -209,19 +258,20 @@ void
 GLProgramUniform::set(const GLdouble* values)
 {
     int i;
+    const GLsizei valueCount = uniform_component_count(type);
 
     if (isSet) {
-        for (i = 0; i < size; i++) {
+        for (i = 0; i < valueCount; i++) {
             if (doubles[i] != values[i])
                 break;
         }
 
-        if (i == size)
+        if (i == valueCount)
             return;
     } else
         isSet = true;
 
-    for (i = 0; i < size; i++)
+    for (i = 0; i < valueCount; i++)
         doubles[i] = values[i];
 
     // setting uniform variables in current program

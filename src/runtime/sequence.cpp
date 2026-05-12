@@ -1045,6 +1045,15 @@ Sequence::bindPassInputs(const PassExecutionPlan& plan,
         case GL_FLOAT_VEC2:
         case GL_FLOAT_VEC3:
         case GL_FLOAT_VEC4:
+        case GL_FLOAT_MAT2:
+        case GL_FLOAT_MAT2x3:
+        case GL_FLOAT_MAT2x4:
+        case GL_FLOAT_MAT3:
+        case GL_FLOAT_MAT3x2:
+        case GL_FLOAT_MAT3x4:
+        case GL_FLOAT_MAT4:
+        case GL_FLOAT_MAT4x2:
+        case GL_FLOAT_MAT4x3:
             if (inputOverride && inputOverride->kind == SequenceExecutionInputOverrideKind::floatValues) {
                 if (input.usesArrayElement) {
                     set_addressed_float_uniform(input, inputOverride->floatValues.data());
@@ -1063,6 +1072,15 @@ Sequence::bindPassInputs(const PassExecutionPlan& plan,
         case GL_DOUBLE_VEC2:
         case GL_DOUBLE_VEC3:
         case GL_DOUBLE_VEC4:
+        case GL_DOUBLE_MAT2:
+        case GL_DOUBLE_MAT2x3:
+        case GL_DOUBLE_MAT2x4:
+        case GL_DOUBLE_MAT3:
+        case GL_DOUBLE_MAT3x2:
+        case GL_DOUBLE_MAT3x4:
+        case GL_DOUBLE_MAT4:
+        case GL_DOUBLE_MAT4x2:
+        case GL_DOUBLE_MAT4x3:
             if (inputOverride && inputOverride->kind == SequenceExecutionInputOverrideKind::doubleValues) {
                 if (input.usesArrayElement) {
                     set_addressed_double_uniform(input, inputOverride->doubleValues.data());

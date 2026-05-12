@@ -13,7 +13,7 @@ def fail(message: str) -> int:
 
 
 def main() -> int:
-    if rawgl.__version__ != "2.0.0":
+    if rawgl.__version__ != "2.0.1":
         return fail(f"unexpected rawgl.__version__: {rawgl.__version__}")
 
     status = rawgl.status()

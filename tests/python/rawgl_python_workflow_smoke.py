@@ -106,6 +106,23 @@ void main()
 }
 """
 
+
+INLINE_PREPARED_OVERRIDE_COMPUTE = """#version 450 core
+layout(local_size_x = 1, local_size_y = 1) in;
+layout(binding = 0, rgba32f) uniform writeonly image2D o_out0;
+
+uniform float gain;
+uniform vec3 bias;
+uniform mat3 transform;
+
+void main()
+{
+    vec3 value = transform * vec3(gain, gain, gain) + bias;
+    imageStore(o_out0, ivec2(0, 0), vec4(value, 1.0));
+}
+"""
+
+
 def verify_inline_host_counter(session: rawgl.Session) -> int:
     source_input = rawgl.make_rgba32f_host_image(1, 1, [0.25, 0.5, 0.75, 1.0])
     if np is not None:
@@ -145,6 +162,78 @@ def verify_inline_host_counter(session: rawgl.Session) -> int:
     counter_values = result.captured_counters.get("counter0::0")
     if counter_values != [8]:
         return fail(f"inline host/counter values mismatch: {counter_values}")
+
+    return 0
+
+
+def verify_prepared_numeric_overrides(session: rawgl.Session) -> int:
+    prepared = rawgl.prepare_compute(
+        INLINE_PREPARED_OVERRIDE_COMPUTE,
+        session=session,
+        size=(1, 1),
+        workgroup_size=(1, 1),
+        verbosity=0,
+        inputs={
+            "gain": 0.25,
+            "bias": [0.0, 0.0, 0.0],
+            "transform": [
+                1.0, 0.0, 0.0,
+                0.0, 1.0, 0.0,
+                0.0, 0.0, 1.0,
+            ],
+        },
+        outputs={
+            "o_out0": {
+                "format": "rgba32f",
+                "channels": 4,
+                "alpha_channel": 3,
+                "bits": 16,
+                "capture_to_host": True,
+            },
+        },
+    )
+
+    def check(label: str, result: rawgl.RunResultView, expected: list[float]) -> int:
+        if not result.success:
+            return fail(f"{label} prepared override workflow failed: {result.error_message}")
+        image = result.captured_outputs.get("o_out0::0")
+        if image is None:
+            return fail(f"{label} prepared override workflow did not capture o_out0::0")
+        values = rawgl.host_image_to_rgba32f(image)
+        if len(values) != 4 or any(
+            not math.isclose(values[i], expected[i], rel_tol=0.0, abs_tol=1e-6)
+            for i in range(4)
+        ):
+            return fail(f"{label} prepared override output mismatch: {values}")
+        return 0
+
+    status = check("default", prepared.run(), [0.25, 0.25, 0.25, 1.0])
+    if status != 0:
+        return status
+
+    status = check(
+        "vector",
+        prepared.run(inputs={"bias": [0.0, 0.125, 0.25]}),
+        [0.25, 0.375, 0.5, 1.0],
+    )
+    if status != 0:
+        return status
+
+    status = check(
+        "matrix",
+        prepared.run(
+            inputs={
+                "transform": [
+                    1.0, 0.0, 0.0,
+                    0.0, 2.0, 0.0,
+                    0.0, 0.0, 3.0,
+                ],
+            }
+        ),
+        [0.25, 0.5, 0.75, 1.0],
+    )
+    if status != 0:
+        return status
 
     return 0
 
@@ -224,6 +313,10 @@ def main() -> int:
         return status
 
     status = verify_inline_host_counter(session)
+    if status != 0:
+        return status
+
+    status = verify_prepared_numeric_overrides(session)
     if status != 0:
         return status
 

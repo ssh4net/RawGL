@@ -50,6 +50,22 @@ make_input_override_workflow()
     input.floatValues.push_back(0.25f);
     pass.inputs.push_back(std::move(input));
 
+    rawgl::InputBinding bias;
+    bias.name        = "bias";
+    bias.sourceKind  = rawgl::InputSourceKind::floatValues;
+    bias.floatValues = { 0.0f, 0.0f, 0.0f };
+    pass.inputs.push_back(std::move(bias));
+
+    rawgl::InputBinding transform;
+    transform.name        = "transform";
+    transform.sourceKind  = rawgl::InputSourceKind::floatValues;
+    transform.floatValues = {
+        1.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 1.0f,
+    };
+    pass.inputs.push_back(std::move(transform));
+
     pass.outputs.push_back(rawgl::CapturedOutput("o_out0", "rgba32f", 4, 3, 16));
 
     rawgl::Workflow workflow;
@@ -111,6 +127,62 @@ main()
         return 1;
     }
     if (!verify_output(overriddenRun, 0.75f)) {
+        return 1;
+    }
+
+    rawgl::RunSettings vectorOverrideRun;
+    rawgl::InputOverride overrideBias;
+    overrideBias.passIndex   = 0;
+    overrideBias.name        = "bias";
+    overrideBias.sourceKind  = rawgl::InputSourceKind::floatValues;
+    overrideBias.floatValues = { 0.0f, 0.125f, 0.25f };
+    vectorOverrideRun.overrides.push_back(std::move(overrideBias));
+
+    const rawgl::RunResult vectorOverriddenRun = prepareResult.workflow->run(vectorOverrideRun);
+    if (!vectorOverriddenRun.success) {
+        std::cerr << "Vector-overridden workflow execution failed: " << vectorOverriddenRun.errorMessage << std::endl;
+        return 1;
+    }
+
+    float vectorPixel[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    if (!read_pixel_rgba32f(vectorOverriddenRun, vectorPixel)) {
+        std::cerr << "Unable to read vector-overridden captured output image." << std::endl;
+        return 1;
+    }
+    if (vectorPixel[0] != 0.25f || vectorPixel[1] != 0.375f || vectorPixel[2] != 0.5f
+        || vectorPixel[3] != 1.0f) {
+        std::cerr << "Unexpected vector-overridden captured output pixel: [" << vectorPixel[0] << ", "
+                  << vectorPixel[1] << ", " << vectorPixel[2] << ", " << vectorPixel[3] << "]" << std::endl;
+        return 1;
+    }
+
+    rawgl::RunSettings matrixOverrideRun;
+    rawgl::InputOverride overrideTransform;
+    overrideTransform.passIndex   = 0;
+    overrideTransform.name        = "transform";
+    overrideTransform.sourceKind  = rawgl::InputSourceKind::floatValues;
+    overrideTransform.floatValues = {
+        1.0f, 0.0f, 0.0f,
+        0.0f, 2.0f, 0.0f,
+        0.0f, 0.0f, 3.0f,
+    };
+    matrixOverrideRun.overrides.push_back(std::move(overrideTransform));
+
+    const rawgl::RunResult matrixOverriddenRun = prepareResult.workflow->run(matrixOverrideRun);
+    if (!matrixOverriddenRun.success) {
+        std::cerr << "Matrix-overridden workflow execution failed: " << matrixOverriddenRun.errorMessage << std::endl;
+        return 1;
+    }
+
+    float matrixPixel[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    if (!read_pixel_rgba32f(matrixOverriddenRun, matrixPixel)) {
+        std::cerr << "Unable to read matrix-overridden captured output image." << std::endl;
+        return 1;
+    }
+    if (matrixPixel[0] != 0.25f || matrixPixel[1] != 0.5f || matrixPixel[2] != 0.75f
+        || matrixPixel[3] != 1.0f) {
+        std::cerr << "Unexpected matrix-overridden captured output pixel: [" << matrixPixel[0] << ", "
+                  << matrixPixel[1] << ", " << matrixPixel[2] << ", " << matrixPixel[3] << "]" << std::endl;
         return 1;
     }
 
