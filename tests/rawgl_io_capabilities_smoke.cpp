@@ -3,6 +3,7 @@
 
 #include "rawgl/rawgl_io.h"
 
+#include <initializer_list>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -38,6 +39,20 @@ has_detail(const rawgl::io::ImageCodecCapabilities& codec, const char* name)
         }
     }
     return false;
+}
+
+static bool
+expect_strings(const std::vector<std::string>& values,
+               std::initializer_list<const char*> expectedValues,
+               const char* context)
+{
+    for (const char* expectedValue : expectedValues) {
+        if (!contains_string(values, expectedValue)) {
+            std::cerr << context << " is missing: " << expectedValue << std::endl;
+            return false;
+        }
+    }
+    return true;
 }
 
 static bool
@@ -93,8 +108,18 @@ main()
         std::cerr << "Native JPEG writer did not report u8 output." << std::endl;
         return 1;
     }
-    if (jpeg->nativeRead && !contains_string(jpeg->nativeReadOptions, "jpeg:color_transform")) {
+    if (jpeg->nativeRead &&
+        !expect_strings(jpeg->nativeReadOptions, { "jpeg:color_transform" }, "Native JPEG reader options")) {
         std::cerr << "Native JPEG reader did not report color transform options." << std::endl;
+        return 1;
+    }
+    if (jpeg->nativeWrite &&
+        !expect_strings(jpeg->nativeWriteOptions,
+                        { "jpeg:quality", "jpg:quality", "oiio:Compression",
+                          "jpeg:progressive", "jpg:progressive",
+                          "jpeg:optimize", "jpg:optimize",
+                          "jpeg:subsampling", "jpg:subsampling" },
+                        "Native JPEG writer options")) {
         return 1;
     }
 
@@ -103,12 +128,35 @@ main()
         std::cerr << "Native TIFF writer did not report uncompressed output." << std::endl;
         return 1;
     }
-    if (tiff->nativeWrite && !contains_string(tiff->nativeWriteOptions, "tiff:compression")) {
-        std::cerr << "Native TIFF writer did not report compression options." << std::endl;
+    if (tiff->nativeWrite &&
+        !expect_strings(tiff->nativeWriteOptions,
+                        { "tiff:compression", "compression", "oiio:Compression",
+                          "tiff:predictor",
+                          "tiff:layout", "tiff:storageLayout", "tiff:storage_layout", "tiff:storage",
+                          "tiff:tiled",
+                          "tiff:tileWidth", "tiff:tile_width",
+                          "tiff:tileLength", "tiff:tile_length",
+                          "tiff:tileHeight", "tiff:tile_height",
+                          "tiff:rowsPerStrip", "tiff:rows_per_strip",
+                          "tiff:bigTiff", "tiff:bigtiff", "tiff:big_tiff",
+                          "tiff:jpegQuality", "tiff:jpeg_quality", "jpeg:quality", "jpg:quality",
+                          "tiff:zipQuality", "tiff:zip_quality",
+                          "tiff:zipLevel", "tiff:zip_level",
+                          "tiff:deflateLevel", "tiff:deflate_level",
+                          "tiff:zstdLevel", "tiff:zstd_level",
+                          "tiff:lzmaPreset", "tiff:lzma_preset",
+                          "tiff:webpLevel", "tiff:webp_level",
+                          "tiff:webpLossless", "tiff:webp_lossless",
+                          "tiff:webpLosslessExact", "tiff:webp_lossless_exact",
+                          "oiio:UnassociatedAlpha" },
+                        "Native TIFF writer options")) {
         return 1;
     }
-    if (tiff->nativeRead && !contains_string(tiff->nativeReadOptions, "tiff:directory_index")) {
-        std::cerr << "Native TIFF reader did not report directory options." << std::endl;
+    if (tiff->nativeRead &&
+        !expect_strings(tiff->nativeReadOptions,
+                        { "rawgl:load_backend", "rawgl:decode_backend",
+                          "tiff:directory_index", "tiff:directoryIndex", "tiff:subimage" },
+                        "Native TIFF reader options")) {
         return 1;
     }
 
@@ -117,12 +165,25 @@ main()
         std::cerr << "Native OpenEXR writer did not report compression modes." << std::endl;
         return 1;
     }
-    if (openexr->nativeWrite && !contains_string(openexr->nativeWriteOptions, "openexr:compression")) {
-        std::cerr << "Native OpenEXR writer did not report compression options." << std::endl;
+    if (openexr->nativeWrite &&
+        !expect_strings(openexr->nativeWriteOptions,
+                        { "openexr:compression", "compression", "oiio:Compression",
+                          "openexr:layout", "openexr:storageLayout", "openexr:storage_layout",
+                          "openexr:tiled",
+                          "openexr:tileWidth", "openexr:tile_width",
+                          "openexr:tileHeight", "openexr:tile_height",
+                          "openexr:tileLength", "openexr:tile_length",
+                          "openexr:lineOrder", "openexr:line_order",
+                          "openexr:dwaCompressionLevel", "openexr:dwa_compression_level",
+                          "openexr:attribute:string:<name>" },
+                        "Native OpenEXR writer options")) {
         return 1;
     }
-    if (openexr->nativeRead && !contains_string(openexr->nativeReadOptions, "openexr:channel_selection")) {
-        std::cerr << "Native OpenEXR reader did not report channel selection options." << std::endl;
+    if (openexr->nativeRead &&
+        !expect_strings(openexr->nativeReadOptions,
+                        { "rawgl:load_backend", "rawgl:decode_backend",
+                          "openexr:channel_selection", "openexr:channelSelection" },
+                        "Native OpenEXR reader options")) {
         return 1;
     }
 
@@ -136,22 +197,22 @@ main()
         return 1;
     }
     if (jpeg2000->nativeRead &&
-        (!contains_string(jpeg2000->nativeReadOptions, "jpeg2000:reduce_factor") ||
-         !contains_string(jpeg2000->nativeReadOptions, "jpeg2000:reduce") ||
-         !contains_string(jpeg2000->nativeReadOptions, "jpeg2000:layer_limit") ||
-         !contains_string(jpeg2000->nativeReadOptions, "jpeg2000:layers"))) {
-        std::cerr << "Native JPEG-2000 reader did not report reduce-factor options." << std::endl;
+        !expect_strings(jpeg2000->nativeReadOptions,
+                        { "rawgl:load_backend", "rawgl:decode_backend",
+                          "jpeg2000:reduce_factor", "jpeg2000:reduce",
+                          "jpeg2000:layer_limit", "jpeg2000:layers" },
+                        "Native JPEG-2000 reader options")) {
         return 1;
     }
     if (jpeg2000->nativeWrite &&
-        (!contains_string(jpeg2000->nativeWriteOptions, "jpeg2000:lossless") ||
-         !contains_string(jpeg2000->nativeWriteOptions, "jpeg2000:compression_ratio") ||
-         !contains_string(jpeg2000->nativeWriteOptions, "jpeg2000:rate") ||
-         !contains_string(jpeg2000->nativeWriteOptions, "jpeg2000:quality") ||
-         !contains_string(jpeg2000->nativeWriteOptions, "jpeg2000:psnr") ||
-         !contains_string(jpeg2000->nativeWriteCompressionModes, "rate") ||
-         !contains_string(jpeg2000->nativeWriteCompressionModes, "quality"))) {
-        std::cerr << "Native JPEG-2000 writer did not report compression options." << std::endl;
+        (!expect_strings(jpeg2000->nativeWriteOptions,
+                         { "jpeg2000:lossless",
+                           "jpeg2000:compression_ratio", "jpeg2000:rate",
+                           "jpeg2000:quality", "jpeg2000:psnr" },
+                         "Native JPEG-2000 writer options") ||
+         !expect_strings(jpeg2000->nativeWriteCompressionModes,
+                         { "lossless", "rate", "quality" },
+                         "Native JPEG-2000 writer compression modes"))) {
         return 1;
     }
 

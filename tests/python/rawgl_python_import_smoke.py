@@ -13,6 +13,18 @@ def fail(message: str) -> int:
     return 1
 
 
+def codec_by_name(capabilities) -> dict[str, object]:
+    return {codec.name: codec for codec in capabilities.codecs}
+
+
+def require_options(values, expected: tuple[str, ...], context: str) -> int:
+    values_set = set(values)
+    for option in expected:
+        if option not in values_set:
+            return fail(f"{context} missing option: {option}")
+    return 0
+
+
 def main() -> int:
     expected_version = Path("VERSION").read_text(encoding="utf-8").strip()
     if rawgl.__version__ != expected_version:
@@ -84,10 +96,42 @@ def main() -> int:
     capabilities = rawgl.io.capabilities()
     if not capabilities.open_image_io_fallback:
         return fail("rawgl.io.capabilities() did not report OpenImageIO fallback")
-    codec_names = {codec.name for codec in capabilities.codecs}
+    codecs = codec_by_name(capabilities)
+    codec_names = set(codecs)
     for codec_name in ("jpeg", "png", "tiff", "openexr", "openimageio"):
         if codec_name not in codec_names:
             return fail(f"rawgl.io.capabilities() missing codec: {codec_name}")
+    tiff = codecs["tiff"]
+    if tiff.native_write:
+        status = require_options(
+            tiff.native_write_options,
+            (
+                "tiff:tileWidth",
+                "tiff:tile_width",
+                "tiff:rowsPerStrip",
+                "tiff:rows_per_strip",
+                "tiff:zipLevel",
+                "tiff:zip_level",
+                "oiio:UnassociatedAlpha",
+            ),
+            "Python TIFF capabilities",
+        )
+        if status != 0:
+            return status
+    openexr = codecs["openexr"]
+    if openexr.native_write:
+        status = require_options(
+            openexr.native_write_options,
+            (
+                "openexr:tileWidth",
+                "openexr:tile_width",
+                "openexr:dwaCompressionLevel",
+                "openexr:dwa_compression_level",
+            ),
+            "Python OpenEXR capabilities",
+        )
+        if status != 0:
+            return status
 
     return 0
 

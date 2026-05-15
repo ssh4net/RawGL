@@ -316,6 +316,38 @@ memory. Use ``mesh_updates`` for fixed-topology animation. Use ``meshes`` when
 the topology or attribute layout changes. ``TriangleId::0`` captures as a
 ``numpy.uint32`` array.
 
+The Python API accepts both mapping and list forms for mesh bindings. These are
+equivalent when names are explicit:
+
+.. code-block:: python
+
+   meshes={
+       "head": head_mesh,
+       "eyes": eye_mesh,
+   }
+
+.. code-block:: python
+
+   meshes=[
+       {"name": "head", "host_mesh": head_mesh},
+       {"name": "eyes", "host_mesh": eye_mesh},
+   ]
+
+Per-run full-mesh replacement can also be built directly from arrays:
+
+.. code-block:: python
+
+   result = prepared.run(
+       meshes={
+           "head": {
+               "positions": positions_f32,
+               "indices": triangles_u32,
+               "colors": colors_u8,
+               "uint_attrs": {"source_triangle_id": ids_u32},
+           }
+       }
+   )
+
 Related repo files:
 
 - ``tests/test_mesh_ao_sponge.bat``
@@ -323,6 +355,7 @@ Related repo files:
 - ``tests/shaders/mesh_ao.frag``
 - ``tests/rawgl_core_shared_file_resources_smoke.cpp``
 - ``tests/python/rawgl_python_host_mesh_smoke.py``
+- ``tests/python/rawgl_python_mesh_api_forms_smoke.py``
 
 For a larger OBJ import, run
 ``examples/Mesh/OBJ/RenderObjPerspectiveBaseColor.py``. The file in that

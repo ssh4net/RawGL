@@ -323,6 +323,13 @@ if(RAWGL_TESTS)
         set_tests_properties(rawgl_python_host_mesh_smoke PROPERTIES
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+        add_test(NAME rawgl_python_mesh_api_forms_smoke
+            COMMAND ${CMAKE_COMMAND} -E env
+                "PYTHONPATH=${CMAKE_BINARY_DIR}/python"
+                "${RAWGL_PYTHON_EXECUTABLE_EFFECTIVE}" "${CMAKE_SOURCE_DIR}/tests/python/rawgl_python_mesh_api_forms_smoke.py")
+        set_tests_properties(rawgl_python_mesh_api_forms_smoke PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
         add_test(NAME rawgl_python_mesh_override_scope_smoke
             COMMAND ${CMAKE_COMMAND} -E env
                 "PYTHONPATH=${CMAKE_BINARY_DIR}/python"

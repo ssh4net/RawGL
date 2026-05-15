@@ -56,6 +56,13 @@ availability, supported native component types, native read/write option names,
 native compression modes, unavailable optional compression modes, and library
 version details.
 
+The option lists include both canonical RawGL names and compatibility aliases
+accepted by the backend parser. For example, TIFF reports both
+``tiff:tile_width`` and ``tiff:tileWidth``; OpenEXR reports both
+``openexr:dwa_compression_level`` and ``openexr:dwaCompressionLevel``. Use the
+canonical snake_case names in new code, but query capabilities when importing
+older scripts or exposing UI controls.
+
 .. code-block:: cpp
 
    const rawgl::io::ImageIoCapabilities capabilities =

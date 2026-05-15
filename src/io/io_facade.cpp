@@ -611,7 +611,10 @@ add_jpeg_capabilities(ImageIoCapabilities& result)
     codec.nativeReadComponentTypes = { "u8" };
     codec.nativeWriteComponentTypes = { "u8" };
     codec.nativeReadOptions = { "rawgl:load_backend", "rawgl:decode_backend", "jpeg:color_transform" };
-    codec.nativeWriteOptions = { "jpeg:quality", "jpeg:progressive", "jpeg:optimize", "jpeg:subsampling" };
+    codec.nativeWriteOptions = { "jpeg:quality", "jpg:quality", "oiio:Compression",
+                                 "jpeg:progressive", "jpg:progressive",
+                                 "jpeg:optimize", "jpg:optimize",
+                                 "jpeg:subsampling", "jpg:subsampling" };
     codec.nativeWriteCompressionModes = { "baseline", "progressive" };
     add_detail(codec, "libjpeg.enabled", "true");
 #    if defined(LIBJPEG_TURBO_VERSION)
@@ -714,11 +717,26 @@ add_tiff_capabilities(ImageIoCapabilities& result)
     codec.nativeWriteComponentTypes = { "u8", "u16", "f32" };
     codec.nativeReadOptions = { "rawgl:load_backend", "rawgl:decode_backend", "tiff:directory_index",
                                 "tiff:directoryIndex", "tiff:subimage" };
-    codec.nativeWriteOptions = { "tiff:compression", "tiff:predictor", "tiff:layout", "tiff:tiled",
-                                 "tiff:tile_width", "tiff:tile_height", "tiff:rows_per_strip",
-                                 "tiff:big_tiff", "tiff:zip_level", "tiff:jpeg_quality",
-                                 "tiff:zstd_level", "tiff:lzma_preset", "tiff:webp_level",
-                                 "tiff:webp_lossless", "tiff:webp_lossless_exact" };
+    codec.nativeWriteOptions = { "tiff:compression", "compression", "oiio:Compression",
+                                 "tiff:predictor",
+                                 "tiff:layout", "tiff:storageLayout", "tiff:storage_layout", "tiff:storage",
+                                 "tiff:tiled",
+                                 "tiff:tileWidth", "tiff:tile_width",
+                                 "tiff:tileLength", "tiff:tile_length",
+                                 "tiff:tileHeight", "tiff:tile_height",
+                                 "tiff:rowsPerStrip", "tiff:rows_per_strip",
+                                 "tiff:bigTiff", "tiff:bigtiff", "tiff:big_tiff",
+                                 "tiff:jpegQuality", "tiff:jpeg_quality",
+                                 "jpeg:quality", "jpg:quality",
+                                 "tiff:zipQuality", "tiff:zip_quality",
+                                 "tiff:zipLevel", "tiff:zip_level",
+                                 "tiff:deflateLevel", "tiff:deflate_level",
+                                 "tiff:zstdLevel", "tiff:zstd_level",
+                                 "tiff:lzmaPreset", "tiff:lzma_preset",
+                                 "tiff:webpLevel", "tiff:webp_level",
+                                 "tiff:webpLossless", "tiff:webp_lossless",
+                                 "tiff:webpLosslessExact", "tiff:webp_lossless_exact",
+                                 "oiio:UnassociatedAlpha" };
     add_detail(codec, "libtiff.enabled", "true");
     add_detail(codec, "libtiff.version", TIFFGetVersion());
 #else
@@ -743,9 +761,15 @@ add_openexr_capabilities(ImageIoCapabilities& result)
     codec.nativeWriteComponentTypes = { "f16", "f32" };
     codec.nativeReadOptions = { "rawgl:load_backend", "rawgl:decode_backend",
                                 "openexr:channel_selection", "openexr:channelSelection" };
-    codec.nativeWriteOptions = { "openexr:compression", "openexr:layout", "openexr:tiled",
-                                 "openexr:tile_width", "openexr:tile_height", "openexr:line_order",
-                                 "openexr:dwa_compression_level", "openexr:attribute:string:<name>" };
+    codec.nativeWriteOptions = { "openexr:compression", "compression", "oiio:Compression",
+                                 "openexr:layout", "openexr:storageLayout", "openexr:storage_layout",
+                                 "openexr:tiled",
+                                 "openexr:tileWidth", "openexr:tile_width",
+                                 "openexr:tileHeight", "openexr:tile_height",
+                                 "openexr:tileLength", "openexr:tile_length",
+                                 "openexr:lineOrder", "openexr:line_order",
+                                 "openexr:dwaCompressionLevel", "openexr:dwa_compression_level",
+                                 "openexr:attribute:string:<name>" };
     add_detail(codec, "openexr.enabled", "true");
 #    if defined(OPENEXR_VERSION_STRING)
     add_detail(codec, "openexr.version", OPENEXR_VERSION_STRING);

@@ -39,8 +39,8 @@ with files:
 - ``rawgl.io.read_metadata_document(...)``
 
 ``rawgl.io.load_image(...)`` and ``rawgl.io.save_image(...)`` accept
-``codec_options=`` for native JPEG, PNG, TIFF, and OpenEXR controls. Prefer
-this over string attributes in new Python code.
+``codec_options=`` for native JPEG, PNG, TIFF, OpenEXR, and JPEG-2000 controls.
+Prefer this over string attributes in new Python code.
 
 .. code-block:: python
 
@@ -276,6 +276,34 @@ attributes. If the same named mesh appears in several passes, an unscoped
 
 ``r32ui`` captured outputs are returned as ``numpy.uint32`` arrays. This is the
 current path for ID, mask, and picking buffers.
+
+Mesh bindings can be written as a mapping or as a list. Use a list when the
+order is clearer or when each binding already carries its own name:
+
+.. code-block:: python
+
+   meshes=[
+       {"name": "head", "host_mesh": head_mesh},
+       {"name": "eyes", "host_mesh": eye_mesh},
+   ]
+
+Full mesh overrides also accept inline arrays:
+
+.. code-block:: python
+
+   result = prepared.run(
+       meshes={
+           "head": {
+               "positions": positions_f32,
+               "indices": triangles_u32,
+               "colors": colors_u8,
+               "uint_attrs": {"source_triangle_id": ids_u32},
+           }
+       }
+   )
+
+``mesh_updates`` writes into the prepared GPU buffers. Submit a new update for
+each frame that changes the fixed-topology mesh.
 
 Prepared workflows
 ------------------
