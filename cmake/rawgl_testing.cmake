@@ -44,6 +44,7 @@ if(RAWGL_TESTS)
     rawgl_add_cpp_smoke_test(rawgl_core_inspect_smoke tests/rawgl_core_inspect_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_core_mesh_inspect_smoke tests/rawgl_core_mesh_inspect_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_core_graph_smoke tests/rawgl_core_graph_smoke.cpp)
+    rawgl_add_cpp_smoke_test(rawgl_core_mesh_override_smoke tests/rawgl_core_mesh_override_smoke.cpp)
     rawgl_add_cpp_smoke_test(rawgl_cli_codec_options_smoke tests/rawgl_cli_codec_options_smoke.cpp)
     target_include_directories(rawgl_cli_codec_options_smoke PRIVATE
         "${CMAKE_SOURCE_DIR}/src/cli")
@@ -100,6 +101,11 @@ if(RAWGL_TESTS)
     add_test(NAME rawgl_core_graph_smoke
         COMMAND rawgl_core_graph_smoke)
     set_tests_properties(rawgl_core_graph_smoke PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+    add_test(NAME rawgl_core_mesh_override_smoke
+        COMMAND rawgl_core_mesh_override_smoke)
+    set_tests_properties(rawgl_core_mesh_override_smoke PROPERTIES
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
     add_test(NAME rawgl_cli_codec_options_smoke

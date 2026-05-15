@@ -127,16 +127,31 @@ main()
     }
 
     const rawgl::io::ImageCodecCapabilities* jpeg2000 = find_codec(capabilities, "jpeg2000");
-    if (!contains_string(jpeg2000->extensions, "jp2") || !has_detail(*jpeg2000, "openjpeg.enabled")) {
+    if (!contains_string(jpeg2000->extensions, "jp2") ||
+        !contains_string(jpeg2000->extensions, "j2k") ||
+        !contains_string(jpeg2000->extensions, "j2c") ||
+        !contains_string(jpeg2000->extensions, "jpc") ||
+        !has_detail(*jpeg2000, "openjpeg.enabled")) {
         std::cerr << "JPEG-2000 capability entry is missing expected details." << std::endl;
         return 1;
     }
-    if (jpeg2000->nativeRead && !contains_string(jpeg2000->nativeReadOptions, "jpeg2000:reduce_factor")) {
+    if (jpeg2000->nativeRead &&
+        (!contains_string(jpeg2000->nativeReadOptions, "jpeg2000:reduce_factor") ||
+         !contains_string(jpeg2000->nativeReadOptions, "jpeg2000:reduce") ||
+         !contains_string(jpeg2000->nativeReadOptions, "jpeg2000:layer_limit") ||
+         !contains_string(jpeg2000->nativeReadOptions, "jpeg2000:layers"))) {
         std::cerr << "Native JPEG-2000 reader did not report reduce-factor options." << std::endl;
         return 1;
     }
-    if (jpeg2000->nativeWrite && !contains_string(jpeg2000->nativeWriteOptions, "jpeg2000:lossless")) {
-        std::cerr << "Native JPEG-2000 writer did not report lossless options." << std::endl;
+    if (jpeg2000->nativeWrite &&
+        (!contains_string(jpeg2000->nativeWriteOptions, "jpeg2000:lossless") ||
+         !contains_string(jpeg2000->nativeWriteOptions, "jpeg2000:compression_ratio") ||
+         !contains_string(jpeg2000->nativeWriteOptions, "jpeg2000:rate") ||
+         !contains_string(jpeg2000->nativeWriteOptions, "jpeg2000:quality") ||
+         !contains_string(jpeg2000->nativeWriteOptions, "jpeg2000:psnr") ||
+         !contains_string(jpeg2000->nativeWriteCompressionModes, "rate") ||
+         !contains_string(jpeg2000->nativeWriteCompressionModes, "quality"))) {
+        std::cerr << "Native JPEG-2000 writer did not report compression options." << std::endl;
         return 1;
     }
 

@@ -213,6 +213,142 @@ run_jpeg2000_case(const Jpeg2000TestCase& testCase)
     return verify_case_result(testCase, loaded, source);
 }
 
+static bool
+expect_jpeg2000_save_failure(const char* label,
+                             const char* path,
+                             const rawgl::HostImageData& image,
+                             const std::vector<rawgl::Attribute>& attributes)
+{
+    std::error_code error;
+    std::filesystem::remove(path, error);
+
+    rawgl::io::ImageSaveRequest request;
+    request.path = path;
+    request.bits = 8;
+    request.attributes = attributes;
+    request.image = image;
+
+    const rawgl::io::ImageSaveResult result = rawgl::io::SaveImageFile(request);
+    if (result.success) {
+        std::cerr << label << " JPEG-2000 invalid save unexpectedly succeeded." << std::endl;
+        return false;
+    }
+    if (result.errorMessage.empty()) {
+        std::cerr << label << " JPEG-2000 invalid save failed without an error message." << std::endl;
+        return false;
+    }
+
+    std::filesystem::remove(path, error);
+    return true;
+}
+
+static bool
+expect_jpeg2000_load_failure(const char* label,
+                             const char* path,
+                             const std::vector<rawgl::Attribute>& attributes)
+{
+    rawgl::io::ImageLoadRequest request;
+    request.path = path;
+    request.attributes = attributes;
+    request.codecOptions.hasBackendPolicy = true;
+    request.codecOptions.backendPolicy = rawgl::io::ImageLoadBackendPolicy::NativeOnly;
+
+    const rawgl::io::ImageLoadResult result = rawgl::io::LoadImageFile(request);
+    if (result.success) {
+        std::cerr << label << " JPEG-2000 invalid load unexpectedly succeeded." << std::endl;
+        return false;
+    }
+    if (result.errorMessage.empty()) {
+        std::cerr << label << " JPEG-2000 invalid load failed without an error message." << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+static bool
+run_jpeg2000_error_cases()
+{
+    const rawgl::HostImageData image = make_test_image(Jpeg2000TestCase { "jp2-error-source",
+                                                                          "",
+                                                                          16,
+                                                                          16,
+                                                                          3,
+                                                                          -1,
+                                                                          8,
+                                                                          GL_RGB8,
+                                                                          GL_UNSIGNED_BYTE,
+                                                                          false,
+                                                                          true,
+                                                                          false,
+                                                                          0.0f,
+                                                                          false,
+                                                                          0.0f,
+                                                                          false });
+    const char* validPath = "tests/outputs/rawgl_io_jpeg2000_error_valid.jp2";
+
+    if (!expect_jpeg2000_save_failure("invalid lossless flag",
+                                      "tests/outputs/rawgl_io_jpeg2000_error_lossless.jp2",
+                                      image,
+                                      { { "jpeg2000:lossless", "maybe" } })) {
+        return false;
+    }
+    if (!expect_jpeg2000_save_failure("conflicting rate and quality",
+                                      "tests/outputs/rawgl_io_jpeg2000_error_rate_quality.jp2",
+                                      image,
+                                      { { "jpeg2000:lossless", "false" },
+                                        { "jpeg2000:compression_ratio", "12" },
+                                        { "jpeg2000:quality", "35" } })) {
+        return false;
+    }
+    if (!expect_jpeg2000_save_failure("lossless with rate",
+                                      "tests/outputs/rawgl_io_jpeg2000_error_lossless_rate.jp2",
+                                      image,
+                                      { { "jpeg2000:lossless", "true" }, { "jpeg2000:rate", "8" } })) {
+        return false;
+    }
+    if (!expect_jpeg2000_save_failure("lossy missing rate",
+                                      "tests/outputs/rawgl_io_jpeg2000_error_lossy_missing_rate.jp2",
+                                      image,
+                                      { { "jpeg2000:lossless", "false" } })) {
+        return false;
+    }
+    if (!expect_jpeg2000_save_failure("invalid quality",
+                                      "tests/outputs/rawgl_io_jpeg2000_error_quality.jp2",
+                                      image,
+                                      { { "jpeg2000:lossless", "false" }, { "jpeg2000:quality", "0" } })) {
+        return false;
+    }
+
+    Jpeg2000TestCase validCase;
+    validCase.label = "jp2-error-valid";
+    validCase.path = validPath;
+    validCase.width = 16;
+    validCase.height = 16;
+    validCase.channels = 3;
+    validCase.alphaChannel = -1;
+    validCase.bits = 8;
+    validCase.glInternalFormat = GL_RGB8;
+    validCase.glType = GL_UNSIGNED_BYTE;
+    validCase.exactRoundTrip = true;
+    validCase.lossless = true;
+    if (!save_jpeg2000_case(validCase, image)) {
+        return false;
+    }
+    if (!expect_jpeg2000_load_failure("invalid reduce factor",
+                                      validPath,
+                                      { { "jpeg2000:reduce_factor", "not_a_number" } })) {
+        return false;
+    }
+    if (!expect_jpeg2000_load_failure("invalid layer limit",
+                                      validPath,
+                                      { { "jpeg2000:layer_limit", "not_a_number" } })) {
+        return false;
+    }
+
+    return true;
+}
+
 int
 main()
 {
@@ -303,6 +439,9 @@ main()
         if (!run_jpeg2000_case(testCase)) {
             return 1;
         }
+    }
+    if (!run_jpeg2000_error_cases()) {
+        return 1;
     }
 
     return 0;

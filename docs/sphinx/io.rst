@@ -34,16 +34,17 @@ settings control:
 - PNG through libpng
 - TIFF through libtiff, including tiled TIFF and BigTIFF
 - OpenEXR through OpenEXR, including tiled EXR
+- JPEG-2000 through OpenJPEG for ``.jp2``, ``.j2k``, ``.j2c``, and ``.jpc``
 
 OpenImageIO remains the fallback path for formats that have not moved to native
-backends yet, such as camera RAW, JPEG-2000, TGA, HDR, WebP, and other plugins
-available in the dependency build.
+backends yet, such as camera RAW, TGA, HDR, WebP, and other plugins available
+in the dependency build.
 
 Native writers are strict for native output families. If a native JPEG, PNG,
-TIFF, or OpenEXR writer rejects an option, RawGL returns that error instead of
-silently retrying the write through OpenImageIO. The read path may still fall
-back to OpenImageIO when a native reader cannot decode a supported format
-variant.
+TIFF, OpenEXR, or JPEG-2000 writer rejects an option, RawGL returns that error
+instead of silently retrying the write through OpenImageIO. The read path may
+still fall back to OpenImageIO when a native reader cannot decode a supported
+format variant.
 
 Codec capability query
 ----------------------
@@ -185,6 +186,25 @@ PNG output accepts:
 
 PNG writes 8-bit and 16-bit integer images. Invalid compression and interlace
 values fail the write instead of being clamped.
+
+JPEG-2000 output accepts:
+
+- ``jpeg2000:lossless``: ``true`` for reversible/lossless output or ``false``
+  for lossy output
+- ``jpeg2000:compression_ratio`` or ``jpeg2000:rate``: positive lossy
+  compression ratio
+- ``jpeg2000:quality`` or ``jpeg2000:psnr``: positive lossy quality target
+
+JPEG-2000 input accepts:
+
+- ``jpeg2000:reduce_factor`` or ``jpeg2000:reduce``: OpenJPEG decode reduce
+  factor
+- ``jpeg2000:layer_limit`` or ``jpeg2000:layers``: OpenJPEG decode layer limit
+
+JPEG-2000 writes 8-bit and 16-bit unsigned output. ``.j2k``, ``.j2c``, and
+``.jpc`` use the raw codestream container; other JPEG-2000 extensions use JP2.
+Lossless output cannot use lossy rate or quality options. Lossy output requires
+exactly one of compression ratio or quality.
 
 TIFF output accepts:
 

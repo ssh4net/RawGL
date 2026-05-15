@@ -653,8 +653,11 @@ add_jpeg2000_capabilities(ImageIoCapabilities& result)
     codec.nativeReadComponentTypes = { "u8", "u16" };
     codec.nativeWriteComponentTypes = { "u8", "u16" };
     codec.nativeReadOptions = { "rawgl:load_backend", "rawgl:decode_backend",
-                                "jpeg2000:reduce_factor", "jpeg2000:layer_limit" };
-    codec.nativeWriteOptions = { "jpeg2000:lossless", "jpeg2000:compression_ratio", "jpeg2000:quality" };
+                                "jpeg2000:reduce_factor", "jpeg2000:reduce",
+                                "jpeg2000:layer_limit", "jpeg2000:layers" };
+    codec.nativeWriteOptions = { "jpeg2000:lossless",
+                                 "jpeg2000:compression_ratio", "jpeg2000:rate",
+                                 "jpeg2000:quality", "jpeg2000:psnr" };
     codec.nativeWriteCompressionModes = { "lossless", "rate", "quality" };
     add_detail(codec, "openjpeg.enabled", "true");
     add_detail(codec, "openjpeg.version", opj_version());
