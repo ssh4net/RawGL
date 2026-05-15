@@ -310,6 +310,27 @@ if(RAWGL_TESTS)
         set_tests_properties(rawgl_python_workflow_smoke PROPERTIES
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+        add_test(NAME rawgl_python_host_mesh_smoke
+            COMMAND ${CMAKE_COMMAND} -E env
+                "PYTHONPATH=${CMAKE_BINARY_DIR}/python"
+                "${RAWGL_PYTHON_EXECUTABLE_EFFECTIVE}" "${CMAKE_SOURCE_DIR}/tests/python/rawgl_python_host_mesh_smoke.py")
+        set_tests_properties(rawgl_python_host_mesh_smoke PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+        add_test(NAME rawgl_python_mesh_override_scope_smoke
+            COMMAND ${CMAKE_COMMAND} -E env
+                "PYTHONPATH=${CMAKE_BINARY_DIR}/python"
+                "${RAWGL_PYTHON_EXECUTABLE_EFFECTIVE}" "${CMAKE_SOURCE_DIR}/tests/python/rawgl_python_mesh_override_scope_smoke.py")
+        set_tests_properties(rawgl_python_mesh_override_scope_smoke PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+        add_test(NAME rawgl_python_integer_pass_output_smoke
+            COMMAND ${CMAKE_COMMAND} -E env
+                "PYTHONPATH=${CMAKE_BINARY_DIR}/python"
+                "${RAWGL_PYTHON_EXECUTABLE_EFFECTIVE}" "${CMAKE_SOURCE_DIR}/tests/python/rawgl_python_integer_pass_output_smoke.py")
+        set_tests_properties(rawgl_python_integer_pass_output_smoke PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
         if(TARGET JPEG::JPEG AND TARGET PNG::PNG AND TARGET TIFF::TIFF AND TARGET OpenEXR::OpenEXR)
             add_test(NAME rawgl_python_numpy_typed_io_example
                 COMMAND ${CMAKE_COMMAND} -E env

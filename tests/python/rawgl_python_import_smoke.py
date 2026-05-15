@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import rawgl
 
@@ -13,7 +14,8 @@ def fail(message: str) -> int:
 
 
 def main() -> int:
-    if rawgl.__version__ != "2.0.1":
+    expected_version = Path("VERSION").read_text(encoding="utf-8").strip()
+    if rawgl.__version__ != expected_version:
         return fail(f"unexpected rawgl.__version__: {rawgl.__version__}")
 
     status = rawgl.status()

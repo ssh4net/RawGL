@@ -117,6 +117,196 @@ from_python_bytes(const nb::object& value)
     throw std::runtime_error("expected a bytes-like object");
 }
 
+struct PythonBufferView {
+    Py_buffer buffer {};
+    bool acquired = false;
+
+    explicit PythonBufferView(const nb::object& object)
+    {
+        if (PyObject_GetBuffer(object.ptr(), &buffer, PyBUF_FORMAT | PyBUF_ND | PyBUF_C_CONTIGUOUS) != 0) {
+            throw std::runtime_error("expected a C-contiguous buffer object");
+        }
+        acquired = true;
+    }
+
+    ~PythonBufferView()
+    {
+        if (acquired) {
+            PyBuffer_Release(&buffer);
+        }
+    }
+
+    PythonBufferView(const PythonBufferView&) = delete;
+    PythonBufferView& operator=(const PythonBufferView&) = delete;
+};
+
+bool
+python_buffer_format_matches(const Py_buffer& buffer, const char* format, const Py_ssize_t itemSize)
+{
+    if (buffer.itemsize != itemSize || buffer.format == nullptr) {
+        return false;
+    }
+    return std::strcmp(buffer.format, format) == 0;
+}
+
+bool
+python_buffer_uint32_format_matches(const Py_buffer& buffer)
+{
+    if (buffer.itemsize != static_cast<Py_ssize_t>(sizeof(uint32_t)) || buffer.format == nullptr) {
+        return false;
+    }
+    return std::strcmp(buffer.format, "I") == 0 || std::strcmp(buffer.format, "L") == 0;
+}
+
+void
+copy_float32_array(const nb::object& object,
+                   const char* name,
+                   const int expectedColumns,
+                   std::vector<float>& values,
+                   size_t* rowCount)
+{
+    PythonBufferView view(object);
+    if (!python_buffer_format_matches(view.buffer, "f", static_cast<Py_ssize_t>(sizeof(float)))) {
+        throw std::runtime_error(std::string(name) + " must use dtype float32");
+    }
+    if (view.buffer.ndim != 2 || view.buffer.shape[1] != expectedColumns) {
+        throw std::runtime_error(std::string(name) + " must be a 2D array with the expected column count");
+    }
+    if (view.buffer.shape[0] < 1) {
+        throw std::runtime_error(std::string(name) + " must not be empty");
+    }
+
+    const size_t rows = static_cast<size_t>(view.buffer.shape[0]);
+    const size_t count = rows * static_cast<size_t>(expectedColumns);
+    values.resize(count);
+    std::memcpy(values.data(), view.buffer.buf, count * sizeof(float));
+    if (rowCount != nullptr) {
+        *rowCount = rows;
+    }
+}
+
+void
+copy_uint8_array(const nb::object& object,
+                 const char* name,
+                 const int expectedColumns,
+                 std::vector<uint8_t>& values,
+                 size_t* rowCount)
+{
+    PythonBufferView view(object);
+    if (!python_buffer_format_matches(view.buffer, "B", static_cast<Py_ssize_t>(sizeof(uint8_t)))) {
+        throw std::runtime_error(std::string(name) + " must use dtype uint8");
+    }
+    if (view.buffer.ndim != 2 || view.buffer.shape[1] != expectedColumns) {
+        throw std::runtime_error(std::string(name) + " must be a 2D array with the expected column count");
+    }
+
+    const size_t rows = static_cast<size_t>(view.buffer.shape[0]);
+    const size_t count = rows * static_cast<size_t>(expectedColumns);
+    values.resize(count);
+    std::memcpy(values.data(), view.buffer.buf, count * sizeof(uint8_t));
+    if (rowCount != nullptr) {
+        *rowCount = rows;
+    }
+}
+
+void
+copy_uint32_indices(const nb::object& object, std::vector<uint32_t>& values)
+{
+    PythonBufferView view(object);
+    if (!python_buffer_uint32_format_matches(view.buffer)) {
+        throw std::runtime_error("indices must use dtype uint32");
+    }
+    if (view.buffer.ndim == 1) {
+        values.resize(static_cast<size_t>(view.buffer.shape[0]));
+    } else if (view.buffer.ndim == 2 && view.buffer.shape[1] == 3) {
+        values.resize(static_cast<size_t>(view.buffer.shape[0]) * 3u);
+    } else {
+        throw std::runtime_error("indices must be uint32[I] or uint32[T, 3]");
+    }
+    if (values.empty()) {
+        throw std::runtime_error("indices must not be empty");
+    }
+    std::memcpy(values.data(), view.buffer.buf, values.size() * sizeof(uint32_t));
+}
+
+void
+copy_uint32_ids(const nb::object& object, const char* name, std::vector<uint32_t>& values, size_t* rowCount)
+{
+    PythonBufferView view(object);
+    if (!python_buffer_uint32_format_matches(view.buffer)) {
+        throw std::runtime_error(std::string(name) + " must use dtype uint32");
+    }
+    if (view.buffer.ndim == 1) {
+        values.resize(static_cast<size_t>(view.buffer.shape[0]));
+    } else if (view.buffer.ndim == 2 && view.buffer.shape[1] == 1) {
+        values.resize(static_cast<size_t>(view.buffer.shape[0]));
+    } else {
+        throw std::runtime_error(std::string(name) + " must be uint32[N] or uint32[N, 1]");
+    }
+    std::memcpy(values.data(), view.buffer.buf, values.size() * sizeof(uint32_t));
+    if (rowCount != nullptr) {
+        *rowCount = values.size();
+    }
+}
+
+std::shared_ptr<rawgl::HostMeshData>
+make_host_mesh_from_buffers(const nb::object& positions,
+                            const nb::object& indices,
+                            const nb::object& texcoords,
+                            const nb::object& normals,
+                            const nb::object& colors,
+                            const nb::object& id0)
+{
+    auto mesh = std::make_shared<rawgl::HostMeshData>();
+    size_t vertexCount = 0u;
+    copy_float32_array(positions, "positions", 3, mesh->positions, &vertexCount);
+    copy_uint32_indices(indices, mesh->indices);
+
+    size_t optionalRows = 0u;
+    if (texcoords.ptr() != Py_None) {
+        copy_float32_array(texcoords, "texcoords", 2, mesh->texcoords, &optionalRows);
+        if (optionalRows != vertexCount) {
+            throw std::runtime_error("texcoords row count must match positions");
+        }
+    }
+    if (normals.ptr() != Py_None) {
+        copy_float32_array(normals, "normals", 3, mesh->normals, &optionalRows);
+        if (optionalRows != vertexCount) {
+            throw std::runtime_error("normals row count must match positions");
+        }
+    }
+    if (colors.ptr() != Py_None) {
+        copy_uint8_array(colors, "colors", 4, mesh->colors, &optionalRows);
+        if (optionalRows != vertexCount) {
+            throw std::runtime_error("colors row count must match positions");
+        }
+    }
+    if (id0.ptr() != Py_None) {
+        copy_uint32_ids(id0, "id0", mesh->id0, &optionalRows);
+        if (optionalRows != vertexCount) {
+            throw std::runtime_error("id0 row count must match positions");
+        }
+    }
+
+    return mesh;
+}
+
+rawgl::MeshUpdate
+make_mesh_update_from_buffers(const nb::object& positions, const nb::object& normals)
+{
+    rawgl::MeshUpdate update;
+    size_t rowCount = 0u;
+
+    if (positions.ptr() != Py_None) {
+        copy_float32_array(positions, "positions", 3, update.positions, &rowCount);
+    }
+    if (normals.ptr() != Py_None) {
+        copy_float32_array(normals, "normals", 3, update.normals, &rowCount);
+    }
+
+    return update;
+}
+
 std::shared_ptr<rawgl::HostImageData>
 make_rgba32f_host_image(const int width, const int height, const std::vector<float>& values)
 {
@@ -222,7 +412,8 @@ NB_MODULE(_rawgl, module)
 
     nb::enum_<rawgl::MeshSourceKind>(module, "MeshSourceKind")
         .value("quad", rawgl::MeshSourceKind::quad)
-        .value("file", rawgl::MeshSourceKind::file);
+        .value("file", rawgl::MeshSourceKind::file)
+        .value("host_mesh", rawgl::MeshSourceKind::hostMesh);
 
     nb::class_<rawgl::Attribute>(module, "Attribute")
         .def(nb::init<>())
@@ -241,6 +432,47 @@ NB_MODULE(_rawgl, module)
             "bytes",
             [](const rawgl::HostImageData& image) { return to_python_bytes(image.bytes); },
             [](rawgl::HostImageData& image, const nb::object& value) { image.bytes = from_python_bytes(value); });
+
+    nb::class_<rawgl::HostMeshAttribute>(module, "HostMeshAttribute")
+        .def(nb::init<>())
+        .def_rw("name", &rawgl::HostMeshAttribute::name)
+        .def_rw("location", &rawgl::HostMeshAttribute::location)
+        .def_rw("components", &rawgl::HostMeshAttribute::components)
+        .def_rw("gl_type", &rawgl::HostMeshAttribute::glType)
+        .def_rw("integer", &rawgl::HostMeshAttribute::integer)
+        .def_prop_rw(
+            "bytes",
+            [](const rawgl::HostMeshAttribute& attribute) { return to_python_bytes(attribute.bytes); },
+            [](rawgl::HostMeshAttribute& attribute, const nb::object& value) {
+                attribute.bytes = from_python_bytes(value);
+            });
+
+    nb::class_<rawgl::HostMeshData>(module, "HostMeshData")
+        .def(nb::init<>())
+        .def_rw("positions", &rawgl::HostMeshData::positions)
+        .def_rw("indices", &rawgl::HostMeshData::indices)
+        .def_rw("texcoords", &rawgl::HostMeshData::texcoords)
+        .def_rw("normals", &rawgl::HostMeshData::normals)
+        .def_rw("colors", &rawgl::HostMeshData::colors)
+        .def_rw("id0", &rawgl::HostMeshData::id0)
+        .def_rw("attributes", &rawgl::HostMeshData::attributes)
+        .def_prop_ro("vertex_count", [](const rawgl::HostMeshData& mesh) { return mesh.positions.size() / 3u; })
+        .def_prop_ro("index_count", [](const rawgl::HostMeshData& mesh) { return mesh.indices.size(); });
+
+    module.def("_make_host_mesh_from_buffers",
+               &make_host_mesh_from_buffers,
+               nb::arg("positions"),
+               nb::arg("indices"),
+               nb::arg("texcoords") = nb::none(),
+               nb::arg("normals") = nb::none(),
+               nb::arg("colors") = nb::none(),
+               nb::arg("id0") = nb::none(),
+               "Create a HostMeshData object from C-contiguous typed buffers.");
+    module.def("_make_mesh_update_from_buffers",
+               &make_mesh_update_from_buffers,
+               nb::arg("positions") = nb::none(),
+               nb::arg("normals") = nb::none(),
+               "Create a MeshUpdate object from C-contiguous typed buffers.");
 
     nb::class_<rawgl::SystemUniformState>(module, "SystemUniformState")
         .def(nb::init<>())
@@ -400,8 +632,10 @@ NB_MODULE(_rawgl, module)
 
     nb::class_<rawgl::MeshBinding>(module, "MeshBinding")
         .def(nb::init<>())
+        .def_rw("name", &rawgl::MeshBinding::name)
         .def_rw("source_kind", &rawgl::MeshBinding::sourceKind)
         .def_rw("path", &rawgl::MeshBinding::path)
+        .def_rw("host_mesh", &rawgl::MeshBinding::hostMesh)
         .def_rw("parameters", &rawgl::MeshBinding::parameters);
 
     nb::class_<rawgl::Pass>(module, "Pass")
@@ -439,10 +673,27 @@ NB_MODULE(_rawgl, module)
         .def_rw("array_element", &rawgl::InputOverride::arrayElement)
         .def_rw("host_texture", &rawgl::InputOverride::hostTexture);
 
+    nb::class_<rawgl::MeshUpdate>(module, "MeshUpdate")
+        .def(nb::init<>())
+        .def_rw("uses_pass_index", &rawgl::MeshUpdate::usesPassIndex)
+        .def_rw("pass_index", &rawgl::MeshUpdate::passIndex)
+        .def_rw("name", &rawgl::MeshUpdate::name)
+        .def_rw("positions", &rawgl::MeshUpdate::positions)
+        .def_rw("normals", &rawgl::MeshUpdate::normals);
+
+    nb::class_<rawgl::MeshOverride>(module, "MeshOverride")
+        .def(nb::init<>())
+        .def_rw("uses_pass_index", &rawgl::MeshOverride::usesPassIndex)
+        .def_rw("pass_index", &rawgl::MeshOverride::passIndex)
+        .def_rw("name", &rawgl::MeshOverride::name)
+        .def_rw("host_mesh", &rawgl::MeshOverride::hostMesh);
+
     nb::class_<rawgl::RunSettings>(module, "RunSettings")
         .def(nb::init<>())
         .def_rw("system_uniforms", &rawgl::RunSettings::systemUniforms)
-        .def_rw("overrides", &rawgl::RunSettings::overrides);
+        .def_rw("overrides", &rawgl::RunSettings::overrides)
+        .def_rw("mesh_updates", &rawgl::RunSettings::meshUpdates)
+        .def_rw("mesh_overrides", &rawgl::RunSettings::meshOverrides);
 
     nb::class_<rawgl::RunResult>(module, "RunResult")
         .def(nb::init<>())

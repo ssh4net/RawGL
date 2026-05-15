@@ -140,7 +140,7 @@ Current practical expectations:
 
 - image shape: ``HxW`` or ``HxWxC``
 - channels: ``1`` to ``4``
-- best-supported dtypes: ``uint8``, ``uint16``, ``float16``, ``float32``
+- best-supported dtypes: ``uint8``, ``uint16``, ``uint32``, ``float16``, ``float32``
 
 If your upstream pipeline produces ``float64``, cast to ``float32`` before
 passing the array into RawGL.
@@ -210,6 +210,72 @@ loading any MTL files.
        raise RuntimeError(mesh_info.error_message)
 
    material_ids = {material.name: material.id for material in mesh_info.materials}
+
+Host meshes from NumPy
+----------------------
+
+Use ``rawgl.make_host_mesh(...)`` when mesh data already lives in Python memory.
+The default vertex layout is stable:
+
+- location 0: ``vec3 position``
+- location 1: ``vec2 texcoord``
+- location 2: ``vec3 normal``
+- location 3: ``uvec4 color_rgba``
+- location 4: ``uint id0``
+
+Extra attributes use explicit locations ``>= 5``:
+
+.. code-block:: python
+
+   mesh = rawgl.make_host_mesh(
+       positions=positions_f32,              # float32[N, 3]
+       indices=triangles_u32,                # uint32[T, 3] or uint32[I]
+       normals=normals_f32,
+       uint_attrs={"source_triangle_id": ids_u32},
+       attributes={
+           "region_id": rawgl.vertex_attr(region_ids_u32, location=5),
+       },
+   )
+
+   workflow = rawgl.build_workflow(
+       rawgl.render_pass(
+           fragment_shader,
+           vertex_shader=vertex_shader,
+           size=(1024, 1024),
+           meshes={"head": mesh},
+           outputs={
+               "Color": {"format": "rgba32f", "channels": 4, "capture_to_host": True},
+               "TriangleId": {"format": "r32ui", "channels": 1, "capture_to_host": True},
+           },
+       )
+   )
+
+   prepared = rawgl.prepare_workflow(workflow)
+   result = prepared.run(
+       mesh_updates={
+           "head": {
+               "positions": next_positions_f32,
+               "normals": next_normals_f32,
+           }
+       }
+   )
+
+For topology changes, replace the named binding for one run:
+
+.. code-block:: python
+
+   result = prepared.run(meshes={"head": rebuilt_mesh})
+   result = prepared.run(meshes={(2, "head"): rebuilt_mesh_for_pass_2})
+
+``meshes=`` is the short spelling for per-run full mesh replacement.
+``mesh_updates=`` keeps the prepared topology and updates only positions and
+normals, which is the faster path for animated meshes with fixed indices and
+attributes. If the same named mesh appears in several passes, an unscoped
+``meshes={"head": mesh}`` override applies to each matching pass; use
+``(pass_index, "head")`` when only one pass should change.
+
+``r32ui`` captured outputs are returned as ``numpy.uint32`` arrays. This is the
+current path for ID, mask, and picking buffers.
 
 Prepared workflows
 ------------------

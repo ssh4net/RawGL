@@ -88,12 +88,15 @@ struct OutputBinding {
 enum class MeshSourceKind {
     quad,
     file,
+    hostMesh,
 };
 
 /// Mesh binding for a render pass.
 struct MeshBinding {
+    std::string name;
     MeshSourceKind sourceKind = MeshSourceKind::quad;
     std::string path;
+    std::shared_ptr<HostMeshData> hostMesh;
     std::vector<Attribute> parameters;
 };
 
@@ -138,6 +141,32 @@ struct InputOverride {
     bool usesArrayElement = false;
     size_t arrayElement = 0;
     std::shared_ptr<HostImageData> hostTexture;
+};
+
+/// Fixed-topology mesh update for prepared workflow execution.
+struct MeshUpdate {
+    /// When false, apply to every pass containing \ref name.
+    bool usesPassIndex = false;
+    /// Target pass index when \ref usesPassIndex is true.
+    size_t passIndex = 0;
+    /// Target mesh binding name.
+    std::string name;
+    /// Optional tightly packed `float32[N, 3]` replacement positions.
+    std::vector<float> positions;
+    /// Optional tightly packed `float32[N, 3]` replacement normals.
+    std::vector<float> normals;
+};
+
+/// Full host mesh replacement for prepared workflow execution.
+struct MeshOverride {
+    /// When false, apply to every pass containing \ref name.
+    bool usesPassIndex = false;
+    /// Target pass index when \ref usesPassIndex is true.
+    size_t passIndex = 0;
+    /// Target mesh binding name.
+    std::string name;
+    /// Replacement host mesh.
+    std::shared_ptr<HostMeshData> hostMesh;
 };
 
 /// Builds one host-memory input binding for the in-memory core path.
@@ -202,6 +231,10 @@ struct RunSettings {
     SystemUniformState systemUniforms;
     /// Per-run input overrides.
     std::vector<InputOverride> overrides;
+    /// Per-run fixed-topology mesh updates.
+    std::vector<MeshUpdate> meshUpdates;
+    /// Per-run full host mesh replacements.
+    std::vector<MeshOverride> meshOverrides;
 };
 
 /// Result of executing a prepared workflow once.
@@ -281,6 +314,7 @@ to_graph(const MeshSourceKind sourceKind)
     switch (sourceKind) {
     case MeshSourceKind::quad: return GraphMeshSourceKind::quad;
     case MeshSourceKind::file: return GraphMeshSourceKind::file;
+    case MeshSourceKind::hostMesh: return GraphMeshSourceKind::hostMesh;
     }
 
     return GraphMeshSourceKind::quad;
@@ -361,8 +395,10 @@ static inline GraphMeshDefinition
 to_graph(const MeshBinding& mesh)
 {
     GraphMeshDefinition result;
+    result.name = mesh.name;
     result.sourceKind = to_graph(mesh.sourceKind);
     result.path = mesh.path;
+    result.hostMesh = mesh.hostMesh;
     result.parameters = to_graph(mesh.parameters);
     return result;
 }
@@ -519,6 +555,29 @@ to_graph(const InputOverride& inputOverride)
     return result;
 }
 
+static inline GraphMeshUpdate
+to_graph(const MeshUpdate& meshUpdate)
+{
+    GraphMeshUpdate result;
+    result.usesPassIndex = meshUpdate.usesPassIndex;
+    result.passIndex = meshUpdate.passIndex;
+    result.name = meshUpdate.name;
+    result.positions = meshUpdate.positions;
+    result.normals = meshUpdate.normals;
+    return result;
+}
+
+static inline GraphMeshOverride
+to_graph(const MeshOverride& meshOverride)
+{
+    GraphMeshOverride result;
+    result.usesPassIndex = meshOverride.usesPassIndex;
+    result.passIndex = meshOverride.passIndex;
+    result.name = meshOverride.name;
+    result.hostMesh = meshOverride.hostMesh;
+    return result;
+}
+
 static inline GraphExecutionRequest
 to_graph(const RunSettings& settings)
 {
@@ -527,6 +586,14 @@ to_graph(const RunSettings& settings)
     result.inputOverrides.reserve(settings.overrides.size());
     for (const InputOverride& overrideValue : settings.overrides) {
         result.inputOverrides.push_back(to_graph(overrideValue));
+    }
+    result.meshUpdates.reserve(settings.meshUpdates.size());
+    for (const MeshUpdate& meshUpdate : settings.meshUpdates) {
+        result.meshUpdates.push_back(to_graph(meshUpdate));
+    }
+    result.meshOverrides.reserve(settings.meshOverrides.size());
+    for (const MeshOverride& meshOverride : settings.meshOverrides) {
+        result.meshOverrides.push_back(to_graph(meshOverride));
     }
     return result;
 }

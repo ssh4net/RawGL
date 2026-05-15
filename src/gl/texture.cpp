@@ -40,68 +40,84 @@ Texture::Texture(GLsizei width, GLsizei height, GLenum internalFormat, GLenum ty
 
     // Set base format & channel count
     switch (m_internalFormat) {
-    case GL_R8:
     case GL_R8I:
     case GL_R8UI:
-    case GL_R8_SNORM:
-    case GL_R16:
     case GL_R16I:
     case GL_R16UI:
-    case GL_R16_SNORM:
-    case GL_R16F:
     case GL_R32I:
     case GL_R32UI:
+        swizzleMask  = { GL_RED, GL_RED, GL_RED, alphaChannel };
+        m_baseFormat = GL_RED_INTEGER;
+        m_channels   = 1;
+        break;
+    case GL_R8:
+    case GL_R8_SNORM:
+    case GL_R16:
+    case GL_R16_SNORM:
+    case GL_R16F:
     case GL_R32F:
         swizzleMask  = { GL_RED, GL_RED, GL_RED, alphaChannel };
         m_baseFormat = GL_RED;
         m_channels   = 1;
         break;
-    case GL_RG8:
     case GL_RG8I:
     case GL_RG8UI:
-    case GL_RG8_SNORM:
-    case GL_RG16:
     case GL_RG16I:
     case GL_RG16UI:
-    case GL_RG16_SNORM:
-    case GL_RG16F:
     case GL_RG32I:
     case GL_RG32UI:
+        swizzleMask  = { GL_RED, GL_GREEN, GL_ONE, alphaChannel };
+        m_baseFormat = GL_RG_INTEGER;
+        m_channels   = 2;
+        break;
+    case GL_RG8:
+    case GL_RG8_SNORM:
+    case GL_RG16:
+    case GL_RG16_SNORM:
+    case GL_RG16F:
     case GL_RG32F:
         swizzleMask  = { GL_RED, GL_GREEN, GL_ONE, alphaChannel };
         m_baseFormat = GL_RG;
         m_channels   = 2;
         break;
-    case GL_RGB8:
     case GL_RGB8I:
     case GL_RGB8UI:
+    case GL_RGB16I:
+    case GL_RGB16UI:
+    case GL_RGB32I:
+    case GL_RGB32UI:
+        swizzleMask  = { GL_RED, GL_GREEN, GL_BLUE, alphaChannel };
+        m_baseFormat = GL_RGB_INTEGER;
+        m_channels   = 3;
+        break;
+    case GL_RGB8:
     case GL_RGB8_SNORM:
     case GL_RGB10_A2:
     case GL_R11F_G11F_B10F:
     case GL_RGB16:
-    case GL_RGB16I:
-    case GL_RGB16UI:
     case GL_RGB16_SNORM:
     case GL_RGB16F:
-    case GL_RGB32I:
-    case GL_RGB32UI:
     case GL_RGB32F:
     case GL_SRGB8:
         swizzleMask  = { GL_RED, GL_GREEN, GL_BLUE, alphaChannel };
         m_baseFormat = GL_RGB;
         m_channels   = 3;
         break;
-    case GL_RGBA8:
     case GL_RGBA8I:
     case GL_RGBA8UI:
-    case GL_RGBA8_SNORM:
-    case GL_RGBA16:
     case GL_RGBA16I:
     case GL_RGBA16UI:
-    case GL_RGBA16_SNORM:
-    case GL_RGBA16F:
     case GL_RGBA32I:
     case GL_RGBA32UI:
+        swizzleMask  = { GL_RED, GL_GREEN, GL_BLUE, alphaChannel };
+        m_baseFormat = GL_RGBA_INTEGER;
+        m_channels   = 4;
+        break;
+    case GL_RGBA8:
+    case GL_RGBA8_SNORM:
+    case GL_RGBA16:
+    case GL_RGBA16_SNORM:
+    case GL_RGBA16F:
     case GL_RGBA32F:
     case GL_SRGB8_ALPHA8:
         swizzleMask  = { GL_RED, GL_GREEN, GL_BLUE, alphaChannel };
@@ -164,6 +180,8 @@ Texture::getData(GLenum type) const
     case GL_UNSIGNED_BYTE: bytes = 1; break;
     case GL_UNSIGNED_SHORT:
     case GL_HALF_FLOAT: bytes = 2; break;
+    case GL_INT:
+    case GL_UNSIGNED_INT:
     case GL_FLOAT: bytes = 4; break;
     default:
         assert(0);

@@ -22,6 +22,8 @@ except ImportError:  # pragma: no cover - optional dependency
 
 __version__ = getattr(_impl, "__version__", "0.0.0")
 advanced = _impl
+_make_host_mesh_from_buffers = _impl._make_host_mesh_from_buffers
+_make_mesh_update_from_buffers = _impl._make_mesh_update_from_buffers
 
 if hasattr(_impl, "inspect_mesh_file"):
     _inspect_mesh_file_impl = _impl.inspect_mesh_file
@@ -70,6 +72,7 @@ _SYSTEM_UNIFORM_ALIASES = {
 
 _GL_UNSIGNED_BYTE = 0x1401
 _GL_UNSIGNED_SHORT = 0x1403
+_GL_UNSIGNED_INT = 0x1405
 _GL_FLOAT = 0x1406
 _GL_HALF_FLOAT = 0x140B
 
@@ -82,6 +85,10 @@ _GL_INTERNAL_FORMATS = {
     (_GL_UNSIGNED_SHORT, 2): 0x822C,  # GL_RG16
     (_GL_UNSIGNED_SHORT, 3): 0x8054,  # GL_RGB16
     (_GL_UNSIGNED_SHORT, 4): 0x805B,  # GL_RGBA16
+    (_GL_UNSIGNED_INT, 1): 0x8236,    # GL_R32UI
+    (_GL_UNSIGNED_INT, 2): 0x823C,    # GL_RG32UI
+    (_GL_UNSIGNED_INT, 3): 0x8D71,    # GL_RGB32UI
+    (_GL_UNSIGNED_INT, 4): 0x8D70,    # GL_RGBA32UI
     (_GL_FLOAT, 1): 0x822E,           # GL_R32F
     (_GL_FLOAT, 2): 0x8230,           # GL_RG32F
     (_GL_FLOAT, 3): 0x8815,           # GL_RGB32F
@@ -200,6 +207,57 @@ def _coerce_attributes(attributes):
     return list(attributes)
 
 
+_TEXTURE_ATTRIBUTE_ALIASES = {
+    "min_filter": ("min", {
+        "nearest": "n",
+        "linear": "l",
+        "nearest_mipmap_nearest": "nn",
+        "linear_mipmap_nearest": "ln",
+        "nearest_mipmap_linear": "nl",
+        "linear_mipmap_linear": "ll",
+    }),
+    "mag_filter": ("mag", {
+        "nearest": "n",
+        "linear": "l",
+    }),
+    "wrap_s": ("wrps", {
+        "clamp_to_edge": "ce",
+        "repeat": "r",
+        "clamp_to_border": "cb",
+        "mirrored_repeat": "mr",
+        "mirror_clamp_to_edge": "mce",
+    }),
+    "wrap_t": ("wrpt", {
+        "clamp_to_edge": "ce",
+        "repeat": "r",
+        "clamp_to_border": "cb",
+        "mirrored_repeat": "mr",
+        "mirror_clamp_to_edge": "mce",
+    }),
+}
+
+
+def _normalize_texture_attribute_value(value, aliases):
+    value_text = str(value)
+    key = value_text.strip().lower().replace("-", "_")
+    return aliases.get(key, value_text)
+
+
+def _coerce_texture_attributes(spec):
+    if not isinstance(spec, Mapping):
+        return []
+
+    result = _coerce_attributes(spec.get("attributes", spec.get("attrs")))
+    for public_name, (raw_name, aliases) in _TEXTURE_ATTRIBUTE_ALIASES.items():
+        if public_name not in spec:
+            continue
+        attribute = Attribute()
+        attribute.name = raw_name
+        attribute.value = _normalize_texture_attribute_value(spec[public_name], aliases)
+        result.append(attribute)
+    return result
+
+
 def _require_numpy():
     if _np is None:
         raise RuntimeError("NumPy support is optional and numpy is not installed")
@@ -217,6 +275,8 @@ def _numpy_gl_type(dtype) -> int:
         return _GL_UNSIGNED_BYTE
     if dtype == np_module.uint16:
         return _GL_UNSIGNED_SHORT
+    if dtype == np_module.uint32:
+        return _GL_UNSIGNED_INT
     if dtype == np_module.float16:
         return _GL_HALF_FLOAT
     if dtype == np_module.float32:
@@ -257,6 +317,125 @@ def make_host_image(array):
     return image
 
 
+def vertex_attr(data, *, location, components=None, integer=None, name=""):
+    """Create one explicit per-vertex HostMeshAttribute from a NumPy array."""
+
+    np_module = _require_numpy()
+    array = np_module.asarray(data)
+    if array.ndim == 1:
+        inferred_components = 1
+        row_count = int(array.shape[0])
+    elif array.ndim == 2:
+        inferred_components = int(array.shape[1])
+        row_count = int(array.shape[0])
+    else:
+        raise TypeError("mesh vertex attributes must be NxC or N arrays")
+
+    if row_count < 1:
+        raise TypeError("mesh vertex attributes must not be empty")
+
+    if components is None:
+        components = inferred_components
+    components = int(components)
+    if components != inferred_components or components < 1 or components > 4:
+        raise TypeError("mesh vertex attribute components must match the array shape and be in range 1..4")
+
+    gl_type = _numpy_gl_type(array.dtype)
+    if integer is None:
+        integer = gl_type in (_GL_UNSIGNED_BYTE, _GL_UNSIGNED_SHORT, _GL_UNSIGNED_INT)
+
+    location = int(location)
+    if location < 5:
+        raise TypeError("custom mesh vertex attribute locations must be >= 5")
+
+    attribute = HostMeshAttribute()
+    attribute.name = str(name)
+    attribute.location = location
+    attribute.components = components
+    attribute.gl_type = int(gl_type)
+    attribute.integer = bool(integer)
+    attribute.bytes = np_module.ascontiguousarray(array).tobytes()
+    return attribute
+
+
+def _coerce_mesh_vertex_attribute(name, spec):
+    if isinstance(spec, HostMeshAttribute):
+        if name is not None and not spec.name:
+            spec.name = str(name)
+        return spec
+
+    if isinstance(spec, Mapping):
+        value = spec.get("data", spec.get("values", spec.get("value")))
+        if value is None:
+            raise TypeError("mesh vertex attribute mapping requires 'data' or 'values'")
+        return vertex_attr(
+            value,
+            location=spec["location"],
+            components=spec.get("components"),
+            integer=spec.get("integer"),
+            name=spec.get("name", "" if name is None else name),
+        )
+
+    raise TypeError("mesh vertex attributes must be HostMeshAttribute objects or mappings")
+
+
+def _coerce_mesh_vertex_attributes(attributes):
+    if attributes is None:
+        return []
+    if isinstance(attributes, Mapping):
+        return [_coerce_mesh_vertex_attribute(name, spec) for name, spec in attributes.items()]
+    return [_coerce_mesh_vertex_attribute(None, spec) for spec in attributes]
+
+
+def make_host_mesh(
+    *,
+    positions,
+    indices,
+    texcoords=None,
+    normals=None,
+    colors=None,
+    uint_attrs=None,
+    attributes=None,
+):
+    """Create HostMeshData from NumPy arrays.
+
+    The default layout provides position, texcoord, normal, color_rgba, and
+    one uint id attribute. Use attributes for explicit locations >= 5.
+    """
+
+    np_module = _require_numpy()
+    id0 = None
+    if uint_attrs is not None:
+        if not isinstance(uint_attrs, Mapping):
+            raise TypeError("uint_attrs must be a mapping")
+        supported = {"id0", "source_triangle_id", "source_vertex_id", "material_id"}
+        unsupported = set(uint_attrs) - supported
+        if unsupported:
+            raise TypeError(f"unsupported uint mesh attributes in this RawGL build: {sorted(unsupported)}")
+        for key in ("id0", "source_triangle_id", "source_vertex_id", "material_id"):
+            if key in uint_attrs:
+                id0 = uint_attrs[key]
+                break
+
+    positions_array = np_module.ascontiguousarray(positions, dtype=np_module.float32)
+    indices_array = np_module.ascontiguousarray(indices, dtype=np_module.uint32)
+    texcoords_array = None if texcoords is None else np_module.ascontiguousarray(texcoords, dtype=np_module.float32)
+    normals_array = None if normals is None else np_module.ascontiguousarray(normals, dtype=np_module.float32)
+    colors_array = None if colors is None else np_module.ascontiguousarray(colors, dtype=np_module.uint8)
+    id0_array = None if id0 is None else np_module.ascontiguousarray(id0, dtype=np_module.uint32)
+
+    mesh = _make_host_mesh_from_buffers(
+        positions_array,
+        indices_array,
+        texcoords_array,
+        normals_array,
+        colors_array,
+        id0_array,
+    )
+    mesh.attributes = _coerce_mesh_vertex_attributes(attributes)
+    return mesh
+
+
 def host_image_to_array(image):
     """Convert HostImageData bytes into a NumPy array."""
 
@@ -264,6 +443,7 @@ def host_image_to_array(image):
     dtype_map = {
         _GL_UNSIGNED_BYTE: np_module.uint8,
         _GL_UNSIGNED_SHORT: np_module.uint16,
+        _GL_UNSIGNED_INT: np_module.uint32,
         _GL_FLOAT: np_module.float32,
         _GL_HALF_FLOAT: np_module.float16,
     }
@@ -531,7 +711,7 @@ def _coerce_input_binding(name, spec):
     binding.name = str(name)
 
     if isinstance(spec, Mapping):
-        binding.attributes = _coerce_attributes(spec.get("attributes", spec.get("attrs")))
+        binding.attributes = _coerce_texture_attributes(spec)
         if "array_element" in spec:
             binding.uses_array_element = True
             binding.array_element = int(spec["array_element"])
@@ -722,21 +902,31 @@ def _maybe_capture_output_from_file_spec(name, spec):
     return _coerce_output_binding(name, core_spec)
 
 
-def _coerce_mesh_binding(spec):
+def _coerce_mesh_binding(spec, name=None):
     if isinstance(spec, MeshBinding):
+        if name is not None and not spec.name:
+            spec.name = str(name)
         return spec
 
     binding = MeshBinding()
+    if name is not None:
+        binding.name = str(name)
     if isinstance(spec, (str, Path)):
         binding.source_kind = MeshSourceKind.file
         binding.path = str(spec)
         return binding
+    if isinstance(spec, HostMeshData):
+        binding.source_kind = MeshSourceKind.host_mesh
+        binding.host_mesh = spec
+        return binding
     if not isinstance(spec, Mapping):
-        raise TypeError("mesh bindings must be a MeshBinding, path, or mapping")
+        raise TypeError("mesh bindings must be a MeshBinding, HostMeshData, path, or mapping")
 
     source_kind = spec.get("source_kind", spec.get("source", None))
     if source_kind is None:
-        if "path" in spec:
+        if "host_mesh" in spec:
+            binding.source_kind = MeshSourceKind.host_mesh
+        elif "path" in spec:
             binding.source_kind = MeshSourceKind.file
         else:
             binding.source_kind = MeshSourceKind.quad
@@ -748,13 +938,136 @@ def _coerce_mesh_binding(spec):
             binding.source_kind = MeshSourceKind.quad
         elif source_name == "file":
             binding.source_kind = MeshSourceKind.file
+        elif source_name in ("host_mesh", "hostmesh"):
+            binding.source_kind = MeshSourceKind.host_mesh
         else:
             raise TypeError(f"unsupported mesh source kind '{source_kind}'")
 
+    if "name" in spec:
+        binding.name = str(spec["name"])
     if "path" in spec:
         binding.path = str(spec["path"])
+    if "host_mesh" in spec:
+        binding.host_mesh = spec["host_mesh"]
     binding.parameters = _coerce_attributes(spec.get("parameters", spec.get("attrs")))
     return binding
+
+
+def _coerce_mesh_bindings(meshes):
+    if meshes is None:
+        return []
+    if isinstance(meshes, Mapping):
+        return [_coerce_mesh_binding(spec, name=name) for name, spec in meshes.items()]
+    return [_coerce_mesh_binding(spec) for spec in meshes]
+
+
+def _coerce_mesh_update_payload(spec):
+    if isinstance(spec, MeshUpdate):
+        return spec
+    if not isinstance(spec, Mapping):
+        raise TypeError("mesh update specifications must be a MeshUpdate or mapping")
+
+    np_module = _require_numpy()
+    positions = spec.get("positions")
+    normals = spec.get("normals")
+    if positions is None and normals is None:
+        raise TypeError("mesh update requires at least one of 'positions' or 'normals'")
+
+    positions_array = None if positions is None else np_module.ascontiguousarray(positions, dtype=np_module.float32)
+    normals_array = None if normals is None else np_module.ascontiguousarray(normals, dtype=np_module.float32)
+    return _make_mesh_update_from_buffers(positions_array, normals_array)
+
+
+def _coerce_mesh_update_entry(key, spec):
+    update = _coerce_mesh_update_payload(spec)
+    if isinstance(key, tuple):
+        if len(key) != 2:
+            raise TypeError("mesh update tuple keys must be (pass_index, mesh_name)")
+        pass_index, name = key
+        update.uses_pass_index = True
+        update.pass_index = int(pass_index)
+        update.name = str(name)
+        return update
+
+    update.uses_pass_index = False
+    update.name = str(key)
+    return update
+
+
+def _coerce_mesh_updates(mesh_updates):
+    if mesh_updates is None:
+        return []
+    if isinstance(mesh_updates, MeshUpdate):
+        return [mesh_updates]
+    if isinstance(mesh_updates, Sequence) and not isinstance(mesh_updates, (str, bytes, bytearray)):
+        return [_coerce_mesh_update_payload(spec) for spec in mesh_updates]
+    if not isinstance(mesh_updates, Mapping):
+        raise TypeError("mesh_updates must be a MeshUpdate or mapping")
+    return [_coerce_mesh_update_entry(key, spec) for key, spec in mesh_updates.items()]
+
+
+def _coerce_mesh_override_payload(spec):
+    if isinstance(spec, MeshOverride):
+        return spec
+
+    override = MeshOverride()
+    if isinstance(spec, HostMeshData):
+        override.host_mesh = spec
+        return override
+
+    if not isinstance(spec, Mapping):
+        raise TypeError("mesh override specifications must be a MeshOverride, HostMeshData, or mapping")
+
+    host_mesh = spec.get("host_mesh", spec.get("mesh"))
+    if host_mesh is None and "positions" in spec and "indices" in spec:
+        host_mesh = make_host_mesh(
+            positions=spec["positions"],
+            indices=spec["indices"],
+            texcoords=spec.get("texcoords"),
+            normals=spec.get("normals"),
+            colors=spec.get("colors"),
+            uint_attrs=spec.get("uint_attrs"),
+            attributes=spec.get("attributes"),
+        )
+    if not isinstance(host_mesh, HostMeshData):
+        raise TypeError("mesh override requires a HostMeshData value or a mapping with positions and indices")
+
+    override.host_mesh = host_mesh
+    if "name" in spec:
+        override.name = str(spec["name"])
+    if "pass_index" in spec:
+        override.uses_pass_index = True
+        override.pass_index = int(spec["pass_index"])
+    return override
+
+
+def _coerce_mesh_override_entry(key, spec):
+    override = _coerce_mesh_override_payload(spec)
+    if isinstance(key, tuple):
+        if len(key) != 2:
+            raise TypeError("mesh override tuple keys must be (pass_index, mesh_name)")
+        pass_index, name = key
+        override.uses_pass_index = True
+        override.pass_index = int(pass_index)
+        override.name = str(name)
+        return override
+
+    override.uses_pass_index = bool(getattr(override, "uses_pass_index", False))
+    if not override.name:
+        override.name = str(key)
+    return override
+
+
+def _coerce_mesh_overrides(mesh_overrides):
+    if mesh_overrides is None:
+        return []
+    if isinstance(mesh_overrides, MeshOverride):
+        return [mesh_overrides]
+    if isinstance(mesh_overrides, Sequence) and not isinstance(mesh_overrides, (str, bytes, bytearray)):
+        return [_coerce_mesh_override_payload(spec) for spec in mesh_overrides]
+    if not isinstance(mesh_overrides, Mapping):
+        raise TypeError("mesh overrides must be a MeshOverride or mapping")
+    return [_coerce_mesh_override_entry(key, spec) for key, spec in mesh_overrides.items()]
 
 
 def _coerce_input_override(pass_index: int, name, spec):
@@ -1129,7 +1442,17 @@ class PreparedJob:
         self._io_runtime = io_runtime
         self._default_pass_index = None if default_pass_index is None else int(default_pass_index)
 
-    def run(self, *, inputs=None, outputs=None, settings=None, system_uniforms=None):
+    def run(
+        self,
+        *,
+        inputs=None,
+        outputs=None,
+        settings=None,
+        system_uniforms=None,
+        mesh_updates=None,
+        meshes=None,
+        mesh_overrides=None,
+    ):
         run_settings = _merge_run_settings(settings=settings, system_uniforms=system_uniforms)
         overrides = list(run_settings.overrides)
         file_overrides = []
@@ -1137,6 +1460,12 @@ class PreparedJob:
             core_overrides, file_overrides = _split_input_overrides(inputs, default_pass_index=self._default_pass_index)
             overrides.extend(core_overrides)
         run_settings.overrides = overrides
+        run_settings.mesh_updates = list(run_settings.mesh_updates) + _coerce_mesh_updates(mesh_updates)
+        run_settings.mesh_overrides = (
+            list(run_settings.mesh_overrides)
+            + _coerce_mesh_overrides(meshes)
+            + _coerce_mesh_overrides(mesh_overrides)
+        )
         file_outputs = _coerce_file_output_overrides(outputs, default_pass_index=self._default_pass_index)
         if self._io_runtime is not None:
             request = IoRunRequest()
@@ -1283,7 +1612,7 @@ def render_pass(
     if session is None and _io_outputs_require_inspection(output_spec):
         session = Session()
     pass0.outputs = _coerce_outputs(session, ShaderProgramKind.vertfrag, shader_modules, output_spec)
-    pass0.meshes = [] if meshes is None else [_coerce_mesh_binding(spec) for spec in meshes]
+    pass0.meshes = _coerce_mesh_bindings(meshes)
     pass0.cull_parameters = _coerce_attributes(cull_parameters)
     return pass0
 
@@ -1557,6 +1886,9 @@ def run_workflow(
     settings=None,
     system_uniforms=None,
     inputs=None,
+    mesh_updates=None,
+    meshes=None,
+    mesh_overrides=None,
 ):
     """Run one workflow once, with optional multi-pass input overrides."""
 
@@ -1566,6 +1898,12 @@ def run_workflow(
     run_settings.overrides = list(run_settings.overrides) + _coerce_input_overrides(
         inputs,
         default_pass_index=override_pass_index,
+    )
+    run_settings.mesh_updates = list(run_settings.mesh_updates) + _coerce_mesh_updates(mesh_updates)
+    run_settings.mesh_overrides = (
+        list(run_settings.mesh_overrides)
+        + _coerce_mesh_overrides(meshes)
+        + _coerce_mesh_overrides(mesh_overrides)
     )
     return _run_workflow(workflow_definition, session=session, settings=run_settings)
 

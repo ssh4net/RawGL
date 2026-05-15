@@ -83,6 +83,33 @@ build_texture_resource_key(const std::string& path, const std::vector<GraphAttri
     return stream.str();
 }
 
+std::string
+build_mesh_resource_key(const GraphMeshDefinition& mesh)
+{
+    bool assumeTriangles = true;
+    for (const GraphAttribute& attribute : mesh.parameters) {
+        if (attribute.name == "tris") {
+            assumeTriangles = (attribute.value == "true");
+            break;
+        }
+    }
+
+    std::ostringstream stream;
+    switch (mesh.sourceKind) {
+    case GraphMeshSourceKind::file:
+        stream << "file:" << mesh.path;
+        break;
+    case GraphMeshSourceKind::hostMesh:
+        stream << "host:" << mesh.hostMesh.get();
+        break;
+    case GraphMeshSourceKind::quad:
+        stream << "quad";
+        break;
+    }
+    stream << '\x1F' << "tris=" << (assumeTriangles ? 1 : 0);
+    return stream.str();
+}
+
 const ShaderResourceInfo*
 find_resource_by_name(const std::vector<ShaderResourceInfo>& resources, const std::string& name)
 {

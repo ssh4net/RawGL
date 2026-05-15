@@ -8,9 +8,11 @@
 #include "cli_parser.h"
 #include "common.h"
 #include "graph_build.h"
+#include "graph_resources.h"
 #include "graph_shared.h"
 #include "io_runtime.h"
 #include "log.h"
+#include "rawgl_version.h"
 #include "shader_interface_cache.h"
 #include "timer.h"
 
@@ -22,7 +24,7 @@
 
 const char* APP_NAME    = "RawGL";
 const char* APP_AUTHOR  = "Erium Vladlen";
-const int APP_VERSION[] = { 2, 0, 1 };
+const int APP_VERSION[] = { RAWGL_VERSION_MAJOR, RAWGL_VERSION_MINOR, RAWGL_VERSION_PATCH };
 
 namespace rawgl {
 
@@ -258,6 +260,16 @@ RawGLGraph::execute(const GraphExecutionRequest& request)
     try {
         std::vector<SequenceExecutionInputOverride> inputOverrides =
             build_sequence_input_overrides(*m_state, request);
+        std::vector<SequenceExecutionMeshUpdate> meshUpdates;
+        meshUpdates.reserve(request.meshUpdates.size());
+        for (const GraphMeshUpdate& meshUpdate : request.meshUpdates) {
+            meshUpdates.push_back(build_sequence_execution_mesh_update(meshUpdate));
+        }
+        std::vector<SequenceExecutionMeshOverride> meshOverrides;
+        meshOverrides.reserve(request.meshOverrides.size());
+        for (const GraphMeshOverride& meshOverride : request.meshOverrides) {
+            meshOverrides.push_back(build_sequence_execution_mesh_override(meshOverride));
+        }
         std::map<std::string, std::shared_ptr<Texture>> persistentTextureSnapshot;
         for (const auto& persistentTexture : m_state->persistentTextures) {
             persistentTextureSnapshot[persistentTexture.first] = clone_texture_resource(persistentTexture.second);
@@ -301,7 +313,7 @@ RawGLGraph::execute(const GraphExecutionRequest& request)
         systemUniforms.deltaTimeSeconds = request.systemUniforms.deltaTimeSeconds;
         systemUniforms.frameNumber      = request.systemUniforms.frameNumber;
         systemUniforms.passIndex        = request.systemUniforms.passIndex;
-        m_state->sequence->run(systemUniforms, inputOverrides);
+        m_state->sequence->run(systemUniforms, inputOverrides, meshUpdates, meshOverrides);
         for (const RawGLGraphState::PersistentOutputBinding& persistentOutput : m_state->executionPlan.persistentOutputs) {
             std::shared_ptr<Texture> outputTexture =
                 m_state->sequence->getPassOutputTexture(persistentOutput.passIndex, persistentOutput.outputName);

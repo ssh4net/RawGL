@@ -103,6 +103,10 @@ make_disk_texture_key(const std::string& path, const std::map<std::string, std::
 static std::string
 make_mesh_cache_key(const MeshInput::Mesh& mesh)
 {
+    if (!mesh.resourceKey.empty()) {
+        return mesh.resourceKey;
+    }
+
     std::ostringstream stream;
     stream << "file:" << mesh.FileName << '\x1F' << "tris=" << (mesh.Triangles ? 1 : 0);
     return stream.str();
@@ -112,6 +116,68 @@ static GLuint
 resolve_fragment_output_location(const PassOutput& output)
 {
     return output.output->location + static_cast<GLuint>(output.usesArrayElement ? output.arrayElement : 0u);
+}
+
+static bool
+is_unsigned_integer_texture_format(const GLenum internalFormat)
+{
+    switch (internalFormat) {
+    case GL_R8UI:
+    case GL_RG8UI:
+    case GL_RGB8UI:
+    case GL_RGBA8UI:
+    case GL_R16UI:
+    case GL_RG16UI:
+    case GL_RGB16UI:
+    case GL_RGBA16UI:
+    case GL_R32UI:
+    case GL_RG32UI:
+    case GL_RGB32UI:
+    case GL_RGBA32UI: return true;
+    default: break;
+    }
+
+    return false;
+}
+
+static bool
+is_signed_integer_texture_format(const GLenum internalFormat)
+{
+    switch (internalFormat) {
+    case GL_R8I:
+    case GL_RG8I:
+    case GL_RGB8I:
+    case GL_RGBA8I:
+    case GL_R16I:
+    case GL_RG16I:
+    case GL_RGB16I:
+    case GL_RGBA16I:
+    case GL_R32I:
+    case GL_RG32I:
+    case GL_RGB32I:
+    case GL_RGBA32I: return true;
+    default: break;
+    }
+
+    return false;
+}
+
+static bool
+is_integer_texture_format(const GLenum internalFormat)
+{
+    return is_unsigned_integer_texture_format(internalFormat) || is_signed_integer_texture_format(internalFormat);
+}
+
+static bool
+is_sampler_2d_uniform(const GLenum type)
+{
+    return type == GL_SAMPLER_2D || type == GL_INT_SAMPLER_2D || type == GL_UNSIGNED_INT_SAMPLER_2D;
+}
+
+static bool
+is_texture_input_uniform(const GLenum type)
+{
+    return is_sampler_2d_uniform(type) || type == GL_IMAGE_2D;
 }
 
 static void
@@ -290,6 +356,32 @@ configure_vertex_array(GLuint vaoId, const MeshInput::VertexBuffer& vertexBuffer
     GLCall(glVertexArrayAttribBinding(vaoId, 4, 4));
     GLCall(glEnableVertexArrayAttrib(vaoId, 4));
 
+    GLuint bindingIndex = 5u;
+    for (const MeshInput::VertexBuffer::AttributeBuffer& attributeBuffer : vertexBuffer.attributeBuffers) {
+        GLCall(glVertexArrayVertexBuffer(vaoId,
+                                         bindingIndex,
+                                         attributeBuffer.bufferId,
+                                         0,
+                                         attributeBuffer.stride));
+        if (attributeBuffer.integer) {
+            GLCall(glVertexArrayAttribIFormat(vaoId,
+                                              attributeBuffer.location,
+                                              attributeBuffer.components,
+                                              attributeBuffer.type,
+                                              0));
+        } else {
+            GLCall(glVertexArrayAttribFormat(vaoId,
+                                             attributeBuffer.location,
+                                             attributeBuffer.components,
+                                             attributeBuffer.type,
+                                             GL_FALSE,
+                                             0));
+        }
+        GLCall(glVertexArrayAttribBinding(vaoId, attributeBuffer.location, bindingIndex));
+        GLCall(glEnableVertexArrayAttrib(vaoId, attributeBuffer.location));
+        ++bindingIndex;
+    }
+
     GLCall(glVertexArrayElementBuffer(vaoId, vertexBuffer.iboId));
 }
 
@@ -316,6 +408,11 @@ delete_vertex_buffers(MeshInput::VertexBuffer& vertexBuffer)
     }
     if (vertexBuffer.iboId) {
         glDeleteBuffers(1, &vertexBuffer.iboId);
+    }
+    for (MeshInput::VertexBuffer::AttributeBuffer& attributeBuffer : vertexBuffer.attributeBuffers) {
+        if (attributeBuffer.bufferId) {
+            glDeleteBuffers(1, &attributeBuffer.bufferId);
+        }
     }
 
     vertexBuffer = MeshInput::VertexBuffer();
@@ -443,11 +540,53 @@ upload_mesh_buffers(const MeshInput::Mesh& mesh, MeshInput::VertexBuffer& vertex
 }
 
 static void
+upload_shared_mesh_attribute_buffers(const SequenceSharedMeshData& sharedMesh, MeshInput::VertexBuffer& vertexBuffer)
+{
+    vertexBuffer.attributeBuffers.reserve(sharedMesh.attributes.size());
+    for (const SequenceSharedMeshAttribute& attribute : sharedMesh.attributes) {
+        MeshInput::VertexBuffer::AttributeBuffer attributeBuffer;
+        attributeBuffer.location   = attribute.location;
+        attributeBuffer.components = attribute.components;
+        attributeBuffer.type       = attribute.type;
+        attributeBuffer.integer    = attribute.integer;
+        attributeBuffer.stride     = attribute.stride;
+
+        GLCall(glCreateBuffers(1, &attributeBuffer.bufferId));
+        GLCall(glNamedBufferData(attributeBuffer.bufferId,
+                                 static_cast<GLsizeiptr>(attribute.bytes.size()),
+                                 attribute.bytes.data(),
+                                 GL_STATIC_DRAW));
+        vertexBuffer.attributeBuffers.push_back(attributeBuffer);
+    }
+}
+
+static void
 create_shared_mesh_vertex_array(const MeshInput::VertexBuffer& sharedBuffers, MeshInput::VertexBuffer& vertexBuffer)
 {
     vertexBuffer = sharedBuffers;
     GLCall(glCreateVertexArrays(1, &vertexBuffer.vaoId));
     configure_vertex_array(vertexBuffer.vaoId, vertexBuffer);
+}
+
+static void
+update_float_mesh_buffer(const GLuint bufferId,
+                         const GLsizei expectedByteCount,
+                         const std::vector<float>& values,
+                         const std::string& context)
+{
+    if (values.empty()) {
+        return;
+    }
+
+    const GLsizeiptr byteCount = static_cast<GLsizeiptr>(values.size() * sizeof(float));
+    if (byteCount != static_cast<GLsizeiptr>(expectedByteCount)) {
+        throw std::runtime_error(context + ": update size does not match prepared mesh buffer size");
+    }
+    if (bufferId == 0u) {
+        throw std::runtime_error(context + ": target mesh buffer is not initialized");
+    }
+
+    GLCall(glNamedBufferSubData(bufferId, 0, byteCount, values.data()));
 }
 }  // namespace
 
@@ -479,6 +618,7 @@ Sequence_CreateSharedGpuMesh(const SequenceSharedMeshData& sharedMesh)
 
     std::shared_ptr<SequenceSharedGpuMesh> sharedGpuMesh = std::make_shared<SequenceSharedGpuMesh>();
     upload_mesh_buffers_only(mesh, sharedGpuMesh->vertexBuffer);
+    upload_shared_mesh_attribute_buffers(sharedMesh, sharedGpuMesh->vertexBuffer);
     return sharedGpuMesh;
 }
 
@@ -583,10 +723,8 @@ Sequence::preloadInputTextures()
         for (auto& inputIt : pass.inputs) {
             PassInput& input = inputIt.second;
 
-            switch (input.uniform->type) {
-            case GL_SAMPLER_2D:
-            case GL_IMAGE_2D: break;
-            default: continue;
+            if (!is_texture_input_uniform(input.uniform->type)) {
+                continue;
             }
 
             if (input.texture && input.path.empty() && !input.runtimeTextureBindingRequired) {
@@ -659,41 +797,56 @@ Sequence::ensurePassOutputTextures(SequencePass& pass, int passIndex)
                                  + "): index exceeds max channel index for this image.");
         }
 
-        const std::string textureName                  = outputIt.first + "::" + std::to_string(passIndex);
-        const std::pair<std::string, GLenum> formats[] = {
-            { "rgba8", GL_RGBA8 }, { "rgba16", GL_RGBA16 }, { "rgba16f", GL_RGBA16F }, { "rgba32f", GL_RGBA32F },
-            { "r8", GL_R8 },       { "r16", GL_R16 },       { "r16f", GL_R16F },       { "r32f", GL_R32F },
-            { "rg8", GL_RG8 },     { "rg16", GL_RG16 },     { "rg16f", GL_RG16F },     { "rg32f", GL_RG32F },
-            { "rgb8", GL_RGB8 },   { "rgb16", GL_RGB16 },   { "rgb16f", GL_RGB16F },   { "rgb32f", GL_RGB32F }
+        struct OutputFormatInfo {
+            const char* name;
+            GLenum internalFormat;
+            GLenum uploadType;
+        };
+
+        const std::string textureName = outputIt.first + "::" + std::to_string(passIndex);
+        const OutputFormatInfo formats[] = {
+            { "rgba8", GL_RGBA8, GL_FLOAT },   { "rgba16", GL_RGBA16, GL_FLOAT },
+            { "rgba16f", GL_RGBA16F, GL_FLOAT }, { "rgba32f", GL_RGBA32F, GL_FLOAT },
+            { "r8", GL_R8, GL_FLOAT },         { "r16", GL_R16, GL_FLOAT },
+            { "r16f", GL_R16F, GL_FLOAT },     { "r32f", GL_R32F, GL_FLOAT },
+            { "rg8", GL_RG8, GL_FLOAT },       { "rg16", GL_RG16, GL_FLOAT },
+            { "rg16f", GL_RG16F, GL_FLOAT },   { "rg32f", GL_RG32F, GL_FLOAT },
+            { "rgb8", GL_RGB8, GL_FLOAT },     { "rgb16", GL_RGB16, GL_FLOAT },
+            { "rgb16f", GL_RGB16F, GL_FLOAT }, { "rgb32f", GL_RGB32F, GL_FLOAT },
+            { "r32ui", GL_R32UI, GL_UNSIGNED_INT },     { "rg32ui", GL_RG32UI, GL_UNSIGNED_INT },
+            { "rgb32ui", GL_RGB32UI, GL_UNSIGNED_INT }, { "rgba32ui", GL_RGBA32UI, GL_UNSIGNED_INT }
         };
 
         GLenum internalFormat = GL_RGBA32F;
+        GLenum uploadType     = GL_FLOAT;
         int formatIndex       = 0;
+        const int formatCount = static_cast<int>(sizeof(formats) / sizeof(formats[0]));
 
-        for (; formatIndex < 16; ++formatIndex) {
-            if (output.internalFormatText == formats[formatIndex].first) {
+        for (; formatIndex < formatCount; ++formatIndex) {
+            if (output.internalFormatText == formats[formatIndex].name) {
                 break;
             }
         }
 
-        if (formatIndex == 16) {
+        if (formatIndex == formatCount) {
             LOG(warning) << "Pass " << passIndex << ": unknown output framebuffer format "
                          << output.internalFormatText << " changing to rgba32f.";
         } else {
-            if (formatIndex > 3 && pass.isCompute) {
+            if (formatIndex < 16 && formatIndex > 3 && pass.isCompute) {
                 formatIndex %= 4;
                 LOG(warning)
                     << "Pass " << passIndex
                     << ": only 4-component output framebuffer formats are allowed for compute shaders, changing to "
-                    << formats[formatIndex].first;
+                    << formats[formatIndex].name;
             }
 
-            internalFormat = formats[formatIndex].second;
+            internalFormat = formats[formatIndex].internalFormat;
+            uploadType     = formats[formatIndex].uploadType;
         }
 
         auto textureIt = m_textures
                              .insert({ textureName,
-                                       std::make_shared<Texture>(pass.size[0], pass.size[1], internalFormat, GL_FLOAT,
+                                       std::make_shared<Texture>(pass.size[0], pass.size[1], internalFormat, uploadType,
                                                                  nullptr, output.alphaChannel) })
                              .first;
         output.texture = textureIt->second;
@@ -724,10 +877,8 @@ Sequence::refreshPassTextureInputs(SequencePass& pass)
     for (auto& inputIt : pass.inputs) {
         PassInput& input = inputIt.second;
 
-        switch (input.uniform->type) {
-        case GL_SAMPLER_2D:
-        case GL_IMAGE_2D: break;
-        default: continue;
+        if (!is_texture_input_uniform(input.uniform->type)) {
+            continue;
         }
 
         if (input.texture && input.path.empty() && !input.runtimeTextureBindingRequired) {
@@ -770,9 +921,117 @@ Sequence::prepareRunTextures()
 }
 
 void
+Sequence::clearRunMeshOverrides()
+{
+    for (auto stateIt = m_runMeshOverrideStates.rbegin(); stateIt != m_runMeshOverrideStates.rend(); ++stateIt) {
+        RunMeshOverrideState& state = *stateIt;
+        if (!state.meshInput) {
+            continue;
+        }
+        if (state.meshInput->VBO.vaoId) {
+            GLCall(glDeleteVertexArrays(1, &state.meshInput->VBO.vaoId));
+        }
+        state.meshInput->mesh = state.mesh;
+        state.meshInput->VBO = state.vertexBuffer;
+        state.meshInput->sharedGpuMesh = state.sharedGpuMesh;
+    }
+    m_runMeshOverrideStates.clear();
+    m_runMeshOverrideGpuMeshes.clear();
+}
+
+void
+Sequence::applyMeshOverrides(const std::vector<SequenceExecutionMeshOverride>& meshOverrides)
+{
+    clearRunMeshOverrides();
+
+    for (const SequenceExecutionMeshOverride& meshOverride : meshOverrides) {
+        if (meshOverride.meshName.empty()) {
+            throw_sequence_error("mesh override: mesh name is empty");
+        }
+        if (!meshOverride.mesh) {
+            throw_sequence_error("mesh override (" + meshOverride.meshName + "): host mesh is missing");
+        }
+
+        bool applied = false;
+        const size_t firstPass = meshOverride.usesPassIndex ? meshOverride.passIndex : 0u;
+        const size_t endPass = meshOverride.usesPassIndex ? meshOverride.passIndex + 1u : m_passes.size();
+        if (firstPass >= m_passes.size()) {
+            throw_sequence_error("mesh override (" + meshOverride.meshName + "): pass index out of range");
+        }
+
+        std::shared_ptr<SequenceSharedGpuMesh> sharedGpuMesh = Sequence_CreateSharedGpuMesh(*meshOverride.mesh);
+
+        for (size_t passIndex = firstPass; passIndex < endPass; ++passIndex) {
+            SequencePass& pass = m_passes[passIndex];
+            auto meshIt = pass.meshes.find(meshOverride.meshName);
+            if (meshIt == pass.meshes.end()) {
+                continue;
+            }
+
+            MeshInput& meshInput = meshIt->second;
+            RunMeshOverrideState previousState;
+            previousState.meshInput = &meshInput;
+            previousState.mesh = meshInput.mesh;
+            previousState.vertexBuffer = meshInput.VBO;
+            previousState.sharedGpuMesh = meshInput.sharedGpuMesh;
+            m_runMeshOverrideStates.push_back(previousState);
+
+            apply_shared_mesh_metadata(meshInput.mesh, *meshOverride.mesh);
+            meshInput.sharedGpuMesh = sharedGpuMesh;
+            create_shared_mesh_vertex_array(sharedGpuMesh->vertexBuffer, meshInput.VBO);
+            applied = true;
+        }
+
+        if (!applied) {
+            throw_sequence_error("mesh override (" + meshOverride.meshName + "): mesh binding was not found");
+        }
+
+        m_runMeshOverrideGpuMeshes.push_back(std::move(sharedGpuMesh));
+    }
+}
+
+void
+Sequence::applyMeshUpdates(const std::vector<SequenceExecutionMeshUpdate>& meshUpdates)
+{
+    for (const SequenceExecutionMeshUpdate& meshUpdate : meshUpdates) {
+        if (meshUpdate.meshName.empty()) {
+            throw_sequence_error("mesh update: mesh name is empty");
+        }
+        if (meshUpdate.positions.empty() && meshUpdate.normals.empty()) {
+            throw_sequence_error("mesh update (" + meshUpdate.meshName + "): no buffers provided");
+        }
+
+        bool applied = false;
+        const size_t firstPass = meshUpdate.usesPassIndex ? meshUpdate.passIndex : 0u;
+        const size_t endPass = meshUpdate.usesPassIndex ? meshUpdate.passIndex + 1u : m_passes.size();
+        if (firstPass >= m_passes.size()) {
+            throw_sequence_error("mesh update (" + meshUpdate.meshName + "): pass index out of range");
+        }
+
+        for (size_t passIndex = firstPass; passIndex < endPass; ++passIndex) {
+            SequencePass& pass = m_passes[passIndex];
+            auto meshIt = pass.meshes.find(meshUpdate.meshName);
+            if (meshIt == pass.meshes.end()) {
+                continue;
+            }
+
+            MeshInput& mesh = meshIt->second;
+            const std::string context = "mesh update (" + meshUpdate.meshName + ")";
+            update_float_mesh_buffer(mesh.VBO.vboId, mesh.mesh.vrtSize, meshUpdate.positions, context + " positions");
+            update_float_mesh_buffer(mesh.VBO.nboId, mesh.mesh.nrmSize, meshUpdate.normals, context + " normals");
+            applied = true;
+        }
+
+        if (!applied) {
+            throw_sequence_error("mesh update (" + meshUpdate.meshName + "): mesh binding was not found");
+        }
+    }
+}
+
+void
 Sequence::initializePass(SequencePass& pass, int passIndex)
 {
-    MeshInput& meshInput = ensure_primary_mesh(pass);
+    ensure_primary_mesh(pass);
 
     for (int axis = 0; axis < 2; ++axis) {
         if (pass.sizeText[axis].empty()) {
@@ -839,33 +1098,38 @@ Sequence::initializePass(SequencePass& pass, int passIndex)
     ensurePassOutputTextures(pass, passIndex);
     refreshPassTextureInputs(pass);
 
-    try {
-        if (meshInput.mesh.isQuad) {
-            load_mesh_data(meshInput.mesh);
-        } else {
-            const auto sharedMeshIt = m_sharedMeshes.find(make_mesh_cache_key(meshInput.mesh));
-            const auto sharedGpuMeshIt = m_sharedGpuMeshes.find(make_mesh_cache_key(meshInput.mesh));
-            if (sharedGpuMeshIt != m_sharedGpuMeshes.end() && sharedGpuMeshIt->second) {
-                if (sharedMeshIt != m_sharedMeshes.end() && sharedMeshIt->second) {
-                    apply_shared_mesh_metadata(meshInput.mesh, *sharedMeshIt->second);
-                }
-                meshInput.sharedGpuMesh = sharedGpuMeshIt->second;
-                create_shared_mesh_vertex_array(sharedGpuMeshIt->second->vertexBuffer, meshInput.VBO);
-                return;
-            }
+    for (auto& meshIt : pass.meshes) {
+        MeshInput& meshInput = meshIt.second;
 
-            if (sharedMeshIt != m_sharedMeshes.end() && sharedMeshIt->second) {
-                clone_shared_mesh_data(meshInput.mesh, *sharedMeshIt->second);
-            } else {
+        try {
+            if (meshInput.mesh.isQuad) {
                 load_mesh_data(meshInput.mesh);
-            }
-        }
-    } catch (const std::exception& exception) {
-        throw_sequence_error(exception.what());
-    }
+            } else {
+                const std::string cacheKey = make_mesh_cache_key(meshInput.mesh);
+                const auto sharedMeshIt = m_sharedMeshes.find(cacheKey);
+                const auto sharedGpuMeshIt = m_sharedGpuMeshes.find(cacheKey);
+                if (sharedGpuMeshIt != m_sharedGpuMeshes.end() && sharedGpuMeshIt->second) {
+                    if (sharedMeshIt != m_sharedMeshes.end() && sharedMeshIt->second) {
+                        apply_shared_mesh_metadata(meshInput.mesh, *sharedMeshIt->second);
+                    }
+                    meshInput.sharedGpuMesh = sharedGpuMeshIt->second;
+                    create_shared_mesh_vertex_array(sharedGpuMeshIt->second->vertexBuffer, meshInput.VBO);
+                    continue;
+                }
 
-    upload_mesh_buffers(meshInput.mesh, meshInput.VBO);
-    release_mesh_cpu_data(meshInput.mesh);
+                if (sharedMeshIt != m_sharedMeshes.end() && sharedMeshIt->second) {
+                    clone_shared_mesh_data(meshInput.mesh, *sharedMeshIt->second);
+                } else {
+                    load_mesh_data(meshInput.mesh);
+                }
+            }
+        } catch (const std::exception& exception) {
+            throw_sequence_error(exception.what());
+        }
+
+        upload_mesh_buffers(meshInput.mesh, meshInput.VBO);
+        release_mesh_cpu_data(meshInput.mesh);
+    }
 }
 
 void
@@ -900,8 +1164,7 @@ Sequence::validatePassSetup() const
                 throw_sequence_error("input (" + inputIt.first + "): uniform is not initialized.");
             }
 
-            if ((input.uniform->type == GL_SAMPLER_2D || input.uniform->type == GL_IMAGE_2D)
-                && input.texture == nullptr
+            if (is_texture_input_uniform(input.uniform->type) && input.texture == nullptr
                 && !input.runtimeTextureBindingRequired) {
                 throw_sequence_error("input (" + inputIt.first + "): texture is not initialized.");
             }
@@ -938,6 +1201,7 @@ Sequence::buildExecutionPlan()
         plan.passIndex   = passIndex;
         plan.inputs.reserve(pass.inputs.size());
         plan.outputs.reserve(pass.outputs.size());
+        plan.meshes.reserve(pass.meshes.size());
 
         for (auto& inputIt : pass.inputs) {
             plan.inputs.push_back(PlannedInputBinding { &inputIt.first, &inputIt.second });
@@ -945,6 +1209,10 @@ Sequence::buildExecutionPlan()
 
         for (auto& outputIt : pass.outputs) {
             plan.outputs.push_back(PlannedOutputBinding { &outputIt.second });
+        }
+
+        for (auto& meshIt : pass.meshes) {
+            plan.meshes.push_back(&meshIt.second);
         }
 
         m_executionPlan.push_back(std::move(plan));
@@ -966,23 +1234,35 @@ Sequence::bindPassInputs(const PassExecutionPlan& plan,
         if (inputOverride && inputOverride->kind == SequenceExecutionInputOverrideKind::texture) {
             boundTexture = inputOverride->texture;
         }
-        if ((input.uniform->type == GL_SAMPLER_2D || input.uniform->type == GL_IMAGE_2D) && !boundTexture) {
+        if (is_texture_input_uniform(input.uniform->type) && !boundTexture) {
             throw_sequence_error("input (" + *binding.name + "): runtime texture binding is missing.");
         }
 
         switch (input.uniform->type) {
-        case GL_SAMPLER_2D: {
+        case GL_SAMPLER_2D:
+        case GL_INT_SAMPLER_2D:
+        case GL_UNSIGNED_INT_SAMPLER_2D: {
             const GLuint textureId = boundTexture->getId();
 
             GLCall(glActiveTexture(GL_TEXTURE0 + textureIndex));
             GLCall(glBindTexture(GL_TEXTURE_2D, textureId));
 
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, input.tex_min);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, input.tex_mag);
+            GLint minFilter = input.tex_min;
+            GLint magFilter = input.tex_mag;
+            if (is_integer_texture_format(boundTexture->getInternalFormat())) {
+                if (minFilter != GL_NEAREST && minFilter != GL_NEAREST_MIPMAP_NEAREST) {
+                    minFilter = GL_NEAREST;
+                }
+                magFilter = GL_NEAREST;
+            }
+
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magFilter);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, input.tex_s);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, input.tex_t);
 
-            if (input.tex_min != GL_LINEAR && input.tex_min != GL_NEAREST) {
+            if (!is_integer_texture_format(boundTexture->getInternalFormat()) && minFilter != GL_LINEAR
+                && minFilter != GL_NEAREST) {
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1000);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, 0);
@@ -1421,11 +1701,28 @@ Sequence::executeGraphicsPass(const PassExecutionPlan& plan)
     }
 
     GLCall(glEnable(GL_DEPTH_TEST));
-    GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+    GLCall(glClear(GL_DEPTH_BUFFER_BIT));
+    for (const PlannedOutputBinding& binding : plan.outputs) {
+        const PassOutput& output         = *binding.output;
+        const GLuint outputLocation      = resolve_fragment_output_location(output);
+        const GLenum outputInternalFormat = output.texture->getInternalFormat();
+        if (is_unsigned_integer_texture_format(outputInternalFormat)) {
+            const GLuint clearValue[4] = { 0u, 0u, 0u, 0u };
+            GLCall(glClearBufferuiv(GL_COLOR, static_cast<GLint>(outputLocation), clearValue));
+        } else if (is_signed_integer_texture_format(outputInternalFormat)) {
+            const GLint clearValue[4] = { 0, 0, 0, 0 };
+            GLCall(glClearBufferiv(GL_COLOR, static_cast<GLint>(outputLocation), clearValue));
+        } else {
+            GLCall(glClearBufferfv(GL_COLOR, static_cast<GLint>(outputLocation), pass.clearColor));
+        }
+    }
     GLCall(glDepthFunc(GL_LEQUAL));
-    GLCall(glBindVertexArray(plan.primaryMesh->VBO.vaoId));
     GLCall(glPolygonMode(GL_FRONT_AND_BACK, GL_FILL));
-    GLCall(glDrawElements(plan.primaryMesh->mesh.render, plan.primaryMesh->mesh.numIndxs, GL_UNSIGNED_INT, 0));
+
+    for (const MeshInput* mesh : plan.meshes) {
+        GLCall(glBindVertexArray(mesh->VBO.vaoId));
+        GLCall(glDrawElements(mesh->mesh.render, mesh->mesh.numIndxs, GL_UNSIGNED_INT, 0));
+    }
 
     const GLenum err = glGetError();
     if (err != GL_NO_ERROR) {
@@ -1473,6 +1770,15 @@ void
 Sequence::run(const SequenceSystemUniformState& systemUniforms,
               const std::vector<SequenceExecutionInputOverride>& inputOverrides)
 {
+    run(systemUniforms, inputOverrides, {});
+}
+
+void
+Sequence::run(const SequenceSystemUniformState& systemUniforms,
+              const std::vector<SequenceExecutionInputOverride>& inputOverrides,
+              const std::vector<SequenceExecutionMeshUpdate>& meshUpdates,
+              const std::vector<SequenceExecutionMeshOverride>& meshOverrides)
+{
     Timer timer;
 
     LOG(debug) << "Rendering...";
@@ -1486,6 +1792,8 @@ Sequence::run(const SequenceSystemUniformState& systemUniforms,
 
     try {
         prepareRunTextures();
+        applyMeshOverrides(meshOverrides);
+        applyMeshUpdates(meshUpdates);
 
         for (const PassExecutionPlan& plan : m_executionPlan) {
             SequencePass& pass = *plan.pass;
@@ -1504,7 +1812,9 @@ Sequence::run(const SequenceSystemUniformState& systemUniforms,
 
             capturePassAtomicCounterResults(pass);
         }
+        clearRunMeshOverrides();
     } catch (...) {
+        clearRunMeshOverrides();
         glBindVertexArray(0);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glUseProgram(0);

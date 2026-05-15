@@ -16,4 +16,10 @@ create_host_texture_resource(const HostImageData& hostImage, const std::string& 
 SequenceExecutionInputOverride
 build_sequence_execution_input_override(const GraphInputOverride& inputOverride);
 
+SequenceExecutionMeshUpdate
+build_sequence_execution_mesh_update(const GraphMeshUpdate& meshUpdate);
+
+SequenceExecutionMeshOverride
+build_sequence_execution_mesh_override(const GraphMeshOverride& meshOverride);
+
 }  // namespace rawgl

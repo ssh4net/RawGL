@@ -246,6 +246,47 @@ struct HostImageData {
     std::vector<std::byte> bytes;
 };
 
+/// Extra per-vertex host-memory attribute.
+///
+/// Locations 0..4 are reserved by RawGL's default mesh layout. Use locations
+/// >= 5 for explicit shader attributes.
+struct HostMeshAttribute {
+    /// Optional debug label for diagnostics.
+    std::string name;
+    /// GLSL vertex attribute location.
+    uint32_t location = 0;
+    /// Number of components per vertex, 1..4.
+    uint32_t components = 1;
+    /// OpenGL element type such as `GL_FLOAT`, `GL_UNSIGNED_BYTE`, or `GL_UNSIGNED_INT`.
+    unsigned int glType = 0;
+    /// True when the attribute should be bound with integer attribute semantics.
+    bool integer = false;
+    /// Owned tightly packed per-vertex attribute bytes.
+    std::vector<std::byte> bytes;
+};
+
+/// Owned host-memory mesh payload used for in-memory graph mesh inputs.
+///
+/// The default layout is position/texcoord/normal/color/id0 at attribute
+/// locations 0..4. Empty optional arrays are expanded to default values during
+/// resource preparation.
+struct HostMeshData {
+    /// Tightly packed `float32[N, 3]` positions.
+    std::vector<float> positions;
+    /// Tightly packed `uint32[I]` element indices.
+    std::vector<uint32_t> indices;
+    /// Optional tightly packed `float32[N, 2]` texture coordinates.
+    std::vector<float> texcoords;
+    /// Optional tightly packed `float32[N, 3]` normals.
+    std::vector<float> normals;
+    /// Optional tightly packed `uint8[N, 4]` RGBA vertex colors.
+    std::vector<uint8_t> colors;
+    /// Optional tightly packed `uint32[N]` ID attribute for location 4.
+    std::vector<uint32_t> id0;
+    /// Optional explicit per-vertex attributes for locations >= 5.
+    std::vector<HostMeshAttribute> attributes;
+};
+
 /// Source variant for a graph input.
 enum class GraphInputSourceKind {
     intValues,
@@ -331,12 +372,15 @@ struct GraphOutputDefinition {
 enum class GraphMeshSourceKind {
     quad,
     file,
+    hostMesh,
 };
 
 /// Declares one mesh input for a pass.
 struct GraphMeshDefinition {
+    std::string name;
     GraphMeshSourceKind sourceKind = GraphMeshSourceKind::quad;
     std::string path;
+    std::shared_ptr<HostMeshData> hostMesh;
     std::vector<GraphAttribute> parameters;
 };
 
@@ -387,10 +431,38 @@ struct GraphInputOverride {
     std::shared_ptr<HostImageData> hostTexture;
 };
 
+/// Per-execution fixed-topology mesh buffer update.
+struct GraphMeshUpdate {
+    /// When false, apply to every pass containing \ref name.
+    bool usesPassIndex = false;
+    /// Target pass index when \ref usesPassIndex is true.
+    size_t passIndex = 0;
+    /// Target mesh binding name.
+    std::string name;
+    /// Optional tightly packed `float32[N, 3]` replacement positions.
+    std::vector<float> positions;
+    /// Optional tightly packed `float32[N, 3]` replacement normals.
+    std::vector<float> normals;
+};
+
+/// Per-execution full host mesh replacement.
+struct GraphMeshOverride {
+    /// When false, apply to every pass containing \ref name.
+    bool usesPassIndex = false;
+    /// Target pass index when \ref usesPassIndex is true.
+    size_t passIndex = 0;
+    /// Target mesh binding name.
+    std::string name;
+    /// Replacement host mesh payload.
+    std::shared_ptr<HostMeshData> hostMesh;
+};
+
 /// Request for executing a previously built graph.
 struct GraphExecutionRequest {
     SystemUniformState systemUniforms;
     std::vector<GraphInputOverride> inputOverrides;
+    std::vector<GraphMeshUpdate> meshUpdates;
+    std::vector<GraphMeshOverride> meshOverrides;
 };
 
 /// Result of executing a built graph.

@@ -210,6 +210,14 @@ add_dependencies(rawgl_python rawgl_python_package_files)
 set_target_properties(rawgl_python PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${_rawgl_py_build_dir}"
     RUNTIME_OUTPUT_DIRECTORY "${_rawgl_py_build_dir}")
+if(CMAKE_CONFIGURATION_TYPES)
+    foreach(_rawgl_python_config IN LISTS CMAKE_CONFIGURATION_TYPES)
+        string(TOUPPER "${_rawgl_python_config}" _rawgl_python_config_upper)
+        set_target_properties(rawgl_python PROPERTIES
+            "LIBRARY_OUTPUT_DIRECTORY_${_rawgl_python_config_upper}" "${_rawgl_py_build_dir}"
+            "RUNTIME_OUTPUT_DIRECTORY_${_rawgl_python_config_upper}" "${_rawgl_py_build_dir}")
+    endforeach()
+endif()
 
 set(_rawgl_py_install_dir "rawgl")
 if(DEFINED SKBUILD_PLATLIB_DIR)

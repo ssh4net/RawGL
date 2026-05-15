@@ -277,12 +277,52 @@ The same workflow shape is available in Python through ``render_pass(...)``:
    result = rawgl.run_workflow(workflow)
    rawgl.save_image(result.captured_outputs["OutSample::0"], "tests/outputs/mesh_ao_sponge.exr", bits=32)
 
+When geometry comes from NumPy instead of a file, bind a named host mesh. The
+same prepared workflow can update positions and normals without rebuilding the
+fixed topology:
+
+.. code-block:: python
+
+   import rawgl
+
+   mesh = rawgl.make_host_mesh(
+       positions=positions_f32,
+       indices=triangles_u32,
+       uint_attrs={"source_triangle_id": source_triangle_id_u32},
+       attributes={
+           "debug_region": rawgl.vertex_attr(region_ids_u32, location=5),
+       },
+   )
+
+   workflow = rawgl.build_workflow(
+       rawgl.render_pass(
+           fragment_shader,
+           vertex_shader=vertex_shader,
+           size=(512, 512),
+           meshes={"head": mesh},
+           outputs={
+               "Color": {"format": "rgba32f", "channels": 4, "capture_to_host": True},
+               "TriangleId": {"format": "r32ui", "channels": 1, "capture_to_host": True},
+           },
+       )
+   )
+
+   prepared = rawgl.prepare_workflow(workflow)
+   result = prepared.run(mesh_updates={"head": {"positions": next_positions_f32}})
+   result = prepared.run(meshes={"head": rebuilt_mesh})
+
+This path is intended for Python pipelines that already produce mesh arrays in
+memory. Use ``mesh_updates`` for fixed-topology animation. Use ``meshes`` when
+the topology or attribute layout changes. ``TriangleId::0`` captures as a
+``numpy.uint32`` array.
+
 Related repo files:
 
 - ``tests/test_mesh_ao_sponge.bat``
 - ``tests/shaders/mesh_ao.vert``
 - ``tests/shaders/mesh_ao.frag``
 - ``tests/rawgl_core_shared_file_resources_smoke.cpp``
+- ``tests/python/rawgl_python_host_mesh_smoke.py``
 
 For a larger OBJ import, run
 ``examples/Mesh/OBJ/RenderObjPerspectiveBaseColor.py``. The file in that
@@ -444,6 +484,21 @@ The same pass-to-pass idea is available in Python with ``pass_output(...)``:
 
    result = rawgl.run_workflow(workflow)
    rawgl.io.save_image(result.captured_outputs["o_out0::1"], "NormalizeRange_python.png", bits=16)
+
+Readable sampler controls can be attached directly to texture inputs. This is
+the preferred spelling when a later pass samples ID or mask buffers:
+
+.. code-block:: python
+
+   inputs={
+       "tri_id": {
+           "pass_output": ("TriangleId", 0),
+           "min_filter": "nearest",
+           "mag_filter": "nearest",
+           "wrap_s": "clamp_to_edge",
+           "wrap_t": "clamp_to_edge",
+       }
+   }
 
 Related repo files:
 

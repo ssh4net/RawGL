@@ -9,24 +9,20 @@
 #include <cstring>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 
 namespace rawgl {
 namespace {
 
-static std::string
-build_mesh_cache_key(const GraphMeshDefinition& mesh)
+static void
+append_default_normals(std::vector<float>& normals, const size_t vertexCount)
 {
-    bool assumeTriangles = true;
-    for (const GraphAttribute& attribute : mesh.parameters) {
-        if (attribute.name == "tris") {
-            assumeTriangles = (attribute.value == "true");
-            break;
-        }
+    normals.reserve(vertexCount * 3u);
+    for (size_t vertexIndex = 0u; vertexIndex < vertexCount; ++vertexIndex) {
+        normals.push_back(0.0f);
+        normals.push_back(0.0f);
+        normals.push_back(1.0f);
     }
-
-    std::ostringstream stream;
-    stream << "file:" << mesh.path << '\x1F' << "tris=" << (assumeTriangles ? 1 : 0);
-    return stream.str();
 }
 
 static size_t
@@ -42,6 +38,62 @@ byte_size_for_gl_type(const GLenum type)
     }
 
     return 0u;
+}
+
+static std::shared_ptr<SequenceSharedMeshData>
+create_shared_mesh_from_host_mesh(const HostMeshData& hostMesh)
+{
+    const size_t vertexCount = hostMesh.positions.size() / 3u;
+
+    std::shared_ptr<SequenceSharedMeshData> sharedMesh = std::make_shared<SequenceSharedMeshData>();
+    sharedMesh->verts = hostMesh.positions;
+    sharedMesh->indices = hostMesh.indices;
+
+    if (hostMesh.texcoords.empty()) {
+        sharedMesh->texcoords.assign(vertexCount * 2u, 0.0f);
+    } else {
+        sharedMesh->texcoords = hostMesh.texcoords;
+    }
+
+    if (hostMesh.normals.empty()) {
+        append_default_normals(sharedMesh->normals, vertexCount);
+    } else {
+        sharedMesh->normals = hostMesh.normals;
+    }
+
+    if (hostMesh.colors.empty()) {
+        sharedMesh->colors.assign(vertexCount * 4u, 255u);
+    } else {
+        sharedMesh->colors = hostMesh.colors;
+    }
+
+    if (hostMesh.id0.empty()) {
+        sharedMesh->materialIds.assign(vertexCount, 0u);
+    } else {
+        sharedMesh->materialIds = hostMesh.id0;
+    }
+
+    sharedMesh->attributes.reserve(hostMesh.attributes.size());
+    for (const HostMeshAttribute& sourceAttribute : hostMesh.attributes) {
+        SequenceSharedMeshAttribute attribute;
+        attribute.name       = sourceAttribute.name;
+        attribute.location   = sourceAttribute.location;
+        attribute.components = static_cast<GLint>(sourceAttribute.components);
+        attribute.type       = sourceAttribute.glType;
+        attribute.integer    = sourceAttribute.integer;
+        attribute.stride     = static_cast<GLsizei>(sourceAttribute.components * byte_size_for_gl_type(sourceAttribute.glType));
+        attribute.bytes      = sourceAttribute.bytes;
+        sharedMesh->attributes.push_back(std::move(attribute));
+    }
+
+    sharedMesh->vrtSize  = static_cast<GLsizei>(sharedMesh->verts.size() * sizeof(float));
+    sharedMesh->texSize  = static_cast<GLsizei>(sharedMesh->texcoords.size() * sizeof(float));
+    sharedMesh->nrmSize  = static_cast<GLsizei>(sharedMesh->normals.size() * sizeof(float));
+    sharedMesh->clrSize  = static_cast<GLsizei>(sharedMesh->colors.size() * sizeof(uint8_t));
+    sharedMesh->matSize  = static_cast<GLsizei>(sharedMesh->materialIds.size() * sizeof(uint32_t));
+    sharedMesh->idxSize  = static_cast<GLsizei>(sharedMesh->indices.size() * sizeof(uint32_t));
+    sharedMesh->numIndxs = static_cast<GLsizei>(sharedMesh->indices.size());
+    return sharedMesh;
 }
 
 static int
@@ -142,7 +194,14 @@ validate_host_image_data(const HostImageData& hostImage, const std::string& cont
 static std::shared_ptr<SequenceSharedMeshData>
 load_cached_mesh_resource(const RawGLContextState& contextState, const GraphMeshDefinition& mesh)
 {
-    const std::string cacheKey = build_mesh_cache_key(mesh);
+    if (mesh.sourceKind == GraphMeshSourceKind::hostMesh) {
+        if (!mesh.hostMesh) {
+            throw std::runtime_error("Failed to load host mesh");
+        }
+        return create_shared_mesh_from_host_mesh(*mesh.hostMesh);
+    }
+
+    const std::string cacheKey = build_mesh_resource_key(mesh);
 
     {
         std::shared_lock<std::shared_mutex> readLock(contextState.meshCacheMutex);
@@ -204,7 +263,11 @@ load_cached_gpu_mesh_resource(const RawGLContextState& contextState,
                               const GraphMeshDefinition& mesh,
                               const std::shared_ptr<SequenceSharedMeshData>& sharedMesh)
 {
-    const std::string cacheKey = build_mesh_cache_key(mesh);
+    if (mesh.sourceKind == GraphMeshSourceKind::hostMesh) {
+        return Sequence_CreateSharedGpuMesh(*sharedMesh);
+    }
+
+    const std::string cacheKey = build_mesh_resource_key(mesh);
 
     {
         std::shared_lock<std::shared_mutex> readLock(contextState.meshGpuCacheMutex);
@@ -282,6 +345,33 @@ build_sequence_execution_input_override(const GraphInputOverride& inputOverride)
     return sequenceOverride;
 }
 
+SequenceExecutionMeshUpdate
+build_sequence_execution_mesh_update(const GraphMeshUpdate& meshUpdate)
+{
+    SequenceExecutionMeshUpdate sequenceUpdate;
+    sequenceUpdate.usesPassIndex = meshUpdate.usesPassIndex;
+    sequenceUpdate.passIndex = meshUpdate.passIndex;
+    sequenceUpdate.meshName = meshUpdate.name;
+    sequenceUpdate.positions = meshUpdate.positions;
+    sequenceUpdate.normals = meshUpdate.normals;
+    return sequenceUpdate;
+}
+
+SequenceExecutionMeshOverride
+build_sequence_execution_mesh_override(const GraphMeshOverride& meshOverride)
+{
+    if (!meshOverride.hostMesh) {
+        throw std::runtime_error("mesh override (" + meshOverride.name + "): host mesh payload is missing");
+    }
+
+    SequenceExecutionMeshOverride sequenceOverride;
+    sequenceOverride.usesPassIndex = meshOverride.usesPassIndex;
+    sequenceOverride.passIndex = meshOverride.passIndex;
+    sequenceOverride.meshName = meshOverride.name;
+    sequenceOverride.mesh = create_shared_mesh_from_host_mesh(*meshOverride.hostMesh);
+    return sequenceOverride;
+}
+
 RawGLGraphState::ResourcePlan
 build_resource_plan(const RawGLContextState& contextState, const RawGLGraphState::ValidatedGraph& validatedGraph)
 {
@@ -306,11 +396,16 @@ build_resource_plan(const RawGLContextState& contextState, const RawGLGraphState
         resourcePass.meshes         = validatedPass.definition.meshes;
 
         for (const GraphMeshDefinition& meshDefinition : resourcePass.meshes) {
-            if (meshDefinition.sourceKind != GraphMeshSourceKind::file) {
+            if (meshDefinition.sourceKind != GraphMeshSourceKind::file
+                && meshDefinition.sourceKind != GraphMeshSourceKind::hostMesh) {
                 continue;
             }
 
-            const std::string cacheKey = build_mesh_cache_key(meshDefinition);
+            const std::string cacheKey = build_mesh_resource_key(meshDefinition);
+            if (resourcePlan.sharedMeshes.find(cacheKey) != resourcePlan.sharedMeshes.end()) {
+                continue;
+            }
+
             std::shared_ptr<SequenceSharedMeshData> sharedMesh = load_cached_mesh_resource(contextState, meshDefinition);
             resourcePlan.sharedMeshes[cacheKey]    = sharedMesh;
             resourcePlan.sharedGpuMeshes[cacheKey] = load_cached_gpu_mesh_resource(contextState, meshDefinition, sharedMesh);

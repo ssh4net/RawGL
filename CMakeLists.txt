@@ -25,6 +25,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 set(RAWGL_CMAKE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+configure_file(
+    "${RAWGL_CMAKE_DIR}/rawgl_version.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/rawgl_version.h"
+    @ONLY
+)
 
 include("${RAWGL_CMAKE_DIR}/rawgl_options.cmake")
 include("${RAWGL_CMAKE_DIR}/rawgl_helpers.cmake")

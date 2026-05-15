@@ -129,6 +129,7 @@ The public API should move toward a façade built from these categories.
   - per-run values and overrides
 - `RunResult`
 - `HostImageData`
+- `HostMeshData`
 
 These are the target façade names that CLI and Python should converge on.
 
@@ -180,6 +181,66 @@ This keeps the source model aligned with the batch-processing goal:
 - simple workflows can use files
 - Python and generated pipelines can use in-memory source
 - advanced users can precompile and hand the core bytecode when the backend supports it
+
+### 4.2.1 Mesh data and dynamic mesh workflows
+
+Mesh support should follow the same memory-first direction as image inputs.
+File-backed PLY/OBJ loading remains useful, but Python and production systems
+must also be able to provide mesh data directly from NumPy without writing
+temporary files.
+
+Recommended public concepts:
+
+- `HostMeshData`
+  - owned CPU mesh payload
+  - positions as tightly packed `float32[N, 3]`
+  - indices as tightly packed `uint32[I]` or `uint32[T, 3]`
+  - optional named vertex attributes with explicit layout locations
+  - convenience slots for the default RawGL layout
+- `MeshBinding`
+  - stable user name
+  - source kind: `quad`, `file`, or `host_mesh`
+  - file path for file-backed meshes
+  - host mesh pointer for memory-backed meshes
+- future `MeshUpdate`
+  - fixed-topology position/normal/attribute updates for prepared workflows
+  - must update GPU buffers without rebuilding VAO/index buffers when topology
+    and attribute layout are unchanged
+
+Default RawGL mesh layout should remain predictable:
+
+```glsl
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec2 texcoord;
+layout(location = 2) in vec3 normal;
+layout(location = 3) in uvec4 color_rgba;
+layout(location = 4) in uint id0;
+```
+
+The fixed layout is a convenience preset, not the long-term limit. The stable
+API should allow explicit attribute locations and integer/float attribute
+types so RawGL can support material IDs, source triangle IDs, region IDs,
+deformation weights, debug overlays, and future mesh pipelines without adding
+project-specific parameters.
+
+Prepared workflow semantics:
+
+- replacing a mesh object may reallocate GPU buffers
+- fixed-topology mesh updates should not reallocate
+- the same named mesh used by multiple passes should upload once per prepared
+  workflow when possible
+- multiple meshes per pass should be legal and should draw in deterministic
+  binding order
+
+Near-term implementation order:
+
+1. add static `HostMeshData` and Python `make_host_mesh(...)`
+2. allow per-pass `host_mesh` bindings
+3. draw all meshes in a pass rather than only the primary mesh
+4. add prepared `mesh_updates` for positions/normals/attributes
+5. generalize vertex attributes beyond the default fixed layout
+6. add integer output capture such as `r32ui` returning NumPy `uint32`
+7. add friendly sampler aliases such as `min_filter` and `wrap_s`
 
 ### 4.3 Variable-facing concepts that should remain public
 

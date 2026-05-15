@@ -37,6 +37,13 @@ set(RAWGL_IO_SOURCES
     src/io/texture_loader.cpp
     src/io/output_writer.cpp)
 
+if(WIN32 AND RAWGL_LIBRAW_INCLUDE_DIR AND NOT TARGET dng_sdk::dng_sdk
+   AND (NOT DNG_SDK_LIBRARY_RELEASE OR NOT DNG_SDK_LIBRARY_DEBUG))
+    list(APPEND RAWGL_IO_SOURCES
+        src/io/libraw_dng_stub.cpp)
+    set(RAWGL_USE_LIBRAW_DNG_STUB ON)
+endif()
+
 set(RAWGL_BATCH_SOURCES
     src/batch/batch_runner.cpp)
 
@@ -79,6 +86,7 @@ target_include_directories(rawgl_core
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_BINARY_DIR}/generated
         ${CMAKE_CURRENT_SOURCE_DIR}/src/cli
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core/graph
@@ -235,6 +243,11 @@ endif()
 
 if(RAWGL_HAS_OPENMETA)
     target_link_libraries(rawgl_io PUBLIC OpenMeta::openmeta)
+endif()
+
+if(RAWGL_USE_LIBRAW_DNG_STUB AND MSVC)
+    target_link_options(rawgl_io PUBLIC
+        "/INCLUDE:?Throw_dng_error@@YAXHPEBD0_N@Z")
 endif()
 
 target_link_libraries(rawgl_batch PUBLIC

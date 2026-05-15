@@ -19,6 +19,9 @@ build_pass_resource_key(const std::string& name, size_t passIndex);
 std::string
 build_texture_resource_key(const std::string& path, const std::vector<GraphAttribute>& attributes);
 
+std::string
+build_mesh_resource_key(const GraphMeshDefinition& mesh);
+
 const ShaderResourceInfo*
 find_resource_by_name(const std::vector<ShaderResourceInfo>& resources, const std::string& name);
 

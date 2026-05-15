@@ -107,13 +107,16 @@ build_sequence_runtime_config(const RawGLGraphState::ResourcePlan& resourcePlan)
 
         for (const GraphMeshDefinition& meshDefinition : resourcePass.meshes) {
             MeshInput meshInput;
-            if (meshDefinition.sourceKind == GraphMeshSourceKind::file) {
+            if (meshDefinition.sourceKind == GraphMeshSourceKind::file
+                || meshDefinition.sourceKind == GraphMeshSourceKind::hostMesh) {
                 meshInput.mesh.isQuad   = false;
                 meshInput.mesh.FileName = meshDefinition.path;
+                meshInput.mesh.resourceKey = build_mesh_resource_key(meshDefinition);
                 apply_mesh_parameters(meshInput, meshDefinition.parameters);
             }
 
-            const std::string meshName = "mesh" + std::to_string(passConfig.meshes.size());
+            const std::string meshName =
+                meshDefinition.name.empty() ? "mesh" + std::to_string(passConfig.meshes.size()) : meshDefinition.name;
             passConfig.meshes.insert({ meshName, meshInput });
         }
 

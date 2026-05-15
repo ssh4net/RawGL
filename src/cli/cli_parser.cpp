@@ -315,7 +315,6 @@ HandleImmediateParsedArguments(const CommandLineParsedArguments& parsedArguments
 
     if (parsedArguments.showVersion) {
         print_version_text();
-        get_GPUfeatures();
         exitCode      = 0;
         immediateExit = true;
     }

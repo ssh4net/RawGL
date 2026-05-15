@@ -146,6 +146,59 @@ validate_host_image_data(const HostImageData& hostImage, const std::string& cont
 }
 
 static void
+validate_host_mesh_data(const HostMeshData& hostMesh)
+{
+    if (hostMesh.positions.empty() || hostMesh.positions.size() % 3u != 0u) {
+        throw std::runtime_error("pass_mesh: host mesh positions must be float32[N, 3].");
+    }
+    if (hostMesh.indices.empty()) {
+        throw std::runtime_error("pass_mesh: host mesh indices must not be empty.");
+    }
+
+    const size_t vertexCount = hostMesh.positions.size() / 3u;
+    if (!hostMesh.texcoords.empty() && hostMesh.texcoords.size() != vertexCount * 2u) {
+        throw std::runtime_error("pass_mesh: host mesh texcoords must be float32[N, 2].");
+    }
+    if (!hostMesh.normals.empty() && hostMesh.normals.size() != vertexCount * 3u) {
+        throw std::runtime_error("pass_mesh: host mesh normals must be float32[N, 3].");
+    }
+    if (!hostMesh.colors.empty() && hostMesh.colors.size() != vertexCount * 4u) {
+        throw std::runtime_error("pass_mesh: host mesh colors must be uint8[N, 4].");
+    }
+    if (!hostMesh.id0.empty() && hostMesh.id0.size() != vertexCount) {
+        throw std::runtime_error("pass_mesh: host mesh id0 values must be uint32[N].");
+    }
+
+    std::unordered_set<uint32_t> usedAttributeLocations;
+    for (const HostMeshAttribute& attribute : hostMesh.attributes) {
+        if (attribute.location < 5u) {
+            throw std::runtime_error("pass_mesh: custom host mesh attributes must use locations >= 5.");
+        }
+        if (!usedAttributeLocations.insert(attribute.location).second) {
+            throw std::runtime_error("pass_mesh: duplicate custom host mesh attribute location.");
+        }
+        if (attribute.components < 1u || attribute.components > 4u) {
+            throw std::runtime_error("pass_mesh: custom host mesh attribute components must be in range 1..4.");
+        }
+        const size_t bytesPerComponent = byte_size_for_gl_type(attribute.glType);
+        if (bytesPerComponent == 0u) {
+            throw std::runtime_error("pass_mesh: custom host mesh attribute uses an unsupported OpenGL type.");
+        }
+
+        const size_t expectedByteCount = vertexCount * static_cast<size_t>(attribute.components) * bytesPerComponent;
+        if (attribute.bytes.size() != expectedByteCount) {
+            throw std::runtime_error("pass_mesh: custom host mesh attribute byte size does not match vertex count.");
+        }
+    }
+
+    for (const uint32_t index : hostMesh.indices) {
+        if (index >= vertexCount) {
+            throw std::runtime_error("pass_mesh: host mesh index exceeds vertex count.");
+        }
+    }
+}
+
+static void
 validate_mesh_definition(const GraphMeshDefinition& definition)
 {
     if (definition.sourceKind == GraphMeshSourceKind::quad) {
@@ -155,6 +208,20 @@ validate_mesh_definition(const GraphMeshDefinition& definition)
         if (!definition.parameters.empty()) {
             throw std::runtime_error("pass_mesh: quad mesh must not provide mesh parameters.");
         }
+        return;
+    }
+
+    if (definition.sourceKind == GraphMeshSourceKind::hostMesh) {
+        if (!definition.hostMesh) {
+            throw std::runtime_error("pass_mesh: host mesh payload is missing.");
+        }
+        if (!definition.path.empty()) {
+            throw std::runtime_error("pass_mesh: host mesh must not provide a file path.");
+        }
+        validate_host_mesh_data(*definition.hostMesh);
+        MeshInput meshInput;
+        meshInput.mesh.isQuad = false;
+        apply_mesh_parameters(meshInput, definition.parameters);
         return;
     }
 
@@ -408,9 +475,13 @@ validate_graph_definition(const RawGLContextState& contextState, const GraphDefi
         std::unordered_set<std::string> declaredInputs;
         std::unordered_set<std::string> declaredOutputs;
         std::unordered_set<std::string> declaredCounters;
+        std::unordered_set<std::string> declaredMeshes;
 
         for (const GraphMeshDefinition& meshDefinition : passDefinition.meshes) {
             validate_mesh_definition(meshDefinition);
+            if (!meshDefinition.name.empty() && !declaredMeshes.insert(meshDefinition.name).second) {
+                throw std::runtime_error("pass_mesh: duplicate mesh name " + meshDefinition.name);
+            }
         }
 
         for (const GraphOutputDefinition& outputDefinition : passDefinition.outputs) {
